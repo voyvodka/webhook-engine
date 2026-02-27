@@ -1,0 +1,77 @@
+services:
+  webhook-engine:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${APP_PORT:-5100}:8080"
+    environment:
+      - ConnectionStrings__Default=Host=postgres;Port=5432;Database=webhookengine;Username=webhookengine;Password=${POSTGRES_PASSWORD:-webhookengine}
+      - WebhookEngine__DashboardAuth__AdminEmail=${ADMIN_EMAIL:-admin@example.com}
+      - WebhookEngine__DashboardAuth__AdminPassword=${ADMIN_PASSWORD:-changeme}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - webhookengine
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  postgres:
+    image: postgres:17-alpine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=webhookengine
+      - POSTGRES_USER=webhookengine
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-webhookengine}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webhookengine -d webhookengine"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - webhookengine
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 64M
+    # PostgreSQL tuning for webhook workload
+    command:
+      - "postgres"
+      - "-c" 
+      - "shared_buffers=128MB"
+      - "-c"
+      - "effective_cache_size=256MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "max_connections=100"
+      - "-c"
+      - "log_min_duration_statement=1000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  webhookengine:
+    driver: bridge
+
+volumes:
+  pgdata:

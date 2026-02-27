@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- NuGet package metadata -->
+    <PackageId>WebhookEngine.Sdk</PackageId>
+    <Version>1.0.0-preview.1</Version>
+    <Authors>WebhookEngine</Authors>
+    <Description>.NET SDK for WebhookEngine — self-hosted webhook delivery platform. Send webhooks, manage endpoints and event types, retry failed deliveries.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/voyvodka/webhook-engine</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/voyvodka/webhook-engine</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>webhook;webhooks;delivery;sdk;aspnetcore;dotnet</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- Build settings -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

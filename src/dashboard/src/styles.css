@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+/* ── Theme tokens ────────────────────────────────── */
+@theme {
+  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+
+  --color-surface-0: #09090b;
+  --color-surface-1: #0f0f12;
+  --color-surface-2: #18181b;
+  --color-surface-3: #27272a;
+  --color-surface-4: #3f3f46;
+
+  --color-border: #27272a;
+  --color-border-subtle: #1e1e22;
+
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #71717a;
+
+  --color-accent: #22d3ee;
+  --color-accent-muted: #0e7490;
+  --color-accent-soft: rgba(34, 211, 238, 0.1);
+
+  --color-success: #34d399;
+  --color-success-muted: #065f46;
+  --color-success-soft: rgba(52, 211, 153, 0.1);
+
+  --color-danger: #f87171;
+  --color-danger-muted: #991b1b;
+  --color-danger-soft: rgba(248, 113, 113, 0.1);
+
+  --color-warning: #fbbf24;
+  --color-warning-muted: #92400e;
+  --color-warning-soft: rgba(251, 191, 36, 0.1);
+}
+
+/* ── Base ────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background: var(--color-surface-0);
+    color: var(--color-text-primary);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--color-accent-muted);
+    color: var(--color-text-primary);
+  }
+
+  /* Scrollbar — thin dark */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-surface-4);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
+  }
+}
+
+/* ── Animations ──────────────────────────────────── */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@utility animate-fade-in-up {
+  animation: fade-in-up 280ms ease both;
+}
+
+@utility animate-spin-slow {
+  animation: spin 800ms linear infinite;
+}
+
+@utility animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}

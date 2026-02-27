@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# CI
+.github
+
+# Node (dashboard dev dependencies — built inside Docker)
+src/dashboard/node_modules
+
+# Test projects
+tests/
+
+# Build artifacts
+**/bin
+**/obj
+**/publish
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker
+docker/docker-compose*.yml

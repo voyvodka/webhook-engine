@@ -1,0 +1,30 @@
+# Development: PostgreSQL only
+# Usage: docker compose -f docker/docker-compose.dev.yml up -d
+# Then:  dotnet run --project src/WebhookEngine.API
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=webhookengine
+      - POSTGRES_USER=webhookengine
+      - POSTGRES_PASSWORD=webhookengine
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webhookengine -d webhookengine"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # Verbose logging for development
+    command:
+      - "postgres"
+      - "-c"
+      - "log_statement=all"
+      - "-c"
+      - "log_min_duration_statement=0"
+
+volumes:
+  pgdata-dev:
