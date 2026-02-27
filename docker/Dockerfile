@@ -25,13 +25,18 @@ COPY src/WebhookEngine.Worker/WebhookEngine.Worker.csproj src/WebhookEngine.Work
 COPY src/WebhookEngine.API/WebhookEngine.API.csproj src/WebhookEngine.API/
 COPY src/WebhookEngine.Sdk/WebhookEngine.Sdk.csproj src/WebhookEngine.Sdk/
 
-RUN dotnet restore WebhookEngine.sln
+# Restore only the deployable host project.
+# Restoring the full solution requires test/sample project files in the image
+# and breaks Docker layer-cached restore when they are intentionally omitted.
+RUN dotnet restore src/WebhookEngine.API/WebhookEngine.API.csproj
 
 # Copy source and publish
 COPY src/ src/
 
-# Copy dashboard build output into wwwroot before publish
-COPY --from=dashboard-build /dashboard/dist/ src/WebhookEngine.API/wwwroot/
+# Copy dashboard build output into wwwroot before publish.
+# Vite outDir is configured as ../WebhookEngine.API/wwwroot, which resolves
+# to /WebhookEngine.API/wwwroot inside the dashboard-build stage.
+COPY --from=dashboard-build /WebhookEngine.API/wwwroot/ src/WebhookEngine.API/wwwroot/
 
 RUN dotnet publish src/WebhookEngine.API/WebhookEngine.API.csproj \
     -c Release \
