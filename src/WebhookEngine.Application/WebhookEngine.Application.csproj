@@ -7,12 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MediatR" Version="12.5.0" />
-    <PackageReference Include="FluentValidation" Version="12.1.1" />
-    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\WebhookEngine.Core\WebhookEngine.Core.csproj" />
     <ProjectReference Include="..\WebhookEngine.Infrastructure\WebhookEngine.Infrastructure.csproj" />
   </ItemGroup>
