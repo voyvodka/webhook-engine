@@ -212,6 +212,21 @@ public class SendMessageRequestValidator : AbstractValidator<SendMessageRequest>
     }
 }
 
+public class BatchSendMessagesRequestValidator : AbstractValidator<BatchSendMessagesRequest>
+{
+    public BatchSendMessagesRequestValidator()
+    {
+        RuleFor(x => x.Messages)
+            .NotNull()
+            .NotEmpty()
+            .Must(messages => messages.Count <= 100)
+            .WithMessage("messages must contain between 1 and 100 items.");
+
+        RuleForEach(x => x.Messages)
+            .SetValidator(new SendMessageRequestValidator());
+    }
+}
+
 public class DashboardSendMessageRequestValidator : AbstractValidator<DashboardSendMessageRequest>
 {
     public DashboardSendMessageRequestValidator()
@@ -240,6 +255,37 @@ public class DashboardSendMessageRequestValidator : AbstractValidator<DashboardS
         RuleFor(x => x.IdempotencyKey)
             .MaximumLength(128)
             .When(x => x.IdempotencyKey is not null);
+    }
+}
+
+public class ReplayMessagesRequestValidator : AbstractValidator<ReplayMessagesRequest>
+{
+    public ReplayMessagesRequestValidator()
+    {
+        RuleFor(x => x)
+            .Must(x => x.EventTypeId.HasValue || !string.IsNullOrWhiteSpace(x.EventType))
+            .WithMessage("eventType or eventTypeId must be provided.");
+
+        RuleFor(x => x.EventType)
+            .MaximumLength(255)
+            .When(x => x.EventType is not null);
+
+        RuleFor(x => x.From)
+            .NotEmpty();
+
+        RuleFor(x => x.To)
+            .NotEmpty();
+
+        RuleFor(x => x)
+            .Must(x => x.From <= x.To)
+            .WithMessage("from must be less than or equal to to.");
+
+        RuleFor(x => x.MaxMessages)
+            .InclusiveBetween(1, 1000);
+
+        RuleFor(x => x.Statuses)
+            .Must(statuses => statuses is null || statuses.Count > 0)
+            .WithMessage("statuses cannot be empty when provided.");
     }
 }
 

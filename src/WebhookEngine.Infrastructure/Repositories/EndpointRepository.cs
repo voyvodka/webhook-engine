@@ -42,6 +42,7 @@ public class EndpointRepository
         var query = _dbContext.Endpoints
             .AsNoTracking()
             .Include(e => e.Health)
+            .Include(e => e.EventTypes)
             .Where(e => e.AppId == appId)
             .AsQueryable();
 
@@ -55,6 +56,21 @@ public class EndpointRepository
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
+    }
+
+    public async Task<int> CountByAppIdAsync(Guid appId, EndpointStatus? status, CancellationToken ct = default)
+    {
+        var query = _dbContext.Endpoints
+            .AsNoTracking()
+            .Where(e => e.AppId == appId)
+            .AsQueryable();
+
+        if (status.HasValue)
+        {
+            query = query.Where(e => e.Status == status.Value);
+        }
+
+        return await query.CountAsync(ct);
     }
 
     public async Task<List<Endpoint>> GetSubscribedEndpointsAsync(Guid appId, Guid eventTypeId, CancellationToken ct = default)

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -57,6 +59,7 @@ builder.Services.AddScoped<IMessageQueue, PostgresMessageQueue>();
 builder.Services.AddScoped<IDeliveryService, HttpDeliveryService>();
 builder.Services.AddSingleton<ISigningService, HmacSigningService>();
 builder.Services.AddScoped<IEndpointHealthTracker, EndpointHealthTracker>();
+builder.Services.AddSingleton<IEndpointRateLimiter, EndpointRateLimiter>();
 builder.Services.AddSingleton<IDeliveryNotifier, SignalRDeliveryNotifier>();
 
 // Background Workers
@@ -105,7 +108,11 @@ builder.Services
 builder.Services.AddAuthorization();
 
 // Controllers
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+    });
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 

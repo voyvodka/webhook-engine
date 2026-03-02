@@ -27,6 +27,16 @@ public class MessageClient
         return result.Data;
     }
 
+    /// <summary>
+    /// Send multiple messages in a single API call.
+    /// Returns per-item success/error results and total enqueued message count.
+    /// </summary>
+    public async Task<BatchSendMessagesResponse?> BatchSendAsync(BatchSendMessagesRequest request, CancellationToken ct = default)
+    {
+        var result = await SdkHelpers.PostAsync<BatchSendMessagesResponse>(_http, $"{BasePath}/batch", request, _json, ct);
+        return result.Data;
+    }
+
     /// <summary>Get a single message by ID.</summary>
     public async Task<MessageResponse?> GetAsync(Guid messageId, CancellationToken ct = default)
     {
@@ -57,6 +67,16 @@ public class MessageClient
     public async Task<RetryMessageResponse?> RetryAsync(Guid messageId, CancellationToken ct = default)
     {
         var result = await SdkHelpers.PostAsync<RetryMessageResponse>(_http, $"{BasePath}/{messageId}/retry", null, _json, ct);
+        return result.Data;
+    }
+
+    /// <summary>
+    /// Replay historical messages by event type and date range.
+    /// Creates new pending messages for redelivery to active endpoints.
+    /// </summary>
+    public async Task<ReplayMessagesResponse?> ReplayAsync(ReplayMessagesRequest request, CancellationToken ct = default)
+    {
+        var result = await SdkHelpers.PostAsync<ReplayMessagesResponse>(_http, $"{BasePath}/replay", request, _json, ct);
         return result.Data;
     }
 

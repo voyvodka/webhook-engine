@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Entities;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
@@ -31,110 +32,135 @@ public class MessagesController : ControllerBase
     public async Task<IActionResult> Send([FromBody] SendMessageRequest request, CancellationToken ct)
     {
         var appId = (Guid)HttpContext.Items["AppId"]!;
-
-        Guid eventTypeId;
-        string eventTypeName;
-
-        if (request.EventTypeId.HasValue)
+        var result = await EnqueueSendRequestAsync(appId, request, ct);
+        if (!result.Success)
         {
-            var eventType = await _eventTypeRepo.GetByIdAsync(appId, request.EventTypeId.Value, ct);
-            if (eventType is null)
-            {
-                return UnprocessableEntity(new
-                {
-                    error = new { code = "UNPROCESSABLE", message = "Event type not found for this application." },
-                    meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-                });
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.EventType)
-                && !string.Equals(request.EventType, eventType.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                return UnprocessableEntity(new
-                {
-                    error = new { code = "UNPROCESSABLE", message = "eventType and eventTypeId refer to different event types." },
-                    meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-                });
-            }
-
-            eventTypeId = eventType.Id;
-            eventTypeName = eventType.Name;
-        }
-        else
-        {
-            var eventType = await _eventTypeRepo.GetByNameAsync(appId, request.EventType, ct);
-            if (eventType is null)
-            {
-                return UnprocessableEntity(new
-                {
-                    error = new { code = "UNPROCESSABLE", message = "Event type not found for this application." },
-                    meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-                });
-            }
-
-            eventTypeId = eventType.Id;
-            eventTypeName = eventType.Name;
+            return UnprocessableEntity(ApiEnvelope.Error(HttpContext, result.ErrorCode!, result.ErrorMessage!));
         }
 
-        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        return Accepted(ApiEnvelope.Success(HttpContext, new
         {
-            var existingMessages = await _messageRepo.ListByIdempotencyKeyAsync(
-                appId,
-                request.IdempotencyKey,
-                DateTime.UtcNow.AddHours(-24),
-                ct);
+            messageIds = result.MessageIds.Select(id => id.ToString()),
+            endpointCount = result.EndpointCount,
+            eventType = result.EventType
+        }));
+    }
 
-            if (existingMessages.Count > 0)
+    [HttpPost("batch")]
+    public async Task<IActionResult> BatchSend([FromBody] BatchSendMessagesRequest request, CancellationToken ct)
+    {
+        var appId = (Guid)HttpContext.Items["AppId"]!;
+
+        var results = new List<object>(request.Messages.Count);
+        var totalEnqueuedMessages = 0;
+        var acceptedEvents = 0;
+        var rejectedEvents = 0;
+
+        for (var index = 0; index < request.Messages.Count; index++)
+        {
+            var item = request.Messages[index];
+            var result = await EnqueueSendRequestAsync(appId, item, ct);
+
+            if (!result.Success)
             {
-                return Accepted(new
+                rejectedEvents++;
+                results.Add(new
                 {
-                    data = new
+                    index,
+                    success = false,
+                    error = new
                     {
-                        messageIds = existingMessages.Select(m => m.Id.ToString()),
-                        endpointCount = existingMessages.Count,
-                        eventType = eventTypeName
-                    },
-                    meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
+                        code = result.ErrorCode,
+                        message = result.ErrorMessage
+                    }
                 });
+                continue;
             }
+
+            acceptedEvents++;
+            totalEnqueuedMessages += result.MessageIds.Count;
+            results.Add(new
+            {
+                index,
+                success = true,
+                eventType = result.EventType,
+                endpointCount = result.EndpointCount,
+                messageIds = result.MessageIds.Select(id => id.ToString())
+            });
         }
 
-        // Find subscribed endpoints
-        var endpoints = await _endpointRepo.GetSubscribedEndpointsAsync(appId, eventTypeId, ct);
-
-        if (endpoints.Count == 0)
-            return Accepted(new { data = new { messageIds = Array.Empty<string>(), endpointCount = 0, eventType = eventTypeName } });
-
-        var messageIds = new List<Guid>();
-
-        foreach (var endpoint in endpoints)
+        return Accepted(ApiEnvelope.Success(HttpContext, new
         {
-            var message = new Message
+            totalEvents = request.Messages.Count,
+            acceptedEvents,
+            rejectedEvents,
+            totalEnqueuedMessages,
+            results
+        }));
+    }
+
+    [HttpPost("replay")]
+    public async Task<IActionResult> Replay([FromBody] ReplayMessagesRequest request, CancellationToken ct)
+    {
+        var appId = (Guid)HttpContext.Items["AppId"]!;
+
+        var eventTypeResolution = await ResolveEventTypeAsync(appId, request.EventType, request.EventTypeId, ct);
+        if (!eventTypeResolution.Success)
+        {
+            return UnprocessableEntity(ApiEnvelope.Error(
+                HttpContext,
+                eventTypeResolution.ErrorCode!,
+                eventTypeResolution.ErrorMessage!));
+        }
+
+        var statuses = request.Statuses is { Count: > 0 }
+            ? request.Statuses
+            : [MessageStatus.Delivered, MessageStatus.Failed, MessageStatus.DeadLetter];
+
+        var sourceMessages = await _messageRepo.ListReplayCandidatesAsync(
+            appId,
+            eventTypeResolution.EventTypeId,
+            request.EndpointId,
+            request.From,
+            request.To,
+            statuses,
+            request.MaxMessages,
+            ct);
+
+        var replayedMessageIds = new List<string>(sourceMessages.Count);
+
+        foreach (var source in sourceMessages)
+        {
+            var replayMessage = new Message
             {
-                AppId = appId,
-                EndpointId = endpoint.Id,
-                EventTypeId = eventTypeId,
-                EventId = request.EventId,
-                IdempotencyKey = request.IdempotencyKey,
-                Payload = System.Text.Json.JsonSerializer.Serialize(request.Payload),
+                AppId = source.AppId,
+                EndpointId = source.EndpointId,
+                EventTypeId = source.EventTypeId,
+                EventId = source.EventId,
+                IdempotencyKey = null,
+                Payload = source.Payload,
                 Status = MessageStatus.Pending,
+                AttemptCount = 0,
+                MaxRetries = source.MaxRetries,
                 ScheduledAt = DateTime.UtcNow
             };
 
-            await _messageQueue.EnqueueAsync(message, ct);
-            messageIds.Add(message.Id);
+            await _messageQueue.EnqueueAsync(replayMessage, ct);
+            replayedMessageIds.Add(replayMessage.Id.ToString());
         }
 
-        return Accepted(new
+        return Accepted(ApiEnvelope.Success(HttpContext, new
         {
-            data = new
-            {
-                messageIds = messageIds.Select(id => id.ToString()),
-                endpointCount = endpoints.Count,
-                eventType = eventTypeName
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            sourceCount = sourceMessages.Count,
+            replayedCount = replayedMessageIds.Count,
+            messageIds = replayedMessageIds,
+            eventType = eventTypeResolution.EventTypeName,
+            endpointId = request.EndpointId,
+            from = request.From,
+            to = request.To,
+            maxMessages = request.MaxMessages,
+            statuses = statuses.Select(s => s.ToString().ToLowerInvariant())
+        }));
     }
 
     [HttpGet("{messageId:guid}")]
@@ -143,9 +169,9 @@ public class MessagesController : ControllerBase
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var message = await _messageRepo.GetByIdAsync(appId, messageId, ct);
         if (message is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Message not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Message not found."));
 
-        return Ok(new { data = message, meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" } });
+        return Ok(ApiEnvelope.Success(HttpContext, message.ToDto()));
     }
 
     [HttpGet]
@@ -161,24 +187,29 @@ public class MessagesController : ControllerBase
     {
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var messages = await _messageRepo.ListAsync(appId, status, endpointId, eventTypeId, after, before, page, pageSize, ct);
+        var totalCount = await _messageRepo.CountAsync(appId, status, endpointId, eventTypeId, after, before, ct);
+        var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);
 
-        return Ok(new
-        {
-            data = messages,
-            meta = new
-            {
-                requestId = $"req_{HttpContext.Items["RequestId"]}",
-                pagination = new { page, pageSize }
-            }
-        });
+        return Ok(ApiEnvelope.Success(HttpContext, messages.Select(m => m.ToDto()), pagination));
     }
 
     [HttpGet("{messageId:guid}/attempts")]
-    public async Task<IActionResult> ListAttempts(Guid messageId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    public async Task<IActionResult> ListAttempts(
+        Guid messageId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
         var appId = (Guid)HttpContext.Items["AppId"]!;
+        var message = await _messageRepo.GetByIdAsync(appId, messageId, ct);
+        if (message is null)
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Message not found."));
+
         var attempts = await _messageRepo.ListAttemptsAsync(appId, messageId, page, pageSize, ct);
-        return Ok(new { data = attempts, meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" } });
+        var totalCount = await _messageRepo.CountAttemptsAsync(appId, messageId, ct);
+        var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);
+
+        return Ok(ApiEnvelope.Success(HttpContext, attempts.Select(a => a.ToDto()), pagination));
     }
 
     [HttpPost("{messageId:guid}/retry")]
@@ -187,18 +218,134 @@ public class MessagesController : ControllerBase
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var message = await _messageRepo.GetByIdAsync(appId, messageId, ct);
         if (message is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Message not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Message not found."));
 
         if (message.Status != MessageStatus.Failed && message.Status != MessageStatus.DeadLetter)
-            return UnprocessableEntity(new { error = new { code = "UNPROCESSABLE", message = "Only failed or dead-letter messages can be retried." } });
+        {
+            return UnprocessableEntity(ApiEnvelope.Error(
+                HttpContext,
+                "UNPROCESSABLE",
+                "Only failed or dead-letter messages can be retried."));
+        }
 
         await _messageRepo.RetryAsync(messageId, ct);
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new { messageId, status = "pending", scheduledAt = DateTime.UtcNow },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            messageId,
+            status = "pending",
+            scheduledAt = DateTime.UtcNow
+        }));
+    }
+
+    private async Task<SendOperationResult> EnqueueSendRequestAsync(Guid appId, SendMessageRequest request, CancellationToken ct)
+    {
+        var eventTypeResolution = await ResolveEventTypeAsync(appId, request.EventType, request.EventTypeId, ct);
+        if (!eventTypeResolution.Success)
+            return SendOperationResult.Failure(eventTypeResolution.ErrorCode!, eventTypeResolution.ErrorMessage!);
+
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            var existingMessages = await _messageRepo.ListByIdempotencyKeyAsync(
+                appId,
+                request.IdempotencyKey,
+                DateTime.UtcNow.AddHours(-24),
+                ct);
+
+            if (existingMessages.Count > 0)
+            {
+                return SendOperationResult.Ok(
+                    eventTypeResolution.EventTypeName!,
+                    existingMessages.Select(m => m.Id).ToList(),
+                    existingMessages.Count);
+            }
+        }
+
+        var endpoints = await _endpointRepo.GetSubscribedEndpointsAsync(appId, eventTypeResolution.EventTypeId!.Value, ct);
+
+        if (endpoints.Count == 0)
+        {
+            return SendOperationResult.Ok(eventTypeResolution.EventTypeName!, [], 0);
+        }
+
+        var messageIds = new List<Guid>(endpoints.Count);
+
+        foreach (var endpoint in endpoints)
+        {
+            var message = new Message
+            {
+                AppId = appId,
+                EndpointId = endpoint.Id,
+                EventTypeId = eventTypeResolution.EventTypeId.Value,
+                EventId = request.EventId,
+                IdempotencyKey = request.IdempotencyKey,
+                Payload = System.Text.Json.JsonSerializer.Serialize(request.Payload),
+                Status = MessageStatus.Pending,
+                ScheduledAt = DateTime.UtcNow
+            };
+
+            await _messageQueue.EnqueueAsync(message, ct);
+            messageIds.Add(message.Id);
+        }
+
+        return SendOperationResult.Ok(eventTypeResolution.EventTypeName!, messageIds, endpoints.Count);
+    }
+
+    private async Task<EventTypeResolutionResult> ResolveEventTypeAsync(
+        Guid appId,
+        string? eventTypeName,
+        Guid? eventTypeId,
+        CancellationToken ct)
+    {
+        if (eventTypeId.HasValue)
+        {
+            var eventType = await _eventTypeRepo.GetByIdAsync(appId, eventTypeId.Value, ct);
+            if (eventType is null)
+                return EventTypeResolutionResult.Failure("UNPROCESSABLE", "Event type not found for this application.");
+
+            if (!string.IsNullOrWhiteSpace(eventTypeName)
+                && !string.Equals(eventTypeName, eventType.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                return EventTypeResolutionResult.Failure("UNPROCESSABLE", "eventType and eventTypeId refer to different event types.");
+            }
+
+            return EventTypeResolutionResult.Ok(eventType.Id, eventType.Name);
+        }
+
+        var resolvedByName = await _eventTypeRepo.GetByNameAsync(appId, eventTypeName ?? string.Empty, ct);
+        if (resolvedByName is null)
+            return EventTypeResolutionResult.Failure("UNPROCESSABLE", "Event type not found for this application.");
+
+        return EventTypeResolutionResult.Ok(resolvedByName.Id, resolvedByName.Name);
+    }
+
+    private sealed record EventTypeResolutionResult(
+        bool Success,
+        Guid? EventTypeId,
+        string? EventTypeName,
+        string? ErrorCode,
+        string? ErrorMessage)
+    {
+        public static EventTypeResolutionResult Ok(Guid eventTypeId, string eventTypeName)
+            => new(true, eventTypeId, eventTypeName, null, null);
+
+        public static EventTypeResolutionResult Failure(string errorCode, string errorMessage)
+            => new(false, null, null, errorCode, errorMessage);
+    }
+
+    private sealed record SendOperationResult(
+        bool Success,
+        string? EventType,
+        List<Guid> MessageIds,
+        int EndpointCount,
+        string? ErrorCode,
+        string? ErrorMessage)
+    {
+        public static SendOperationResult Ok(string eventType, List<Guid> messageIds, int endpointCount)
+            => new(true, eventType, messageIds, endpointCount, null, null);
+
+        public static SendOperationResult Failure(string errorCode, string errorMessage)
+            => new(false, null, [], 0, errorCode, errorMessage);
     }
 }
 
@@ -209,4 +356,20 @@ public class SendMessageRequest
     public object Payload { get; set; } = new { };
     public string? EventId { get; set; }
     public string? IdempotencyKey { get; set; }
+}
+
+public class ReplayMessagesRequest
+{
+    public string? EventType { get; set; }
+    public Guid? EventTypeId { get; set; }
+    public Guid? EndpointId { get; set; }
+    public DateTime From { get; set; }
+    public DateTime To { get; set; }
+    public List<MessageStatus>? Statuses { get; set; }
+    public int MaxMessages { get; set; } = 100;
+}
+
+public class BatchSendMessagesRequest
+{
+    public List<SendMessageRequest> Messages { get; set; } = [];
 }

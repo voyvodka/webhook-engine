@@ -18,6 +18,7 @@ public class DeliveryWorker : BackgroundService
     private readonly ILogger<DeliveryWorker> _logger;
     private readonly DeliveryOptions _deliveryOptions;
     private readonly RetryPolicyOptions _retryPolicy;
+    private readonly IEndpointRateLimiter _endpointRateLimiter;
     private readonly WebhookMetrics? _metrics;
     private readonly string _workerId = $"worker_{Environment.MachineName}_{Guid.NewGuid().ToString("N")[..8]}";
 
@@ -26,12 +27,14 @@ public class DeliveryWorker : BackgroundService
         ILogger<DeliveryWorker> logger,
         IOptions<DeliveryOptions> deliveryOptions,
         IOptions<RetryPolicyOptions> retryPolicy,
+        IEndpointRateLimiter endpointRateLimiter,
         WebhookMetrics? metrics = null)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
         _deliveryOptions = deliveryOptions.Value;
         _retryPolicy = retryPolicy.Value;
+        _endpointRateLimiter = endpointRateLimiter;
         _metrics = metrics;
     }
 
@@ -117,6 +120,26 @@ public class DeliveryWorker : BackgroundService
                 _logger.LogWarning("Endpoint {EndpointId} not found for message {MessageId}", message.EndpointId, message.Id);
                 await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, ct);
                 return;
+            }
+
+            var rateLimitPerMinute = ResolveRateLimitPerMinute(endpoint.MetadataJson);
+            if (rateLimitPerMinute is > 0)
+            {
+                var limitPerMinute = rateLimitPerMinute.Value;
+                if (!_endpointRateLimiter.TryAcquire(endpoint.Id, limitPerMinute, out var retryAtUtc))
+                {
+                    var nextAttemptAt = retryAtUtc > DateTime.UtcNow ? retryAtUtc : DateTime.UtcNow.AddSeconds(1);
+                    await messageRepo.ReschedulePendingAsync(message.Id, nextAttemptAt, ct);
+
+                    _logger.LogInformation(
+                        "Rate limit reached for endpoint {EndpointId} (limit: {LimitPerMinute}/min). Message {MessageId} rescheduled to {NextAttemptAt}.",
+                        endpoint.Id,
+                        limitPerMinute,
+                        message.Id,
+                        nextAttemptAt);
+
+                    return;
+                }
             }
 
             var signingSecret = endpoint.SecretOverride ?? endpoint.Application?.SigningSecret;
@@ -234,6 +257,37 @@ public class DeliveryWorker : BackgroundService
         catch (JsonException)
         {
             return [];
+        }
+    }
+
+    private static int? ResolveRateLimitPerMinute(string? metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson))
+            return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(metadataJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                return null;
+
+            if (!document.RootElement.TryGetProperty("rateLimitPerMinute", out var rateLimitElement))
+                return null;
+
+            if (rateLimitElement.ValueKind == JsonValueKind.Number && rateLimitElement.TryGetInt32(out var numericValue))
+                return numericValue > 0 ? numericValue : null;
+
+            if (rateLimitElement.ValueKind == JsonValueKind.String
+                && int.TryParse(rateLimitElement.GetString(), out var stringValue))
+            {
+                return stringValue > 0 ? stringValue : null;
+            }
+
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

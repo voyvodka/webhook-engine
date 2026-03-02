@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Entities;
 using WebhookEngine.Infrastructure.Repositories;
 
@@ -20,15 +21,13 @@ public class EventTypesController : ControllerBase
     {
         var appId = (Guid)HttpContext.Items["AppId"]!;
 
-        // Check for duplicate name within same application
         var existing = await _eventTypeRepo.GetByNameAsync(appId, request.Name, ct);
         if (existing is not null)
         {
-            return Conflict(new
-            {
-                error = new { code = "CONFLICT", message = $"Event type '{request.Name}' already exists for this application." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return Conflict(ApiEnvelope.Error(
+                HttpContext,
+                "CONFLICT",
+                $"Event type '{request.Name}' already exists for this application."));
         }
 
         var eventType = new EventType
@@ -43,17 +42,9 @@ public class EventTypesController : ControllerBase
 
         await _eventTypeRepo.CreateAsync(eventType, ct);
 
-        return Created($"/api/v1/event-types/{eventType.Id}", new
-        {
-            data = new
-            {
-                id = eventType.Id,
-                name = eventType.Name,
-                description = eventType.Description,
-                createdAt = eventType.CreatedAt
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+        return Created(
+            $"/api/v1/event-types/{eventType.Id}",
+            ApiEnvelope.Success(HttpContext, eventType.ToDto()));
     }
 
     [HttpGet]
@@ -66,32 +57,9 @@ public class EventTypesController : ControllerBase
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var eventTypes = await _eventTypeRepo.ListByAppIdAsync(appId, includeArchived, page, pageSize, ct);
         var totalCount = await _eventTypeRepo.CountByAppIdAsync(appId, includeArchived, ct);
-        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);
 
-        return Ok(new
-        {
-            data = eventTypes.Select(et => new
-            {
-                id = et.Id,
-                name = et.Name,
-                description = et.Description,
-                isArchived = et.IsArchived,
-                createdAt = et.CreatedAt
-            }),
-            meta = new
-            {
-                requestId = $"req_{HttpContext.Items["RequestId"]}",
-                pagination = new
-                {
-                    page,
-                    pageSize,
-                    totalCount,
-                    totalPages,
-                    hasNext = page < totalPages,
-                    hasPrev = page > 1
-                }
-            }
-        });
+        return Ok(ApiEnvelope.Success(HttpContext, eventTypes.Select(et => et.ToDto()), pagination));
     }
 
     [HttpGet("{eventTypeId:guid}")]
@@ -100,21 +68,9 @@ public class EventTypesController : ControllerBase
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var eventType = await _eventTypeRepo.GetByIdAsync(appId, eventTypeId, ct);
         if (eventType is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Event type not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Event type not found."));
 
-        return Ok(new
-        {
-            data = new
-            {
-                id = eventType.Id,
-                name = eventType.Name,
-                description = eventType.Description,
-                schema = eventType.SchemaJson,
-                isArchived = eventType.IsArchived,
-                createdAt = eventType.CreatedAt
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+        return Ok(ApiEnvelope.Success(HttpContext, eventType.ToDto()));
     }
 
     [HttpPut("{eventTypeId:guid}")]
@@ -123,10 +79,15 @@ public class EventTypesController : ControllerBase
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var eventType = await _eventTypeRepo.GetByIdAsync(appId, eventTypeId, ct);
         if (eventType is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Event type not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Event type not found."));
 
         if (eventType.IsArchived)
-            return UnprocessableEntity(new { error = new { code = "UNPROCESSABLE", message = "Cannot update an archived event type." } });
+        {
+            return UnprocessableEntity(ApiEnvelope.Error(
+                HttpContext,
+                "UNPROCESSABLE",
+                "Cannot update an archived event type."));
+        }
 
         eventType.Name = request.Name ?? eventType.Name;
         eventType.Description = request.Description ?? eventType.Description;
@@ -136,30 +97,16 @@ public class EventTypesController : ControllerBase
 
         await _eventTypeRepo.UpdateAsync(eventType, ct);
 
-        return Ok(new
-        {
-            data = new
-            {
-                id = eventType.Id,
-                name = eventType.Name,
-                description = eventType.Description,
-                isArchived = eventType.IsArchived,
-                createdAt = eventType.CreatedAt
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+        return Ok(ApiEnvelope.Success(HttpContext, eventType.ToDto()));
     }
 
-    /// <summary>
-    /// Soft delete (archive). Existing messages referencing this type are unaffected.
-    /// </summary>
     [HttpDelete("{eventTypeId:guid}")]
     public async Task<IActionResult> Archive(Guid eventTypeId, CancellationToken ct)
     {
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var eventType = await _eventTypeRepo.GetByIdAsync(appId, eventTypeId, ct);
         if (eventType is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Event type not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Event type not found."));
 
         await _eventTypeRepo.ArchiveAsync(appId, eventTypeId, ct);
         return NoContent();

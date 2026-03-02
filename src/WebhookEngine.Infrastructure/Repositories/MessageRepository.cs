@@ -67,6 +67,38 @@ public class MessageRepository
             .ToListAsync(ct);
     }
 
+    public async Task<int> CountAsync(
+        Guid appId,
+        MessageStatus? status,
+        Guid? endpointId,
+        Guid? eventTypeId,
+        DateTime? after,
+        DateTime? before,
+        CancellationToken ct = default)
+    {
+        var query = _dbContext.Messages
+            .AsNoTracking()
+            .Where(m => m.AppId == appId)
+            .AsQueryable();
+
+        if (status.HasValue)
+            query = query.Where(m => m.Status == status.Value);
+
+        if (endpointId.HasValue)
+            query = query.Where(m => m.EndpointId == endpointId.Value);
+
+        if (eventTypeId.HasValue)
+            query = query.Where(m => m.EventTypeId == eventTypeId.Value);
+
+        if (after.HasValue)
+            query = query.Where(m => m.CreatedAt >= after.Value);
+
+        if (before.HasValue)
+            query = query.Where(m => m.CreatedAt <= before.Value);
+
+        return await query.CountAsync(ct);
+    }
+
     public async Task<List<Message>> ListByIdempotencyKeyAsync(
         Guid appId,
         string idempotencyKey,
@@ -102,6 +134,13 @@ public class MessageRepository
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
+    }
+
+    public async Task<int> CountAttemptsAsync(Guid appId, Guid messageId, CancellationToken ct = default)
+    {
+        return await _dbContext.MessageAttempts
+            .AsNoTracking()
+            .CountAsync(a => a.MessageId == messageId && a.Message.AppId == appId, ct);
     }
 
     public async Task CreateAttemptAsync(MessageAttempt attempt, CancellationToken ct = default)
@@ -194,6 +233,37 @@ public class MessageRepository
                 .SetProperty(m => m.Status, MessageStatus.Pending)
                 .SetProperty(m => m.LockedAt, (DateTime?)null)
                 .SetProperty(m => m.LockedBy, (string?)null), ct);
+    }
+
+    public async Task<List<Message>> ListReplayCandidatesAsync(
+        Guid appId,
+        Guid? eventTypeId,
+        Guid? endpointId,
+        DateTime from,
+        DateTime to,
+        IReadOnlyCollection<MessageStatus> statuses,
+        int maxMessages,
+        CancellationToken ct = default)
+    {
+        var query = _dbContext.Messages
+            .AsNoTracking()
+            .Where(m => m.AppId == appId
+                && m.CreatedAt >= from
+                && m.CreatedAt <= to
+                && statuses.Contains(m.Status)
+                && m.Endpoint.Status == EndpointStatus.Active)
+            .AsQueryable();
+
+        if (eventTypeId.HasValue)
+            query = query.Where(m => m.EventTypeId == eventTypeId.Value);
+
+        if (endpointId.HasValue)
+            query = query.Where(m => m.EndpointId == endpointId.Value);
+
+        return await query
+            .OrderBy(m => m.CreatedAt)
+            .Take(maxMessages)
+            .ToListAsync(ct);
     }
 
     /// <summary>

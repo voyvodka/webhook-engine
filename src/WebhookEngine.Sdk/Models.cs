@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace WebhookEngine.Sdk;
@@ -65,7 +66,7 @@ public class EventTypeResponse
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public string? Schema { get; set; }
+    public JsonElement? Schema { get; set; }
     public bool IsArchived { get; set; }
     public DateTime CreatedAt { get; set; }
 }
@@ -99,10 +100,11 @@ public class EndpointResponse
     public Guid AppId { get; set; }
     public string Url { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public int Status { get; set; }
-    public string? CustomHeadersJson { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public Dictionary<string, string>? CustomHeadersJson { get; set; }
     public string? SecretOverride { get; set; }
-    public string? MetadataJson { get; set; }
+    public Dictionary<string, string>? MetadataJson { get; set; }
+    public List<Guid> FilterEventTypes { get; set; } = [];
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
@@ -139,6 +141,30 @@ public class SendMessageResponse
     public string EventType { get; set; } = string.Empty;
 }
 
+public class BatchSendMessagesRequest
+{
+    public List<SendMessageRequest> Messages { get; set; } = [];
+}
+
+public class BatchSendMessagesResponse
+{
+    public int TotalEvents { get; set; }
+    public int AcceptedEvents { get; set; }
+    public int RejectedEvents { get; set; }
+    public int TotalEnqueuedMessages { get; set; }
+    public List<BatchSendResultItem> Results { get; set; } = [];
+}
+
+public class BatchSendResultItem
+{
+    public int Index { get; set; }
+    public bool Success { get; set; }
+    public string? EventType { get; set; }
+    public int? EndpointCount { get; set; }
+    public List<string> MessageIds { get; set; } = [];
+    public ApiError? Error { get; set; }
+}
+
 public class MessageResponse
 {
     public Guid Id { get; set; }
@@ -147,8 +173,8 @@ public class MessageResponse
     public Guid EventTypeId { get; set; }
     public string? EventId { get; set; }
     public string? IdempotencyKey { get; set; }
-    public string? Payload { get; set; }
-    public int Status { get; set; }
+    public JsonElement? Payload { get; set; }
+    public string Status { get; set; } = string.Empty;
     public int AttemptCount { get; set; }
     public int MaxRetries { get; set; }
     public DateTime ScheduledAt { get; set; }
@@ -163,15 +189,39 @@ public class RetryMessageResponse
     public DateTime ScheduledAt { get; set; }
 }
 
+public class ReplayMessagesRequest
+{
+    public string? EventType { get; set; }
+    public Guid? EventTypeId { get; set; }
+    public Guid? EndpointId { get; set; }
+    public DateTime From { get; set; }
+    public DateTime To { get; set; }
+    public List<string>? Statuses { get; set; }
+    public int MaxMessages { get; set; } = 100;
+}
+
+public class ReplayMessagesResponse
+{
+    public int SourceCount { get; set; }
+    public int ReplayedCount { get; set; }
+    public List<string> MessageIds { get; set; } = [];
+    public string EventType { get; set; } = string.Empty;
+    public Guid? EndpointId { get; set; }
+    public DateTime From { get; set; }
+    public DateTime To { get; set; }
+    public int MaxMessages { get; set; }
+    public List<string> Statuses { get; set; } = [];
+}
+
 public class MessageAttemptResponse
 {
     public Guid Id { get; set; }
     public Guid MessageId { get; set; }
     public Guid EndpointId { get; set; }
     public int AttemptNumber { get; set; }
-    public int Status { get; set; }
+    public string Status { get; set; } = string.Empty;
     public int? StatusCode { get; set; }
-    public string? RequestHeadersJson { get; set; }
+    public Dictionary<string, string>? RequestHeadersJson { get; set; }
     public string? ResponseBody { get; set; }
     public string? Error { get; set; }
     public int LatencyMs { get; set; }

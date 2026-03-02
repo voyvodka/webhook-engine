@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Infrastructure.Data;
 using WebhookEngine.Infrastructure.Repositories;
@@ -46,11 +47,10 @@ public class EndpointsController : ControllerBase
                 var eventType = await _eventTypeRepo.GetByIdAsync(appId, eventTypeId, ct);
                 if (eventType is null)
                 {
-                    return UnprocessableEntity(new
-                    {
-                        error = new { code = "UNPROCESSABLE", message = $"Event type {eventTypeId} is invalid for this application." },
-                        meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-                    });
+                    return UnprocessableEntity(ApiEnvelope.Error(
+                        HttpContext,
+                        "UNPROCESSABLE",
+                        $"Event type {eventTypeId} is invalid for this application."));
                 }
 
                 endpoint.EventTypes.Add(eventType);
@@ -58,12 +58,11 @@ public class EndpointsController : ControllerBase
         }
 
         await _endpointRepo.CreateAsync(endpoint, ct);
+        var createdEndpoint = await _endpointRepo.GetByIdAsync(appId, endpoint.Id, ct) ?? endpoint;
 
-        return Created($"/api/v1/endpoints/{endpoint.Id}", new
-        {
-            data = endpoint,
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+        return Created(
+            $"/api/v1/endpoints/{endpoint.Id}",
+            ApiEnvelope.Success(HttpContext, createdEndpoint.ToDto()));
     }
 
     [HttpGet]
@@ -75,12 +74,10 @@ public class EndpointsController : ControllerBase
     {
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var endpoints = await _endpointRepo.ListByAppIdAsync(appId, status, page, pageSize, ct);
+        var totalCount = await _endpointRepo.CountByAppIdAsync(appId, status, ct);
+        var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);
 
-        return Ok(new
-        {
-            data = endpoints,
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}", pagination = new { page, pageSize } }
-        });
+        return Ok(ApiEnvelope.Success(HttpContext, endpoints.Select(e => e.ToDto()), pagination));
     }
 
     [HttpGet("{endpointId:guid}")]
@@ -89,9 +86,9 @@ public class EndpointsController : ControllerBase
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var endpoint = await _endpointRepo.GetByIdAsync(appId, endpointId, ct);
         if (endpoint is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Endpoint not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Endpoint not found."));
 
-        return Ok(new { data = endpoint, meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" } });
+        return Ok(ApiEnvelope.Success(HttpContext, endpoint.ToDto()));
     }
 
     [HttpPut("{endpointId:guid}")]
@@ -100,7 +97,7 @@ public class EndpointsController : ControllerBase
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var endpoint = await _endpointRepo.GetByIdAsync(appId, endpointId, ct);
         if (endpoint is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Endpoint not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Endpoint not found."));
 
         if (request.Url is not null)
             endpoint.Url = request.Url;
@@ -126,11 +123,10 @@ public class EndpointsController : ControllerBase
                 var eventType = await _eventTypeRepo.GetByIdAsync(appId, eventTypeId, ct);
                 if (eventType is null)
                 {
-                    return UnprocessableEntity(new
-                    {
-                        error = new { code = "UNPROCESSABLE", message = $"Event type {eventTypeId} is invalid for this application." },
-                        meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-                    });
+                    return UnprocessableEntity(ApiEnvelope.Error(
+                        HttpContext,
+                        "UNPROCESSABLE",
+                        $"Event type {eventTypeId} is invalid for this application."));
                 }
 
                 endpoint.EventTypes.Add(eventType);
@@ -138,8 +134,9 @@ public class EndpointsController : ControllerBase
         }
 
         await _endpointRepo.UpdateAsync(endpoint, ct);
+        var updatedEndpoint = await _endpointRepo.GetByIdAsync(appId, endpoint.Id, ct) ?? endpoint;
 
-        return Ok(new { data = endpoint, meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" } });
+        return Ok(ApiEnvelope.Success(HttpContext, updatedEndpoint.ToDto()));
     }
 
     [HttpPost("{endpointId:guid}/disable")]
@@ -148,12 +145,12 @@ public class EndpointsController : ControllerBase
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var endpoint = await _endpointRepo.GetByIdAsync(appId, endpointId, ct);
         if (endpoint is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Endpoint not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Endpoint not found."));
 
         endpoint.Status = EndpointStatus.Disabled;
         await _endpointRepo.UpdateAsync(endpoint, ct);
 
-        return Ok(new { data = endpoint, meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" } });
+        return Ok(ApiEnvelope.Success(HttpContext, endpoint.ToDto()));
     }
 
     [HttpPost("{endpointId:guid}/enable")]
@@ -162,12 +159,12 @@ public class EndpointsController : ControllerBase
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var endpoint = await _endpointRepo.GetByIdAsync(appId, endpointId, ct);
         if (endpoint is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Endpoint not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Endpoint not found."));
 
         endpoint.Status = EndpointStatus.Active;
         await _endpointRepo.UpdateAsync(endpoint, ct);
 
-        return Ok(new { data = endpoint, meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" } });
+        return Ok(ApiEnvelope.Success(HttpContext, endpoint.ToDto()));
     }
 
     [HttpDelete("{endpointId:guid}")]
@@ -184,7 +181,7 @@ public class EndpointsController : ControllerBase
         var appId = (Guid)HttpContext.Items["AppId"]!;
         var endpoint = await _endpointRepo.GetByIdAsync(appId, endpointId, ct);
         if (endpoint is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Endpoint not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Endpoint not found."));
 
         var startAt = period switch
         {
@@ -218,21 +215,17 @@ public class EndpointsController : ControllerBase
             p95LatencyMs = latencies[percentileIndex];
         }
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new
-            {
-                endpointId,
-                period,
-                totalAttempts,
-                successful,
-                failed,
-                successRate,
-                avgLatencyMs = Math.Round(avgLatencyMs, 0),
-                p95LatencyMs
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            endpointId,
+            period,
+            totalAttempts,
+            successful,
+            failed,
+            successRate,
+            avgLatencyMs = Math.Round(avgLatencyMs, 0),
+            p95LatencyMs
+        }));
     }
 }
 

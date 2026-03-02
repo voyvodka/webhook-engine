@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WebhookEngine.API.Contracts;
 using WebhookEngine.Infrastructure.Repositories;
 using AppEntity = WebhookEngine.Core.Entities.Application;
 
@@ -104,7 +105,7 @@ public class ApplicationsController : ControllerBase
     {
         var application = await _appRepo.GetByIdAsync(applicationId, ct);
         if (application is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Application not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
 
         return Ok(new
         {
@@ -126,7 +127,7 @@ public class ApplicationsController : ControllerBase
     {
         var application = await _appRepo.GetByIdAsync(applicationId, ct);
         if (application is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Application not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
 
         application.Name = request.Name ?? application.Name;
         application.IsActive = request.IsActive ?? application.IsActive;
@@ -153,7 +154,7 @@ public class ApplicationsController : ControllerBase
     {
         var application = await _appRepo.GetByIdAsync(applicationId, ct);
         if (application is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Application not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
 
         await _appRepo.DeleteAsync(applicationId, ct);
         return NoContent();
@@ -164,7 +165,7 @@ public class ApplicationsController : ControllerBase
     {
         var application = await _appRepo.GetByIdAsync(applicationId, ct);
         if (application is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Application not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
 
         // Generate new API key with same prefix format
         var appIdShort = application.Id.ToString("N")[..8];
@@ -192,7 +193,7 @@ public class ApplicationsController : ControllerBase
     {
         var application = await _appRepo.GetByIdAsync(applicationId, ct);
         if (application is null)
-            return NotFound(new { error = new { code = "NOT_FOUND", message = "Application not found." } });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
 
         var newSigningSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         application.SigningSecret = newSigningSecret;
