@@ -6,6 +6,7 @@ import { Select } from "../components/Select";
 import { useDeliveryFeed } from "../hooks/useDeliveryFeed";
 import { listApplications, listEndpoints, listMessages, sendDashboardMessage } from "../api/dashboardApi";
 import type { ApplicationRow, MessageRow, MessageStatusType, Pagination } from "../types";
+import { formatLocaleDateTime } from "../utils/dateTime";
 import {
   Send,
   Filter,
@@ -314,7 +315,7 @@ export function MessagesPage() {
                       </td>
                       <td className="px-4 py-2"><StatusBadge status={msg.status} /></td>
                       <td className="px-4 py-2 text-xs text-text-muted font-mono">{msg.attemptCount}/{msg.maxRetries}</td>
-                      <td className="px-4 py-2 text-xs text-text-muted">{new Date(msg.createdAt).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-xs text-text-muted">{formatLocaleDateTime(msg.createdAt)}</td>
                       <td className="px-4 py-2">
                         <div className="flex items-center justify-end gap-1">
                           <Link to={`/delivery-log/${msg.id}`} className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent-soft transition-colors" title="View details">

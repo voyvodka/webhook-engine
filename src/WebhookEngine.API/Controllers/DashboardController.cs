@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WebhookEngine.API.Contracts;
+using WebhookEngine.API.Services;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Infrastructure.Data;
@@ -25,19 +26,22 @@ public class DashboardController : ControllerBase
     private readonly EndpointRepository _endpointRepository;
     private readonly EventTypeRepository _eventTypeRepository;
     private readonly IMessageQueue _messageQueue;
+    private readonly IDevTrafficGenerator _devTrafficGenerator;
 
     public DashboardController(
         WebhookDbContext dbContext,
         MessageRepository messageRepository,
         EndpointRepository endpointRepository,
         EventTypeRepository eventTypeRepository,
-        IMessageQueue messageQueue)
+        IMessageQueue messageQueue,
+        IDevTrafficGenerator devTrafficGenerator)
     {
         _dbContext = dbContext;
         _messageRepository = messageRepository;
         _endpointRepository = endpointRepository;
         _eventTypeRepository = eventTypeRepository;
         _messageQueue = messageQueue;
+        _devTrafficGenerator = devTrafficGenerator;
     }
 
     [HttpGet("overview")]
@@ -101,7 +105,7 @@ public class DashboardController : ControllerBase
     [HttpGet("timeline")]
     public async Task<IActionResult> Timeline(
         [FromQuery] string period = "24h",
-        [FromQuery] string interval = "1h",
+        [FromQuery] string interval = "15m",
         CancellationToken ct = default)
     {
         var (startTime, intervalMinutes) = ParseTimelineParams(period, interval);
@@ -674,6 +678,45 @@ public class DashboardController : ControllerBase
         }));
     }
 
+    [HttpGet("dev/traffic/status")]
+    public IActionResult GetDevTrafficStatus()
+    {
+        if (!_devTrafficGenerator.IsEnabled)
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Dev traffic tools are only available in Development or DEBUG builds."));
+
+        return Ok(ApiEnvelope.Success(HttpContext, _devTrafficGenerator.GetStatus()));
+    }
+
+    [HttpPost("dev/traffic/start")]
+    public async Task<IActionResult> StartDevTraffic([FromBody] DevTrafficStartRequest request, CancellationToken ct)
+    {
+        if (!_devTrafficGenerator.IsEnabled)
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Dev traffic tools are only available in Development or DEBUG builds."));
+
+        var status = await _devTrafficGenerator.StartAsync(request, ct);
+        return Ok(ApiEnvelope.Success(HttpContext, status));
+    }
+
+    [HttpPost("dev/traffic/seed-once")]
+    public async Task<IActionResult> SeedDevTraffic([FromBody] DevTrafficSeedRequest request, CancellationToken ct)
+    {
+        if (!_devTrafficGenerator.IsEnabled)
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Dev traffic tools are only available in Development or DEBUG builds."));
+
+        var result = await _devTrafficGenerator.SeedOnceAsync(request, ct);
+        return Ok(ApiEnvelope.Success(HttpContext, result));
+    }
+
+    [HttpPost("dev/traffic/stop")]
+    public async Task<IActionResult> StopDevTraffic(CancellationToken ct)
+    {
+        if (!_devTrafficGenerator.IsEnabled)
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Dev traffic tools are only available in Development or DEBUG builds."));
+
+        var status = await _devTrafficGenerator.StopAsync(ct);
+        return Ok(ApiEnvelope.Success(HttpContext, status));
+    }
+
     // ──────────────────────────────────────────────────
     // Helper
     // ──────────────────────────────────────────────────
@@ -692,9 +735,10 @@ public class DashboardController : ControllerBase
         var intervalMinutes = interval switch
         {
             "5m" => 5,
+            "15m" => 15,
             "1h" => 60,
             "1d" => 1440,
-            _ => 60
+            _ => 15
         };
 
         return (startTime, intervalMinutes);

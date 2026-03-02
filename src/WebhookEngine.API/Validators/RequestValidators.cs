@@ -1,5 +1,6 @@
 using FluentValidation;
 using WebhookEngine.API.Controllers;
+using WebhookEngine.API.Services;
 
 namespace WebhookEngine.API.Validators;
 
@@ -334,5 +335,26 @@ public class LoginRequestValidator : AbstractValidator<LoginRequest>
 
         RuleFor(x => x.Password)
             .NotEmpty();
+    }
+}
+
+public class DevTrafficStartRequestValidator : AbstractValidator<DevTrafficStartRequest>
+{
+    public DevTrafficStartRequestValidator()
+    {
+        RuleFor(x => x.IntervalMs)
+            .InclusiveBetween(250, 60_000);
+
+        RuleFor(x => x.MessagesPerTick)
+            .InclusiveBetween(1, 25);
+    }
+}
+
+public class DevTrafficSeedRequestValidator : AbstractValidator<DevTrafficSeedRequest>
+{
+    public DevTrafficSeedRequestValidator()
+    {
+        RuleFor(x => x.Messages)
+            .InclusiveBetween(1, 50);
     }
 }

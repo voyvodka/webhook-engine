@@ -1,8 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
-import { getOverview, getTimeline } from "../api/dashboardApi";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  getDevTrafficStatus,
+  getOverview,
+  getTimeline,
+  seedDevTraffic,
+  startDevTraffic,
+  stopDevTraffic,
+  type DevTrafficSeedResult,
+  type DevTrafficStatus
+} from "../api/dashboardApi";
 import { DeliveryTimeline } from "../components/DeliveryTimeline";
 import { useDeliveryFeed } from "../hooks/useDeliveryFeed";
 import type { DashboardOverview, TimelineBucket } from "../types";
+import { formatLocaleTime } from "../utils/dateTime";
 import {
   Activity,
   CheckCircle2,
@@ -11,7 +21,10 @@ import {
   Gauge,
   Timer,
   Wifi,
-  WifiOff
+  WifiOff,
+  Play,
+  Square,
+  FlaskConical
 } from "lucide-react";
 
 const fallbackOverview: DashboardOverview = {
@@ -70,30 +83,139 @@ export function DashboardPage() {
   const [overview, setOverview] = useState<DashboardOverview>(fallbackOverview);
   const [timeline, setTimeline] = useState<TimelineBucket[]>(fallbackTimeline);
   const [isLoading, setIsLoading] = useState(true);
+  const [devToolsAvailable, setDevToolsAvailable] = useState(false);
+  const [devStatus, setDevStatus] = useState<DevTrafficStatus | null>(null);
+  const [devSeedResult, setDevSeedResult] = useState<DevTrafficSeedResult | null>(null);
+  const [devActionLoading, setDevActionLoading] = useState(false);
   const { events, connected } = useDeliveryFeed(20);
 
-  useEffect(() => {
-    let isMounted = true;
+  const isMountedRef = useRef(true);
+  const realtimeSyncPendingRef = useRef(false);
+  const realtimeSyncInFlightRef = useRef(false);
+  const hasEverConnectedRef = useRef(false);
 
-    async function load() {
-      setIsLoading(true);
-      try {
-        const [overviewData, timelineData] = await Promise.all([getOverview(), getTimeline()]);
-        if (!isMounted) return;
-        setOverview(overviewData);
-        setTimeline(timelineData);
-      } catch {
-        if (!isMounted) return;
+  const refreshDashboardData = useCallback(async (showLoading = false) => {
+    if (showLoading) setIsLoading(true);
+
+    try {
+      const [overviewData, timelineData] = await Promise.all([getOverview(), getTimeline()]);
+      if (!isMountedRef.current) return;
+
+      setOverview(overviewData);
+      setTimeline(timelineData);
+    } catch {
+      if (!isMountedRef.current) return;
+
+      if (showLoading) {
         setOverview(fallbackOverview);
         setTimeline(fallbackTimeline);
-      } finally {
-        if (isMounted) setIsLoading(false);
+      }
+    } finally {
+      if (showLoading && isMountedRef.current) {
+        setIsLoading(false);
       }
     }
-
-    void load();
-    return () => { isMounted = false; };
   }, []);
+
+  const loadDevStatus = useCallback(async () => {
+    try {
+      const status = await getDevTrafficStatus();
+      setDevToolsAvailable(true);
+      setDevStatus(status);
+    } catch {
+      setDevToolsAvailable(false);
+      setDevStatus(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshDashboardData(true);
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [refreshDashboardData]);
+
+  useEffect(() => {
+    void loadDevStatus();
+  }, [loadDevStatus]);
+
+  useEffect(() => {
+    if (!devToolsAvailable) return;
+
+    const timer = window.setInterval(() => {
+      void loadDevStatus();
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, [devToolsAvailable, loadDevStatus]);
+
+  useEffect(() => {
+    const latestEvent = events[0];
+    if (!latestEvent) return;
+
+    realtimeSyncPendingRef.current = true;
+  }, [events]);
+
+  useEffect(() => {
+    if (!connected) return;
+
+    if (!hasEverConnectedRef.current) {
+      hasEverConnectedRef.current = true;
+      return;
+    }
+
+    realtimeSyncPendingRef.current = true;
+  }, [connected]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (!realtimeSyncPendingRef.current || realtimeSyncInFlightRef.current) {
+        return;
+      }
+
+      realtimeSyncPendingRef.current = false;
+      realtimeSyncInFlightRef.current = true;
+
+      void refreshDashboardData(false).finally(() => {
+        realtimeSyncInFlightRef.current = false;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [refreshDashboardData]);
+
+  const handleSeedOnce = async () => {
+    setDevActionLoading(true);
+    try {
+      const result = await seedDevTraffic({ messages: 12 });
+      setDevSeedResult(result);
+      await Promise.all([loadDevStatus(), refreshDashboardData(false)]);
+    } finally {
+      setDevActionLoading(false);
+    }
+  };
+
+  const handleStartFlow = async () => {
+    setDevActionLoading(true);
+    try {
+      const status = await startDevTraffic({ intervalMs: 1200, messagesPerTick: 6 });
+      setDevStatus(status);
+      setDevSeedResult(null);
+    } finally {
+      setDevActionLoading(false);
+    }
+  };
+
+  const handleStopFlow = async () => {
+    setDevActionLoading(true);
+    try {
+      const status = await stopDevTraffic();
+      setDevStatus(status);
+    } finally {
+      setDevActionLoading(false);
+    }
+  };
 
   const cards = useMemo<StatCard[]>(
     () => [
@@ -114,6 +236,67 @@ export function DashboardPage() {
         <h1 className="text-lg font-semibold">Overview</h1>
         <p className="text-sm text-text-muted mt-0.5">Last 24h delivery stats, throughput, and live feed.</p>
       </div>
+
+      {devToolsAvailable && (
+        <div className="rounded-xl border border-accent/20 bg-accent-soft/50 p-3 animate-fade-in-up">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                <FlaskConical className="w-3.5 h-3.5 text-accent" />
+                Dev Traffic
+              </h2>
+              <p className="text-xs text-text-muted mt-0.5">
+                Local demo traffic generator. When running, live feed gets continuous events.
+              </p>
+            </div>
+            <span className={`text-xs px-2 py-1 rounded ${devStatus?.running ? "text-success bg-success-soft" : "text-text-muted bg-surface-2"}`}>
+              {devStatus?.running ? "Running" : "Idle"}
+            </span>
+          </div>
+
+          <div className="mt-2 flex items-center flex-wrap gap-2">
+            <button
+              onClick={handleSeedOnce}
+              disabled={devActionLoading}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-border bg-surface-1 text-text-secondary hover:text-text-primary hover:bg-surface-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Seed Once
+            </button>
+            <button
+              onClick={handleStartFlow}
+              disabled={devActionLoading || devStatus?.running}
+              className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-accent text-zinc-950 hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <Play className="w-3 h-3" />
+              Start Live Flow
+            </button>
+            <button
+              onClick={handleStopFlow}
+              disabled={devActionLoading || !devStatus?.running}
+              className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-surface-2 text-text-secondary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <Square className="w-3 h-3" />
+              Stop
+            </button>
+
+            <span className="text-xs text-text-muted ml-auto">
+              {devStatus?.lastSeedAtUtc
+                ? `Last seed: ${formatLocaleTime(devStatus.lastSeedAtUtc, { withSeconds: true })} (${devStatus.lastEnqueuedCount} msg)`
+                : "No seed yet"}
+            </span>
+          </div>
+
+          {devSeedResult && (
+            <p className="text-xs text-text-secondary mt-2">
+              Seed sonucu: {devSeedResult.enqueuedMessages} mesaj, {devSeedResult.targetedEndpoints} endpoint, {devSeedResult.activeApplications} app.
+            </p>
+          )}
+
+          {devStatus?.lastError && (
+            <p className="text-xs text-danger mt-2">{devStatus.lastError}</p>
+          )}
+        </div>
+      )}
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5">
@@ -188,7 +371,7 @@ export function DashboardPage() {
                     <td className="py-1.5 font-mono text-xs text-text-secondary">
                       {event.latencyMs ? `${event.latencyMs}ms` : "--"}
                     </td>
-                    <td className="py-1.5 text-xs text-text-muted">{new Date(event.timestamp).toLocaleTimeString()}</td>
+                    <td className="py-1.5 text-xs text-text-muted">{formatLocaleTime(event.timestamp, { withSeconds: true })}</td>
                   </tr>
                 ))}
               </tbody>

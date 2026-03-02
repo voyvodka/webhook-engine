@@ -10,6 +10,7 @@ import {
 import { Modal } from "../components/Modal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import type { ApplicationRow, EndpointRow, Pagination } from "../types";
+import { formatLocaleDate } from "../utils/dateTime";
 import {
   Plus,
   KeyRound,
@@ -383,7 +384,7 @@ export function ApplicationsPage() {
                             <span className="text-text-muted">--</span>
                           )}
                         </td>
-                        <td className="px-4 py-2.5 text-xs text-text-muted">{new Date(app.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-2.5 text-xs text-text-muted">{formatLocaleDate(app.createdAt)}</td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center justify-end gap-1">
                             <button onClick={() => requestRotateKey(app.id)} className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent-soft transition-colors" title="Rotate API Key">

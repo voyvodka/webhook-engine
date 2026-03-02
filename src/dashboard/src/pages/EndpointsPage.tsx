@@ -27,6 +27,7 @@ import {
   ChevronRight,
   Save
 } from "lucide-react";
+import { formatLocaleDate } from "../utils/dateTime";
 
 function toTitleCase(value: string): string {
   if (!value) return value;
@@ -334,7 +335,7 @@ export function EndpointsPage() {
                       <td className="px-4 py-2 text-xs text-text-muted max-w-[180px] truncate">
                         {ep.eventTypes.length > 0 ? ep.eventTypes.join(", ") : "All events"}
                       </td>
-                      <td className="px-4 py-2 text-xs text-text-muted">{new Date(ep.createdAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-2 text-xs text-text-muted">{formatLocaleDate(ep.createdAt)}</td>
                       <td className="px-4 py-2">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => startEdit(ep)} className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent-soft transition-colors" title="Edit">

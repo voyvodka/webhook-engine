@@ -9,6 +9,7 @@ using OpenTelemetry.Metrics;
 using Serilog;
 using WebhookEngine.API.Hubs;
 using WebhookEngine.API.Middleware;
+using WebhookEngine.API.Services;
 using WebhookEngine.API.Startup;
 using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Core.Metrics;
@@ -61,6 +62,7 @@ builder.Services.AddSingleton<ISigningService, HmacSigningService>();
 builder.Services.AddScoped<IEndpointHealthTracker, EndpointHealthTracker>();
 builder.Services.AddSingleton<IEndpointRateLimiter, EndpointRateLimiter>();
 builder.Services.AddSingleton<IDeliveryNotifier, SignalRDeliveryNotifier>();
+builder.Services.AddSingleton<IDevTrafficGenerator, DevTrafficGenerator>();
 
 // Background Workers
 builder.Services.AddHostedService<DeliveryWorker>();

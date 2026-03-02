@@ -503,6 +503,10 @@ src/dashboard/node_modules/
 src/dashboard/dist/
 src/dashboard/.yarn/
 
+# Dashboard build output bundled into API host (generated)
+src/WebhookEngine.API/wwwroot/index.html
+src/WebhookEngine.API/wwwroot/assets/
+
 # Environment files
 .env
 .env.*

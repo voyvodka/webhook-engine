@@ -4,6 +4,7 @@ import { PayloadViewer } from "../components/PayloadViewer";
 import { RetryButton } from "../components/RetryButton";
 import { getMessage } from "../api/dashboardApi";
 import type { MessageDetail } from "../types";
+import { formatLocaleDateTime } from "../utils/dateTime";
 import {
   ArrowLeft,
   Clock,
@@ -123,9 +124,9 @@ export function DeliveryLogPage() {
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
           <DetailItem icon={Globe} label="Endpoint" value={message.endpointUrl ?? message.endpointId} mono />
           <DetailItem icon={Tag} label="Event Type" value={message.eventType ?? "--"} />
-          <DetailItem icon={Clock} label="Created" value={new Date(message.createdAt).toLocaleString()} />
+          <DetailItem icon={Clock} label="Created" value={formatLocaleDateTime(message.createdAt)} />
           {message.deliveredAt && (
-            <DetailItem icon={CheckCircle2} label="Delivered" value={new Date(message.deliveredAt).toLocaleString()} />
+            <DetailItem icon={CheckCircle2} label="Delivered" value={formatLocaleDateTime(message.deliveredAt)} />
           )}
           {message.eventId && (
             <DetailItem icon={Hash} label="Event ID" value={message.eventId} mono />
@@ -171,7 +172,7 @@ export function DeliveryLogPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 font-mono text-xs text-text-secondary">{attempt.latencyMs}ms</td>
-                    <td className="px-3 py-2 text-xs text-text-muted">{new Date(attempt.createdAt).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-xs text-text-muted">{formatLocaleDateTime(attempt.createdAt)}</td>
                     <td className="px-3 py-2 text-xs text-text-muted max-w-[280px] truncate">
                       {attempt.error ?? attempt.responseBody ?? "--"}
                     </td>

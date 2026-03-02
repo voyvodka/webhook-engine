@@ -63,11 +63,64 @@ export async function getOverview(): Promise<DashboardOverview> {
   return payload.data;
 }
 
-export async function getTimeline(period = "24h", interval = "1h"): Promise<TimelineBucket[]> {
+export async function getTimeline(period = "24h", interval = "15m"): Promise<TimelineBucket[]> {
   const payload = await fetchJson<ApiEnvelope<{ buckets: TimelineBucket[] }>>(
     `/api/v1/dashboard/timeline?period=${period}&interval=${interval}`
   );
   return payload.data.buckets;
+}
+
+export interface DevTrafficStatus {
+  enabled: boolean;
+  running: boolean;
+  appId?: string | null;
+  intervalMs: number;
+  messagesPerTick: number;
+  startedAtUtc?: string | null;
+  lastSeedAtUtc?: string | null;
+  lastEnqueuedCount: number;
+  lastError?: string | null;
+}
+
+export interface DevTrafficSeedResult {
+  enabled: boolean;
+  enqueuedMessages: number;
+  targetedEndpoints: number;
+  activeApplications: number;
+  seededAtUtc: string;
+  messageIds: string[];
+  error?: string | null;
+}
+
+export async function getDevTrafficStatus(): Promise<DevTrafficStatus> {
+  const payload = await fetchJson<ApiEnvelope<DevTrafficStatus>>("/api/v1/dashboard/dev/traffic/status");
+  return payload.data;
+}
+
+export async function startDevTraffic(input: { appId?: string; intervalMs: number; messagesPerTick: number }): Promise<DevTrafficStatus> {
+  const payload = await mutate<ApiEnvelope<DevTrafficStatus>>(
+    "/api/v1/dashboard/dev/traffic/start",
+    "POST",
+    input
+  );
+  return payload.data;
+}
+
+export async function stopDevTraffic(): Promise<DevTrafficStatus> {
+  const payload = await mutate<ApiEnvelope<DevTrafficStatus>>(
+    "/api/v1/dashboard/dev/traffic/stop",
+    "POST"
+  );
+  return payload.data;
+}
+
+export async function seedDevTraffic(input: { appId?: string; messages: number }): Promise<DevTrafficSeedResult> {
+  const payload = await mutate<ApiEnvelope<DevTrafficSeedResult>>(
+    "/api/v1/dashboard/dev/traffic/seed-once",
+    "POST",
+    input
+  );
+  return payload.data;
 }
 
 // ── Applications ────────────────────────────────

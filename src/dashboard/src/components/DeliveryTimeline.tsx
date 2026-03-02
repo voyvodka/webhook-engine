@@ -8,10 +8,10 @@ import {
   YAxis
 } from "recharts";
 import type { TimelineBucket } from "../types";
+import { formatLocaleDateTime, formatLocaleTime } from "../utils/dateTime";
 
 function formatLabel(value: string): string {
-  const date = new Date(value);
-  return `${date.getHours().toString().padStart(2, "0")}:00`;
+  return formatLocaleTime(value);
 }
 
 export function DeliveryTimeline({ buckets }: { buckets: TimelineBucket[] }) {
@@ -49,7 +49,7 @@ export function DeliveryTimeline({ buckets }: { buckets: TimelineBucket[] }) {
               tickLine={false}
             />
             <Tooltip
-              labelFormatter={(value) => new Date(value).toLocaleString()}
+              labelFormatter={(value) => formatLocaleDateTime(value as string)}
               contentStyle={{
                 borderRadius: 8,
                 border: "1px solid #27272a",
