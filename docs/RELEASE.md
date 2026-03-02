@@ -40,20 +40,20 @@ These require `gh auth login` first.
 
 Tag format:
 
-- Stable: `v1.0.0`
-- Pre-release: `v1.0.0-preview.1`
+- Stable: `v0.1.0`
+- Pre-release: `v0.1.1-preview.1`
 
 `release.yml` automatically maps the tag to NuGet package version by stripping the `v` prefix.
 Examples:
 
-- `v1.0.0` -> `1.0.0`
-- `v1.0.0-preview.1` -> `1.0.0-preview.1`
+- `v0.1.0` -> `0.1.0`
+- `v0.1.1-preview.1` -> `0.1.1-preview.1`
 
 Push the tag to trigger publishing:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 ## 4) What the workflow does
@@ -63,10 +63,10 @@ git push origin v1.0.0
 - Logs in to Docker Hub
 - Builds `docker/Dockerfile`
 - Pushes image tags:
-  - `voyvodka/webhook-engine:1.0.0` (from tag `v1.0.0`)
+  - `voyvodka/webhook-engine:0.1.0` (from tag `v0.1.0`)
   - `voyvodka/webhook-engine:latest` (stable tags only)
 
-For pre-release tags (e.g. `v1.0.0-preview.1`), only the version tag is pushed.
+For pre-release tags (e.g. `v0.1.1-preview.1`), only the version tag is pushed.
 
 ### NuGet
 
@@ -80,16 +80,24 @@ For pre-release tags (e.g. `v1.0.0-preview.1`), only the version tag is pushed.
 ### Docker image
 
 ```bash
-docker run --rm -p 5100:8080 voyvodka/webhook-engine:1.0.0
+docker run --rm -p 5100:8080 voyvodka/webhook-engine:0.1.0
 ```
 
 ### NuGet package
 
 ```bash
 cd SdkSmokeTest
-dotnet add package WebhookEngine.Sdk --version 1.0.0
+dotnet add package WebhookEngine.Sdk --version 0.1.0
 dotnet build
 ```
+
+### Automated smoke (optional)
+
+```bash
+./scripts/release-smoke.sh http://localhost:5100 admin@example.com changeme
+```
+
+This verifies `/health`, `/metrics`, dashboard login/session, overview, timeline, and dev-traffic endpoint behavior.
 
 ## Troubleshooting
 

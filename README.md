@@ -84,6 +84,8 @@ Dashboard dev server runs on `http://localhost:5173` with API proxy to `localhos
 - [Self-Hosting Guide](docs/SELF-HOSTING.md) — production deployment and operations
 - [Release Guide](docs/RELEASE.md) — Docker Hub and NuGet publishing flow
 - [Launch Checklist](docs/LAUNCH-CHECKLIST.md) — final pre-launch and go-live tracking
+- [Roadmap](docs/ROADMAP.md) — current phase status and upcoming priorities
+- [PRD](docs/PRD.md) — product scope, goals, and requirement definitions
 - [API Reference](docs/API.md) — full endpoint documentation
 - [Architecture](docs/ARCHITECTURE.md) — system design and component overview
 - [Database](docs/DATABASE.md) — schema and PostgreSQL notes
@@ -290,10 +292,18 @@ cd src/dashboard && yarn install && yarn build
 # Production
 docker compose -f docker/docker-compose.yml up -d
 
+# Stop production services
+docker compose -f docker/docker-compose.yml down
+
+# Reset production data (removes PostgreSQL volume)
+docker compose -f docker/docker-compose.yml down -v
+
 # Development (starts PostgreSQL only, run backend separately)
 docker compose -f docker/docker-compose.dev.yml up -d
 dotnet run --project src/WebhookEngine.API
 ```
+
+`docker/docker-compose.yml` uses a persistent PostgreSQL volume (`pgdata`), so old applications/endpoints remain after restart unless you run `down -v`.
 
 ## Prometheus Metrics
 

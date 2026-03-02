@@ -1,6 +1,6 @@
 name: Bug Report
 description: Report a bug or unexpected behavior
-labels: ["bug"]
+labels: ["bug", "status: needs-triage"]
 body:
   - type: markdown
     attributes:
@@ -37,6 +37,19 @@ body:
       required: true
 
   - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How much does this impact your usage?
+      options:
+        - Critical (blocks production or core workflow)
+        - High (major impact, workaround exists)
+        - Medium (limited impact)
+        - Low (minor issue)
+    validations:
+      required: true
+
+  - type: dropdown
     id: component
     attributes:
       label: Component
@@ -50,6 +63,18 @@ body:
         - Docker
         - Documentation
         - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Regression
+      description: Did this work in an earlier version?
+      options:
+        - "Yes"
+        - "No"
+        - "Not sure"
     validations:
       required: true
 

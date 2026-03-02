@@ -8,6 +8,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 ### Added
+- No unreleased changes yet.
+
+## [0.1.0] - 2026-03-02
+
+### Added
 - Sample applications for end-to-end webhook flow:
   - `samples/WebhookEngine.Sample.Sender` (SDK-based sender)
   - `samples/WebhookEngine.Sample.Receiver` (signature-verifying receiver)
@@ -40,3 +45,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - API response envelope standardization applied across dashboard/auth/application surfaces.
 - Endpoint health now drives endpoint status transitions (`active`, `degraded`, `failed`) while preserving `disabled` endpoints.
 - CI frontend workflow now includes explicit `yarn lint` step and uses `yarn typecheck`.
+
+### Fixed
+- Release workflow compatibility for tag releases by removing invalid job-level `if` conditions that referenced `secrets`.

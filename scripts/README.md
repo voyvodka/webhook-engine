@@ -2,6 +2,20 @@
 
 Utility scripts for repository setup and maintenance.
 
+## Release Smoke Checks
+
+Run quick post-release checks against a running instance:
+
+```bash
+./scripts/release-smoke.sh
+```
+
+Custom base URL and credentials:
+
+```bash
+./scripts/release-smoke.sh http://localhost:5100 admin@example.com changeme
+```
+
 ## GitHub Repository Setup
 
 These scripts require the GitHub CLI (`gh`) and an authenticated session (`gh auth login`).

@@ -141,11 +141,11 @@ Message status values:
 
 | Status | Meaning |
 |--------|---------|
-| `0` (Pending) | Queued, waiting for delivery |
-| `1` (Sending) | Currently being delivered |
-| `2` (Delivered) | Successfully delivered (HTTP 2xx) |
-| `3` (Failed) | Delivery failed, will retry |
-| `4` (DeadLetter) | All retries exhausted |
+| `pending` | Queued, waiting for delivery |
+| `sending` | Currently being delivered |
+| `delivered` | Successfully delivered (HTTP 2xx) |
+| `failed` | Delivery failed, will retry |
+| `deadletter` | All retries exhausted |
 
 View delivery attempts:
 

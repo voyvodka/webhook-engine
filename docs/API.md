@@ -488,7 +488,7 @@ Response: `200 OK`
 GET /api/v1/messages
     ?page=1
     &pageSize=20
-    &status=delivered      (pending | sending | delivered | failed | dead_letter)
+    &status=delivered      (pending | sending | delivered | failed | deadletter)
     &eventTypeId={uuid}
     &endpointId={uuid}
     &before=2026-02-26T23:59:59Z
@@ -500,7 +500,7 @@ GET /api/v1/messages
 POST /api/v1/messages/{messageId}/retry
 ```
 
-Resets message status to `pending` and schedules immediate delivery. Works for `failed` and `dead_letter` messages.
+Resets message status to `pending` and schedules immediate delivery. Works for `failed` and `deadletter` messages.
 
 Response: `200 OK`
 ```json
@@ -770,23 +770,8 @@ await client.Messages.RetryAsync("msg_aaa111");
 ```
 
 ### TypeScript SDK (npm)
-```typescript
-import { WebhookEngine } from '@webhookengine/sdk';
-
-const client = new WebhookEngine('whe_app1a2b3_xK9m...', {
-  baseUrl: 'http://localhost:5100'
-});
-
-// Send a webhook
-await client.messages.send({
-  eventType: 'order.created',
-  payload: { orderId: 'ord_abc123', amount: 99.99 },
-  idempotencyKey: 'idem_order_abc123_created'
-});
-
-// List endpoints
-const endpoints = await client.endpoints.list({ page: 1, pageSize: 20 });
-```
+TypeScript SDK is planned for Phase 2 and is not published yet.
+Use the REST API examples below (or the .NET SDK above) until npm package release.
 
 ### cURL
 ```bash

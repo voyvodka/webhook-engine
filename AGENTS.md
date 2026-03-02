@@ -320,3 +320,49 @@ src/dashboard/src/
 6. **API key format:** `whe_{appIdShort}_{random32}` — stored as SHA256 hash, prefix for lookup
 7. **At-least-once delivery:** Messages may be delivered more than once; never lost
 8. **Bundled SPA:** React dashboard built into `wwwroot/`, served as static files — no separate frontend deployment
+
+## GitHub Workflow (Issue, Commit, Push, PR)
+
+Use this workflow for Phase 2 and later so issue status, labels, and release notes stay consistent.
+
+### Issue Triage Rules
+- New issues should start with `status: needs-triage`.
+- After validation, move to `status: triaged` and add exactly one priority label: `priority: p0` or `priority: p1` or `priority: p2`.
+- Add component labels (`api`, `dashboard`, `worker`, `sdk`, `infrastructure`, `database`, `security`, `performance`) and set a milestone.
+- Use `regression` label when behavior was working in an earlier release.
+
+### Commit Message and Issue Linking
+- While work is in progress, reference issues with `Refs #<issue-number>`.
+- When the change is complete and should close the issue, use `Closes #<issue-number>` in the final commit message/body that reaches the default branch.
+- Do not close an issue before the fix is pushed and visible on remote.
+
+### Approval Requirements (Mandatory)
+- Before any state-changing Git/GitHub action, present a short action summary and wait for explicit user approval.
+- State-changing actions include: `git commit`, `git push`, tag creation/deletion, release actions, PR create/merge, issue close/reopen, and bulk label/milestone edits.
+- After approval and execution, report what was done (commit SHA, PR URL, issue links, workflow status) and any follow-up needed.
+
+### Direct-to-main Flow (no PR)
+1. Ensure issue labels/milestone are correct (`status: triaged`, priority, component).
+2. Implement and commit to `main` with a conventional message.
+3. In the final commit body, add `Closes #<issue-number>`.
+4. Push `main`.
+5. Verify CI is green and issue auto-closed; if not, close manually and link commit SHA.
+
+### PR Flow (when branch review is used)
+1. Create branch from `main` (`issue-<id>-short-slug`).
+2. Use `Refs #<issue-number>` in intermediate commits.
+3. Open PR with `Closes #<issue-number>` in PR body.
+4. Merge PR to `main` (issue auto-closes on merge).
+5. Verify CI and release notes/changelog alignment.
+
+### Release and Issue Closure Notes
+- If a fix is merged but should close only after patch release, use `Refs #<issue-number>` in code commit and close manually after tag publish.
+- For hotfixes on `main`, keep one issue per fix when possible; avoid bundling unrelated issue closures in one commit.
+
+### Open Work Analysis Routine
+- At the start of a development cycle (or when requested), analyze open items before execution:
+  - open issues (status/priority/component/milestone),
+  - open PRs and review/check states,
+  - recent workflow failures and pending release actions.
+- Publish a concise **Required Next Actions** list ordered by priority (P0 -> P2), with clear owner/action/output.
+- When an issue is marked `status: needs-triage`, first triage (repro, priority, component, milestone) before implementation.

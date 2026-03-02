@@ -28,6 +28,18 @@ docker compose -f docker/docker-compose.yml up -d
 
 WebhookEngine starts on port `5100` (configurable). Database migrations run automatically on startup.
 
+## Stop and Reset
+
+```bash
+# Stop containers (keeps PostgreSQL data volume)
+docker compose -f docker/docker-compose.yml down
+
+# Stop containers and remove PostgreSQL data volume
+docker compose -f docker/docker-compose.yml down -v
+```
+
+`docker/docker-compose.yml` stores PostgreSQL data in the `pgdata` volume. Existing applications, endpoints, and message history persist across restarts unless you remove volumes.
+
 ## Configuration
 
 All settings are configured via environment variables. Set them in `docker/.env` or pass them directly to Docker Compose.

@@ -43,6 +43,15 @@ create_label "bug" "d73a4a" "Something is not working"
 create_label "enhancement" "a2eeef" "New feature or request"
 create_label "documentation" "0075ca" "Documentation improvements"
 create_label "question" "d876e3" "Further information is requested"
+create_label "regression" "b60205" "Behavior regressed from a previously working version"
+
+# Triage workflow labels
+create_label "status: needs-triage" "ededed" "New issue waiting for triage"
+create_label "status: triaged" "0e8a16" "Issue was reproduced and prioritized"
+create_label "status: blocked" "5319e7" "Issue is blocked by dependency or decision"
+create_label "priority: p0" "b60205" "Critical: blocks release or core workflow"
+create_label "priority: p1" "fbca04" "High: important but has workaround"
+create_label "priority: p2" "1d76db" "Normal: planned improvement"
 
 # Contribution labels
 create_label "good first issue" "7057ff" "Good for first-time contributors"
