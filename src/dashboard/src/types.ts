@@ -28,6 +28,7 @@ export interface DashboardOverview {
     healthy: number;
     degraded: number;
     failed: number;
+    disabled: number;
   };
   queueDepth: number;
 }
@@ -79,6 +80,7 @@ export interface EventTypeSummary {
   appId: string;
   name: string;
   description: string | null;
+  isArchived: boolean;
   createdAt: string;
 }
 

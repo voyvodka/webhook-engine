@@ -259,7 +259,7 @@ export function EndpointsPage() {
       )}
 
       {/* Filters */}
-      <div className="rounded-lg border border-border bg-surface-1 p-3 animate-fade-in-up">
+      <div className="relative z-20 rounded-lg border border-border bg-surface-1 p-3 animate-fade-in-up">
         <div className="flex items-center gap-2 mb-2">
           <Filter className="w-3.5 h-3.5 text-text-muted" />
           <span className="text-xs font-medium text-text-secondary">Filters</span>
@@ -330,7 +330,7 @@ export function EndpointsPage() {
                           {toTitleCase(ep.status)}
                         </span>
                       </td>
-                      <td className="px-4 py-2"><EndpointHealthBadge state={ep.circuitState} /></td>
+                      <td className="px-4 py-2"><EndpointHealthBadge state={ep.status} /></td>
                       <td className="px-4 py-2 text-xs text-text-muted max-w-[180px] truncate">
                         {ep.eventTypes.length > 0 ? ep.eventTypes.join(", ") : "All events"}
                       </td>

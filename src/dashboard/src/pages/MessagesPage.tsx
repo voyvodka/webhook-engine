@@ -4,7 +4,7 @@ import { RetryButton } from "../components/RetryButton";
 import { Modal } from "../components/Modal";
 import { Select } from "../components/Select";
 import { useDeliveryFeed } from "../hooks/useDeliveryFeed";
-import { listApplications, listMessages, sendDashboardMessage } from "../api/dashboardApi";
+import { listApplications, listEndpoints, listMessages, sendDashboardMessage } from "../api/dashboardApi";
 import type { ApplicationRow, MessageRow, MessageStatusType, Pagination } from "../types";
 import {
   Send,
@@ -48,6 +48,13 @@ const statusOptions = [
   { value: "DeadLetter", label: "Dead Letter" }
 ];
 
+function toIsoOrUndefined(localDateTime: string): string | undefined {
+  if (!localDateTime) return undefined;
+  const date = new Date(localDateTime);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
+}
+
 export function MessagesPage() {
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -57,8 +64,13 @@ export function MessagesPage() {
 
   const [eventTypeFilter, setEventTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [appFilter, setAppFilter] = useState("");
+  const [endpointFilter, setEndpointFilter] = useState("");
+  const [afterFilter, setAfterFilter] = useState("");
+  const [beforeFilter, setBeforeFilter] = useState("");
 
   const [applications, setApplications] = useState<ApplicationRow[]>([]);
+  const [endpointOptions, setEndpointOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [sendAppId, setSendAppId] = useState("");
   const [sendEventType, setSendEventType] = useState("");
   const [sendPayload, setSendPayload] = useState("{}");
@@ -72,7 +84,16 @@ export function MessagesPage() {
   const fetchMessages = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
-      const result = await listMessages({ eventType: eventTypeFilter || undefined, status: statusFilter || undefined, page, pageSize: 20 });
+      const result = await listMessages({
+        appId: appFilter || undefined,
+        endpointId: endpointFilter || undefined,
+        eventType: eventTypeFilter || undefined,
+        status: statusFilter || undefined,
+        after: toIsoOrUndefined(afterFilter),
+        before: toIsoOrUndefined(beforeFilter),
+        page,
+        pageSize: 20
+      });
       setMessages(result.data);
       setPagination(result.pagination);
     } catch (e) {
@@ -80,7 +101,7 @@ export function MessagesPage() {
     } finally {
       if (showSpinner) setLoading(false);
     }
-  }, [page, eventTypeFilter, statusFilter]);
+  }, [afterFilter, appFilter, beforeFilter, endpointFilter, eventTypeFilter, page, statusFilter]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
@@ -104,6 +125,31 @@ export function MessagesPage() {
     };
     fetchApplications();
   }, []);
+
+  useEffect(() => {
+    const fetchEndpoints = async () => {
+      if (!appFilter) {
+        setEndpointOptions([]);
+        setEndpointFilter("");
+        return;
+      }
+
+      try {
+        const result = await listEndpoints({ appId: appFilter, page: 1, pageSize: 200 });
+        const options = result.data.map((endpoint) => ({
+          value: endpoint.id,
+          label: endpoint.url
+        }));
+        setEndpointOptions(options);
+        setEndpointFilter((current) => (options.some((option) => option.value === current) ? current : ""));
+      } catch {
+        setEndpointOptions([]);
+        setEndpointFilter("");
+      }
+    };
+
+    fetchEndpoints();
+  }, [appFilter]);
 
   const applyFilters = () => { setPage(1); fetchMessages(); };
 
@@ -136,6 +182,7 @@ export function MessagesPage() {
   };
 
   const appOptions = applications.map((a) => ({ value: a.id, label: a.name }));
+  const endpointFilterOptions = [{ value: "", label: "All" }, ...endpointOptions];
 
   return (
     <div className="space-y-4">
@@ -172,12 +219,33 @@ export function MessagesPage() {
       )}
 
       {/* Filters */}
-      <div className="rounded-lg border border-border bg-surface-1 p-3 animate-fade-in-up">
+      <div className="relative z-20 rounded-lg border border-border bg-surface-1 p-3 animate-fade-in-up">
         <div className="flex items-center gap-2 mb-2">
           <Filter className="w-3.5 h-3.5 text-text-muted" />
           <span className="text-xs font-medium text-text-secondary">Filters</span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2">
+          <div>
+            <span className="text-xs text-text-muted mb-1 block">Application</span>
+            <Select
+              value={appFilter}
+              onChange={(value) => {
+                setAppFilter(value);
+                setEndpointFilter("");
+              }}
+              options={[{ value: "", label: "All" }, ...appOptions]}
+              placeholder="All applications"
+            />
+          </div>
+          <div>
+            <span className="text-xs text-text-muted mb-1 block">Endpoint</span>
+            <Select
+              value={endpointFilter}
+              onChange={setEndpointFilter}
+              options={endpointFilterOptions}
+              placeholder={appFilter ? "All endpoints" : "Select application"}
+            />
+          </div>
           <label className="block">
             <span className="text-xs text-text-muted mb-1 block">Event Type</span>
             <input placeholder="order.created" value={eventTypeFilter} onChange={(e) => setEventTypeFilter(e.target.value)} className={inputClasses} />
@@ -186,6 +254,14 @@ export function MessagesPage() {
             <span className="text-xs text-text-muted mb-1 block">Status</span>
             <Select value={statusFilter} onChange={setStatusFilter} options={statusOptions} placeholder="All statuses" />
           </div>
+          <label className="block">
+            <span className="text-xs text-text-muted mb-1 block">After</span>
+            <input type="datetime-local" value={afterFilter} onChange={(e) => setAfterFilter(e.target.value)} className={inputClasses} />
+          </label>
+          <label className="block">
+            <span className="text-xs text-text-muted mb-1 block">Before</span>
+            <input type="datetime-local" value={beforeFilter} onChange={(e) => setBeforeFilter(e.target.value)} className={inputClasses} />
+          </label>
           <div className="flex items-end">
             <button onClick={applyFilters} className="text-xs font-medium px-3 py-2 rounded-lg border border-border bg-surface-2 text-text-secondary hover:text-text-primary hover:bg-surface-3 transition-colors">
               Apply

@@ -28,7 +28,8 @@ const fallbackOverview: DashboardOverview = {
     total: 0,
     healthy: 0,
     degraded: 0,
-    failed: 0
+    failed: 0,
+    disabled: 0
   },
   queueDepth: 0
 };

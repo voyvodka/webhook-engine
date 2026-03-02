@@ -187,11 +187,44 @@ export async function updateDashboardEndpoint(endpointId: string, request: Dashb
   return payload.data;
 }
 
-export async function listDashboardEventTypes(appId: string): Promise<EventTypeSummary[]> {
+export async function listDashboardEventTypes(appId: string, includeArchived = false): Promise<EventTypeSummary[]> {
   const payload = await fetchJson<ApiEnvelope<EventTypeSummary[]>>(
-    `/api/v1/dashboard/event-types?appId=${encodeURIComponent(appId)}`
+    `/api/v1/dashboard/event-types?appId=${encodeURIComponent(appId)}&includeArchived=${includeArchived}`
   );
   return payload.data;
+}
+
+export interface DashboardCreateEventTypeRequest {
+  appId: string;
+  name: string;
+  description?: string;
+}
+
+export interface DashboardUpdateEventTypeRequest {
+  name?: string;
+  description?: string;
+}
+
+export async function createDashboardEventType(request: DashboardCreateEventTypeRequest): Promise<EventTypeSummary> {
+  const payload = await mutate<ApiEnvelope<EventTypeSummary>>(
+    "/api/v1/dashboard/event-types",
+    "POST",
+    request
+  );
+  return payload.data;
+}
+
+export async function updateDashboardEventType(eventTypeId: string, request: DashboardUpdateEventTypeRequest): Promise<EventTypeSummary> {
+  const payload = await mutate<ApiEnvelope<EventTypeSummary>>(
+    `/api/v1/dashboard/event-types/${eventTypeId}`,
+    "PUT",
+    request
+  );
+  return payload.data;
+}
+
+export async function archiveDashboardEventType(eventTypeId: string): Promise<void> {
+  await mutate<void>(`/api/v1/dashboard/event-types/${eventTypeId}`, "DELETE");
 }
 
 export async function setDashboardEndpointStatus(endpointId: string, enabled: boolean): Promise<{ id: string; status: string }> {

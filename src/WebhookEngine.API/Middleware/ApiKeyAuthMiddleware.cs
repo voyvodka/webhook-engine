@@ -85,6 +85,17 @@ public class ApiKeyAuthMiddleware
             return;
         }
 
+        if (!app.IsActive)
+        {
+            context.Response.StatusCode = 401;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                error = new { code = "UNAUTHORIZED", message = "Application is inactive." },
+                meta = new { requestId = $"req_{context.Items["RequestId"]}" }
+            });
+            return;
+        }
+
         // Store authenticated app in context
         context.Items["AppId"] = app.Id;
         context.Items["Application"] = app;

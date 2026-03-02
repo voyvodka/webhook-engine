@@ -34,6 +34,17 @@ public class DashboardUserRepository
 
     public async Task UpdateLastLoginAsync(Guid id, CancellationToken ct = default)
     {
+        if (string.Equals(_dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal))
+        {
+            var user = await _dbContext.DashboardUsers.FirstOrDefaultAsync(u => u.Id == id, ct);
+            if (user is null)
+                return;
+
+            user.LastLoginAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(ct);
+            return;
+        }
+
         await _dbContext.DashboardUsers
             .Where(u => u.Id == id)
             .ExecuteUpdateAsync(setters => setters

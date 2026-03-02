@@ -114,6 +114,38 @@ public class DeliveryWorkerTests
         message.MaxRetries.Should().Be(_retryPolicy.MaxRetries);
     }
 
+    [Fact]
+    public void ResolveRateLimitPerMinute_Reads_Numeric_Value_From_Metadata()
+    {
+        var value = ResolveRateLimitPerMinute("""{"rateLimitPerMinute":120}""");
+
+        value.Should().Be(120);
+    }
+
+    [Fact]
+    public void ResolveRateLimitPerMinute_Reads_String_Value_From_Metadata()
+    {
+        var value = ResolveRateLimitPerMinute("""{"rateLimitPerMinute":"75"}""");
+
+        value.Should().Be(75);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    [InlineData("{" + "\"rateLimitPerMinute\":0" + "}")]
+    [InlineData("{" + "\"rateLimitPerMinute\":-5" + "}")]
+    [InlineData("{" + "\"rateLimitPerMinute\":\"abc\"" + "}")]
+    [InlineData("invalid-json")]
+    public void ResolveRateLimitPerMinute_Returns_Null_For_Invalid_Metadata(string? metadataJson)
+    {
+        var value = ResolveRateLimitPerMinute(metadataJson);
+
+        value.Should().BeNull();
+    }
+
     // Helper methods that mirror DeliveryWorker private methods
     private static Dictionary<string, string> ParseCustomHeaders(string? customHeadersJson)
     {
@@ -148,5 +180,15 @@ public class DeliveryWorkerTests
         }
 
         return headers;
+    }
+
+    private static int? ResolveRateLimitPerMinute(string? metadataJson)
+    {
+        var method = typeof(DeliveryWorker).GetMethod(
+            "ResolveRateLimitPerMinute",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        method.Should().NotBeNull();
+        return (int?)method!.Invoke(null, [metadataJson]);
     }
 }

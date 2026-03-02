@@ -50,9 +50,28 @@ public class CircuitBreakerWorker : BackgroundService
                 foreach (var health in expiredCircuits)
                 {
                     health.CircuitState = CircuitState.HalfOpen;
+                    health.CooldownUntil = null;
+                    health.ConsecutiveFailures = 0;
                     health.UpdatedAt = DateTime.UtcNow;
 
                     _logger.LogInformation("Endpoint {EndpointId} circuit transitioned to HalfOpen", health.EndpointId);
+                }
+
+                if (expiredCircuits.Count > 0)
+                {
+                    var endpointIds = expiredCircuits.Select(h => h.EndpointId).Distinct().ToList();
+                    var endpoints = await dbContext.Endpoints
+                        .Where(e => endpointIds.Contains(e.Id) && e.Status != EndpointStatus.Disabled)
+                        .ToListAsync(stoppingToken);
+
+                    foreach (var endpoint in endpoints)
+                    {
+                        if (endpoint.Status == EndpointStatus.Degraded)
+                            continue;
+
+                        endpoint.Status = EndpointStatus.Degraded;
+                        endpoint.UpdatedAt = DateTime.UtcNow;
+                    }
                 }
 
                 if (expiredCircuits.Count > 0)

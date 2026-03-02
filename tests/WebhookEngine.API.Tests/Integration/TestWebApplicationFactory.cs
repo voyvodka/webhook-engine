@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebhookEngine.Infrastructure.Data;
 
 namespace WebhookEngine.API.Tests.Integration;
@@ -21,22 +23,17 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         builder.ConfigureServices(services =>
         {
             // Remove all DbContext-related registrations (Npgsql provider)
-            RemoveServices(services, typeof(DbContextOptions<WebhookDbContext>));
-            RemoveServices(services, typeof(DbContextOptions));
+            services.RemoveAll<DbContextOptions<WebhookDbContext>>();
+            services.RemoveAll<DbContextOptions>();
+            services.RemoveAll<WebhookDbContext>();
+            services.RemoveAll(typeof(IDbContextOptionsConfiguration<WebhookDbContext>));
 
             // Remove hosted services (workers) to speed up tests
-            RemoveServices(services, typeof(Microsoft.Extensions.Hosting.IHostedService));
+            services.RemoveAll<Microsoft.Extensions.Hosting.IHostedService>();
 
             // Register InMemory database
             services.AddDbContext<WebhookDbContext>(options =>
                 options.UseInMemoryDatabase(_dbName));
         });
-    }
-
-    private static void RemoveServices(IServiceCollection services, Type serviceType)
-    {
-        var descriptors = services.Where(d => d.ServiceType == serviceType).ToList();
-        foreach (var descriptor in descriptors)
-            services.Remove(descriptor);
     }
 }

@@ -2,6 +2,26 @@ import { Circle } from "lucide-react";
 import type { CircuitState } from "../types";
 
 const config: Record<string, { label: string; dotClass: string; badgeClass: string }> = {
+  active: {
+    label: "Active",
+    dotClass: "text-success",
+    badgeClass: "text-success bg-success-soft"
+  },
+  degraded: {
+    label: "Degraded",
+    dotClass: "text-warning",
+    badgeClass: "text-warning bg-warning-soft"
+  },
+  failed: {
+    label: "Failed",
+    dotClass: "text-danger",
+    badgeClass: "text-danger bg-danger-soft"
+  },
+  disabled: {
+    label: "Disabled",
+    dotClass: "text-text-muted",
+    badgeClass: "text-text-muted bg-surface-3"
+  },
   closed: {
     label: "Active",
     dotClass: "text-success",

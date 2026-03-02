@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Infrastructure.Data;
@@ -58,12 +59,13 @@ public class DashboardController : ControllerBase
             .Where(a => a.CreatedAt >= cutoff && a.Status == AttemptStatus.Success)
             .AverageAsync(a => (double?)a.LatencyMs, ct) ?? 0;
 
-        // Endpoint health summary — individual counts
-        var endpointsQuery = _dbContext.Endpoints.AsNoTracking().Include(e => e.Health);
+        // Endpoint health summary — derive from endpoint status
+        var endpointsQuery = _dbContext.Endpoints.AsNoTracking();
         var totalEndpoints = await endpointsQuery.CountAsync(ct);
-        var healthyEndpoints = await endpointsQuery.CountAsync(e => e.Health == null || e.Health.CircuitState == CircuitState.Closed, ct);
-        var degradedEndpoints = await endpointsQuery.CountAsync(e => e.Health != null && e.Health.CircuitState == CircuitState.HalfOpen, ct);
-        var failedEndpoints = await endpointsQuery.CountAsync(e => e.Health != null && e.Health.CircuitState == CircuitState.Open, ct);
+        var healthyEndpoints = await endpointsQuery.CountAsync(e => e.Status == EndpointStatus.Active, ct);
+        var degradedEndpoints = await endpointsQuery.CountAsync(e => e.Status == EndpointStatus.Degraded, ct);
+        var failedEndpoints = await endpointsQuery.CountAsync(e => e.Status == EndpointStatus.Failed, ct);
+        var disabledEndpoints = await endpointsQuery.CountAsync(e => e.Status == EndpointStatus.Disabled, ct);
 
         // Queue depth (messages currently pending or sending)
         var queueDepth = await _dbContext.Messages
@@ -72,31 +74,28 @@ public class DashboardController : ControllerBase
 
         var successRate = total > 0 ? Math.Round((double)delivered / total * 100, 1) : 0;
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new
+            last24h = new
             {
-                last24h = new
-                {
-                    totalMessages = total,
-                    delivered,
-                    failed,
-                    pending,
-                    deadLetter,
-                    successRate,
-                    avgLatencyMs = Math.Round(avgLatency, 0)
-                },
-                endpoints = new
-                {
-                    total = totalEndpoints,
-                    healthy = healthyEndpoints,
-                    degraded = degradedEndpoints,
-                    failed = failedEndpoints
-                },
-                queueDepth
+                totalMessages = total,
+                delivered,
+                failed,
+                pending,
+                deadLetter,
+                successRate,
+                avgLatencyMs = Math.Round(avgLatency, 0)
             },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            endpoints = new
+            {
+                total = totalEndpoints,
+                healthy = healthyEndpoints,
+                degraded = degradedEndpoints,
+                failed = failedEndpoints,
+                disabled = disabledEndpoints
+            },
+            queueDepth
+        }));
     }
 
     [HttpGet("timeline")]
@@ -123,11 +122,7 @@ public class DashboardController : ControllerBase
                 intervalMinutes, startTime)
             .ToListAsync(ct);
 
-        return Ok(new
-        {
-            data = new { buckets },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+        return Ok(ApiEnvelope.Success(HttpContext, new { buckets }));
     }
 
     [HttpPost("messages/{messageId:guid}/retry")]
@@ -136,29 +131,25 @@ public class DashboardController : ControllerBase
         var message = await _messageRepository.GetByIdAsync(messageId, ct);
         if (message is null)
         {
-            return NotFound(new
-            {
-                error = new { code = "NOT_FOUND", message = "Message not found." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Message not found."));
         }
 
         if (message.Status != MessageStatus.Failed && message.Status != MessageStatus.DeadLetter)
         {
-            return UnprocessableEntity(new
-            {
-                error = new { code = "UNPROCESSABLE", message = "Only failed or dead-letter messages can be retried." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return UnprocessableEntity(ApiEnvelope.Error(
+                HttpContext,
+                "UNPROCESSABLE",
+                "Only failed or dead-letter messages can be retried."));
         }
 
         await _messageRepository.RetryAsync(messageId, ct);
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new { messageId, status = "pending", scheduledAt = DateTime.UtcNow },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            messageId,
+            status = "pending",
+            scheduledAt = DateTime.UtcNow
+        }));
     }
 
     // ──────────────────────────────────────────────────
@@ -175,11 +166,10 @@ public class DashboardController : ControllerBase
     {
         var endpoints = await _endpointRepository.ListAllAsync(appId, status, page, pageSize, ct);
         var totalCount = await _endpointRepository.CountAllAsync(appId, status, ct);
-        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);
 
-        return Ok(new
-        {
-            data = endpoints.Select(e => new
+        return Ok(ApiEnvelope.Success(HttpContext,
+            endpoints.Select(e => new
             {
                 id = e.Id,
                 appId = e.AppId,
@@ -193,41 +183,132 @@ public class DashboardController : ControllerBase
                 createdAt = e.CreatedAt,
                 updatedAt = e.UpdatedAt
             }),
-            meta = new
-            {
-                requestId = $"req_{HttpContext.Items["RequestId"]}",
-                pagination = new { page, pageSize, totalCount, totalPages, hasNext = page < totalPages, hasPrev = page > 1 }
-            }
-        });
+            pagination));
     }
 
     [HttpGet("event-types")]
-    public async Task<IActionResult> ListEventTypes([FromQuery] Guid appId, CancellationToken ct)
+    public async Task<IActionResult> ListEventTypes(
+        [FromQuery] Guid appId,
+        [FromQuery] bool includeArchived = false,
+        CancellationToken ct = default)
     {
         var appExists = await _dbContext.Applications.AsNoTracking().AnyAsync(a => a.Id == appId, ct);
         if (!appExists)
         {
-            return NotFound(new
-            {
-                error = new { code = "NOT_FOUND", message = "Application not found." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
         }
 
-        var eventTypes = await _eventTypeRepository.ListByAppIdAsync(appId, includeArchived: false, page: 1, pageSize: 500, ct);
+        var eventTypes = await _eventTypeRepository.ListByAppIdAsync(appId, includeArchived, page: 1, pageSize: 500, ct);
 
-        return Ok(new
-        {
-            data = eventTypes.Select(et => new
+        return Ok(ApiEnvelope.Success(HttpContext,
+            eventTypes.Select(et => new
             {
                 id = et.Id,
                 appId = et.AppId,
                 name = et.Name,
                 description = et.Description,
+                isArchived = et.IsArchived,
                 createdAt = et.CreatedAt
-            }),
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            })));
+    }
+
+    [HttpPost("event-types")]
+    public async Task<IActionResult> CreateEventType([FromBody] DashboardCreateEventTypeRequest request, CancellationToken ct)
+    {
+        var appExists = await _dbContext.Applications.AsNoTracking().AnyAsync(a => a.Id == request.AppId, ct);
+        if (!appExists)
+        {
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
+        }
+
+        var existing = await _eventTypeRepository.GetByNameAsync(request.AppId, request.Name, ct);
+        if (existing is not null)
+        {
+            return Conflict(ApiEnvelope.Error(
+                HttpContext,
+                "CONFLICT",
+                $"Event type '{request.Name}' already exists for this application."));
+        }
+
+        var eventType = new WebhookEngine.Core.Entities.EventType
+        {
+            AppId = request.AppId,
+            Name = request.Name,
+            Description = request.Description
+        };
+
+        await _eventTypeRepository.CreateAsync(eventType, ct);
+
+        return Created($"/api/v1/dashboard/event-types/{eventType.Id}", ApiEnvelope.Success(HttpContext, new
+        {
+            id = eventType.Id,
+            appId = eventType.AppId,
+            name = eventType.Name,
+            description = eventType.Description,
+            isArchived = eventType.IsArchived,
+            createdAt = eventType.CreatedAt
+        }));
+    }
+
+    [HttpPut("event-types/{eventTypeId:guid}")]
+    public async Task<IActionResult> UpdateEventType(Guid eventTypeId, [FromBody] DashboardUpdateEventTypeRequest request, CancellationToken ct)
+    {
+        var eventType = await _eventTypeRepository.GetByIdAsync(eventTypeId, ct);
+        if (eventType is null)
+        {
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Event type not found."));
+        }
+
+        if (eventType.IsArchived)
+        {
+            return UnprocessableEntity(ApiEnvelope.Error(
+                HttpContext,
+                "UNPROCESSABLE",
+                "Cannot update an archived event type."));
+        }
+
+        if (request.Name is not null
+            && !string.Equals(request.Name, eventType.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            var existing = await _eventTypeRepository.GetByNameAsync(eventType.AppId, request.Name, ct);
+            if (existing is not null && existing.Id != eventType.Id)
+            {
+                return Conflict(ApiEnvelope.Error(
+                    HttpContext,
+                    "CONFLICT",
+                    $"Event type '{request.Name}' already exists for this application."));
+            }
+
+            eventType.Name = request.Name;
+        }
+
+        if (request.Description is not null)
+            eventType.Description = request.Description;
+
+        await _eventTypeRepository.UpdateAsync(eventType, ct);
+
+        return Ok(ApiEnvelope.Success(HttpContext, new
+        {
+            id = eventType.Id,
+            appId = eventType.AppId,
+            name = eventType.Name,
+            description = eventType.Description,
+            isArchived = eventType.IsArchived,
+            createdAt = eventType.CreatedAt
+        }));
+    }
+
+    [HttpDelete("event-types/{eventTypeId:guid}")]
+    public async Task<IActionResult> ArchiveEventType(Guid eventTypeId, CancellationToken ct)
+    {
+        var eventType = await _eventTypeRepository.GetByIdAsync(eventTypeId, ct);
+        if (eventType is null)
+        {
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Event type not found."));
+        }
+
+        await _eventTypeRepository.ArchiveAsync(eventTypeId, ct);
+        return NoContent();
     }
 
     [HttpPost("endpoints")]
@@ -236,11 +317,7 @@ public class DashboardController : ControllerBase
         var appExists = await _dbContext.Applications.AsNoTracking().AnyAsync(a => a.Id == request.AppId, ct);
         if (!appExists)
         {
-            return NotFound(new
-            {
-                error = new { code = "NOT_FOUND", message = "Application not found." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
         }
 
         var endpoint = new Endpoint
@@ -260,11 +337,10 @@ public class DashboardController : ControllerBase
                 var eventType = await _eventTypeRepository.GetByIdAsync(request.AppId, eventTypeId, ct);
                 if (eventType is null)
                 {
-                    return UnprocessableEntity(new
-                    {
-                        error = new { code = "UNPROCESSABLE", message = $"Event type {eventTypeId} is invalid for this application." },
-                        meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-                    });
+                    return UnprocessableEntity(ApiEnvelope.Error(
+                        HttpContext,
+                        "UNPROCESSABLE",
+                        $"Event type {eventTypeId} is invalid for this application."));
                 }
 
                 endpoint.EventTypes.Add(eventType);
@@ -274,24 +350,21 @@ public class DashboardController : ControllerBase
         await _endpointRepository.CreateAsync(endpoint, ct);
         var created = await _endpointRepository.GetByIdAsync(endpoint.Id, ct);
 
-        return Created($"/api/v1/dashboard/endpoints/{endpoint.Id}", new
+        return Created($"/api/v1/dashboard/endpoints/{endpoint.Id}", ApiEnvelope.Success(HttpContext, new
         {
-            data = new
-            {
-                id = endpoint.Id,
-                appId = endpoint.AppId,
-                appName = created?.Application?.Name,
-                url = endpoint.Url,
-                description = endpoint.Description,
-                status = endpoint.Status.ToString().ToLowerInvariant(),
-                circuitState = created?.Health?.CircuitState.ToString().ToLowerInvariant() ?? "closed",
-                eventTypes = created?.EventTypes.Select(et => et.Name).ToList() ?? [],
-                eventTypeIds = created?.EventTypes.Select(et => et.Id).ToList() ?? [],
-                createdAt = endpoint.CreatedAt,
-                updatedAt = endpoint.UpdatedAt
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            id = endpoint.Id,
+            appId = endpoint.AppId,
+            appName = created?.Application?.Name,
+            url = endpoint.Url,
+            description = endpoint.Description,
+            status = endpoint.Status.ToString().ToLowerInvariant(),
+            circuitState = created?.Health?.CircuitState.ToString().ToLowerInvariant() ?? "closed",
+            eventTypes = created?.EventTypes.Select(et => et.Name).ToList() ?? [],
+            eventTypeIds = created?.EventTypes.Select(et => et.Id).ToList() ?? [],
+            createdAt = endpoint.CreatedAt,
+            updatedAt = endpoint.UpdatedAt
+        }));
+
     }
 
     [HttpPut("endpoints/{endpointId:guid}")]
@@ -300,11 +373,7 @@ public class DashboardController : ControllerBase
         var endpoint = await _endpointRepository.GetByIdAsync(endpointId, ct);
         if (endpoint is null)
         {
-            return NotFound(new
-            {
-                error = new { code = "NOT_FOUND", message = "Endpoint not found." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Endpoint not found."));
         }
 
         if (request.Url is not null)
@@ -331,11 +400,10 @@ public class DashboardController : ControllerBase
                 var eventType = await _eventTypeRepository.GetByIdAsync(endpoint.AppId, eventTypeId, ct);
                 if (eventType is null)
                 {
-                    return UnprocessableEntity(new
-                    {
-                        error = new { code = "UNPROCESSABLE", message = $"Event type {eventTypeId} is invalid for this application." },
-                        meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-                    });
+                    return UnprocessableEntity(ApiEnvelope.Error(
+                        HttpContext,
+                        "UNPROCESSABLE",
+                        $"Event type {eventTypeId} is invalid for this application."));
                 }
 
                 endpoint.EventTypes.Add(eventType);
@@ -345,24 +413,20 @@ public class DashboardController : ControllerBase
         await _endpointRepository.UpdateAsync(endpoint, ct);
         var updated = await _endpointRepository.GetByIdAsync(endpoint.Id, ct);
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new
-            {
-                id = endpoint.Id,
-                appId = endpoint.AppId,
-                appName = updated?.Application?.Name,
-                url = endpoint.Url,
-                description = endpoint.Description,
-                status = endpoint.Status.ToString().ToLowerInvariant(),
-                circuitState = updated?.Health?.CircuitState.ToString().ToLowerInvariant() ?? "closed",
-                eventTypes = updated?.EventTypes.Select(et => et.Name).ToList() ?? [],
-                eventTypeIds = updated?.EventTypes.Select(et => et.Id).ToList() ?? [],
-                createdAt = endpoint.CreatedAt,
-                updatedAt = endpoint.UpdatedAt
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            id = endpoint.Id,
+            appId = endpoint.AppId,
+            appName = updated?.Application?.Name,
+            url = endpoint.Url,
+            description = endpoint.Description,
+            status = endpoint.Status.ToString().ToLowerInvariant(),
+            circuitState = updated?.Health?.CircuitState.ToString().ToLowerInvariant() ?? "closed",
+            eventTypes = updated?.EventTypes.Select(et => et.Name).ToList() ?? [],
+            eventTypeIds = updated?.EventTypes.Select(et => et.Id).ToList() ?? [],
+            createdAt = endpoint.CreatedAt,
+            updatedAt = endpoint.UpdatedAt
+        }));
     }
 
     [HttpPost("endpoints/{endpointId:guid}/disable")]
@@ -371,21 +435,17 @@ public class DashboardController : ControllerBase
         var endpoint = await _endpointRepository.GetByIdAsync(endpointId, ct);
         if (endpoint is null)
         {
-            return NotFound(new
-            {
-                error = new { code = "NOT_FOUND", message = "Endpoint not found." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Endpoint not found."));
         }
 
         endpoint.Status = EndpointStatus.Disabled;
         await _endpointRepository.UpdateAsync(endpoint, ct);
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new { id = endpoint.Id, status = endpoint.Status.ToString().ToLowerInvariant() },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            id = endpoint.Id,
+            status = endpoint.Status.ToString().ToLowerInvariant()
+        }));
     }
 
     [HttpPost("endpoints/{endpointId:guid}/enable")]
@@ -394,21 +454,17 @@ public class DashboardController : ControllerBase
         var endpoint = await _endpointRepository.GetByIdAsync(endpointId, ct);
         if (endpoint is null)
         {
-            return NotFound(new
-            {
-                error = new { code = "NOT_FOUND", message = "Endpoint not found." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Endpoint not found."));
         }
 
         endpoint.Status = EndpointStatus.Active;
         await _endpointRepository.UpdateAsync(endpoint, ct);
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new { id = endpoint.Id, status = endpoint.Status.ToString().ToLowerInvariant() },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            id = endpoint.Id,
+            status = endpoint.Status.ToString().ToLowerInvariant()
+        }));
     }
 
     [HttpDelete("endpoints/{endpointId:guid}")]
@@ -417,11 +473,7 @@ public class DashboardController : ControllerBase
         var endpoint = await _endpointRepository.GetByIdAsync(endpointId, ct);
         if (endpoint is null)
         {
-            return NotFound(new
-            {
-                error = new { code = "NOT_FOUND", message = "Endpoint not found." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Endpoint not found."));
         }
 
         await _endpointRepository.DeleteAsync(endpointId, ct);
@@ -446,11 +498,10 @@ public class DashboardController : ControllerBase
     {
         var messages = await _messageRepository.ListAllAsync(appId, status, endpointId, eventType, after, before, page, pageSize, ct);
         var totalCount = await _messageRepository.CountAllAsync(appId, status, endpointId, eventType, after, before, ct);
-        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);
 
-        return Ok(new
-        {
-            data = messages.Select(m => new
+        return Ok(ApiEnvelope.Success(HttpContext,
+            messages.Select(m => new
             {
                 id = m.Id,
                 appId = m.AppId,
@@ -467,12 +518,7 @@ public class DashboardController : ControllerBase
                 deliveredAt = m.DeliveredAt,
                 createdAt = m.CreatedAt
             }),
-            meta = new
-            {
-                requestId = $"req_{HttpContext.Items["RequestId"]}",
-                pagination = new { page, pageSize, totalCount, totalPages, hasNext = page < totalPages, hasPrev = page > 1 }
-            }
-        });
+            pagination));
     }
 
     [HttpPost("messages/send")]
@@ -481,11 +527,7 @@ public class DashboardController : ControllerBase
         var appExists = await _dbContext.Applications.AsNoTracking().AnyAsync(a => a.Id == request.AppId, ct);
         if (!appExists)
         {
-            return NotFound(new
-            {
-                error = new { code = "NOT_FOUND", message = "Application not found." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
         }
 
         Guid eventTypeId;
@@ -496,21 +538,19 @@ public class DashboardController : ControllerBase
             var eventType = await _eventTypeRepository.GetByIdAsync(request.AppId, request.EventTypeId.Value, ct);
             if (eventType is null)
             {
-                return UnprocessableEntity(new
-                {
-                    error = new { code = "UNPROCESSABLE", message = "Event type not found for this application." },
-                    meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-                });
+                return UnprocessableEntity(ApiEnvelope.Error(
+                    HttpContext,
+                    "UNPROCESSABLE",
+                    "Event type not found for this application."));
             }
 
             if (!string.IsNullOrWhiteSpace(request.EventType)
                 && !string.Equals(request.EventType, eventType.Name, StringComparison.OrdinalIgnoreCase))
             {
-                return UnprocessableEntity(new
-                {
-                    error = new { code = "UNPROCESSABLE", message = "eventType and eventTypeId refer to different event types." },
-                    meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-                });
+                return UnprocessableEntity(ApiEnvelope.Error(
+                    HttpContext,
+                    "UNPROCESSABLE",
+                    "eventType and eventTypeId refer to different event types."));
             }
 
             eventTypeId = eventType.Id;
@@ -545,16 +585,12 @@ public class DashboardController : ControllerBase
 
             if (existingMessages.Count > 0)
             {
-                return Accepted(new
+                return Accepted(ApiEnvelope.Success(HttpContext, new
                 {
-                    data = new
-                    {
-                        messageIds = existingMessages.Select(m => m.Id.ToString()),
-                        endpointCount = existingMessages.Count,
-                        eventType = eventTypeName
-                    },
-                    meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-                });
+                    messageIds = existingMessages.Select(m => m.Id.ToString()),
+                    endpointCount = existingMessages.Count,
+                    eventType = eventTypeName
+                }));
             }
         }
 
@@ -562,11 +598,12 @@ public class DashboardController : ControllerBase
 
         if (endpoints.Count == 0)
         {
-            return Accepted(new
+            return Accepted(ApiEnvelope.Success(HttpContext, new
             {
-                data = new { messageIds = Array.Empty<string>(), endpointCount = 0, eventType = eventTypeName },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+                messageIds = Array.Empty<string>(),
+                endpointCount = 0,
+                eventType = eventTypeName
+            }));
         }
 
         var messageIds = new List<Guid>();
@@ -589,16 +626,12 @@ public class DashboardController : ControllerBase
             messageIds.Add(message.Id);
         }
 
-        return Accepted(new
+        return Accepted(ApiEnvelope.Success(HttpContext, new
         {
-            data = new
-            {
-                messageIds = messageIds.Select(id => id.ToString()),
-                endpointCount = endpoints.Count,
-                eventType = eventTypeName
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            messageIds = messageIds.Select(id => id.ToString()),
+            endpointCount = endpoints.Count,
+            eventType = eventTypeName
+        }));
     }
 
     [HttpGet("messages/{messageId:guid}")]
@@ -607,46 +640,38 @@ public class DashboardController : ControllerBase
         var message = await _messageRepository.GetByIdWithAttemptsAsync(messageId, ct);
         if (message is null)
         {
-            return NotFound(new
-            {
-                error = new { code = "NOT_FOUND", message = "Message not found." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Message not found."));
         }
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new
+            id = message.Id,
+            appId = message.AppId,
+            endpointId = message.EndpointId,
+            endpointUrl = message.Endpoint?.Url,
+            eventType = message.EventType?.Name,
+            eventTypeId = message.EventTypeId,
+            status = message.Status.ToString(),
+            attemptCount = message.AttemptCount,
+            maxRetries = message.MaxRetries,
+            payload = message.Payload,
+            eventId = message.EventId,
+            scheduledAt = message.ScheduledAt,
+            deliveredAt = message.DeliveredAt,
+            createdAt = message.CreatedAt,
+            attempts = message.Attempts.Select(a => new
             {
-                id = message.Id,
-                appId = message.AppId,
-                endpointId = message.EndpointId,
-                endpointUrl = message.Endpoint?.Url,
-                eventType = message.EventType?.Name,
-                eventTypeId = message.EventTypeId,
-                status = message.Status.ToString(),
-                attemptCount = message.AttemptCount,
-                maxRetries = message.MaxRetries,
-                payload = message.Payload,
-                eventId = message.EventId,
-                scheduledAt = message.ScheduledAt,
-                deliveredAt = message.DeliveredAt,
-                createdAt = message.CreatedAt,
-                attempts = message.Attempts.Select(a => new
-                {
-                    id = a.Id,
-                    attemptNumber = a.AttemptNumber,
-                    status = a.Status.ToString(),
-                    statusCode = a.StatusCode,
-                    requestHeaders = a.RequestHeadersJson,
-                    responseBody = a.ResponseBody,
-                    error = a.Error,
-                    latencyMs = a.LatencyMs,
-                    createdAt = a.CreatedAt
-                })
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+                id = a.Id,
+                attemptNumber = a.AttemptNumber,
+                status = a.Status.ToString(),
+                statusCode = a.StatusCode,
+                requestHeaders = a.RequestHeadersJson,
+                responseBody = a.ResponseBody,
+                error = a.Error,
+                latencyMs = a.LatencyMs,
+                createdAt = a.CreatedAt
+            })
+        }));
     }
 
     // ──────────────────────────────────────────────────
@@ -702,6 +727,19 @@ public class DashboardUpdateEndpointRequest
     public Dictionary<string, string>? CustomHeaders { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
     public string? SecretOverride { get; set; }
+}
+
+public class DashboardCreateEventTypeRequest
+{
+    public Guid AppId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+}
+
+public class DashboardUpdateEventTypeRequest
+{
+    public string? Name { get; set; }
+    public string? Description { get; set; }
 }
 
 public class DashboardSendMessageRequest

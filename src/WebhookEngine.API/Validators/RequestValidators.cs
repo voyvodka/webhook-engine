@@ -184,6 +184,41 @@ public class DashboardUpdateEndpointRequestValidator : AbstractValidator<Dashboa
     }
 }
 
+public class DashboardCreateEventTypeRequestValidator : AbstractValidator<DashboardCreateEventTypeRequest>
+{
+    public DashboardCreateEventTypeRequestValidator()
+    {
+        RuleFor(x => x.AppId)
+            .NotEmpty();
+
+        RuleFor(x => x.Name)
+            .NotEmpty()
+            .MaximumLength(255);
+
+        RuleFor(x => x.Description)
+            .MaximumLength(500)
+            .When(x => x.Description is not null);
+    }
+}
+
+public class DashboardUpdateEventTypeRequestValidator : AbstractValidator<DashboardUpdateEventTypeRequest>
+{
+    public DashboardUpdateEventTypeRequestValidator()
+    {
+        RuleFor(x => x.Name)
+            .MaximumLength(255)
+            .When(x => x.Name is not null);
+
+        RuleFor(x => x.Description)
+            .MaximumLength(500)
+            .When(x => x.Description is not null);
+
+        RuleFor(x => x)
+            .Must(x => x.Name is not null || x.Description is not null)
+            .WithMessage("At least one field must be provided.");
+    }
+}
+
 public class SendMessageRequestValidator : AbstractValidator<SendMessageRequest>
 {
     public SendMessageRequestValidator()

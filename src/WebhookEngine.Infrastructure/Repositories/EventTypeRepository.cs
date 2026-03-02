@@ -71,6 +71,17 @@ public class EventTypeRepository
 
     public async Task ArchiveAsync(Guid id, CancellationToken ct = default)
     {
+        if (string.Equals(_dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal))
+        {
+            var eventType = await _dbContext.EventTypes.FirstOrDefaultAsync(et => et.Id == id, ct);
+            if (eventType is null)
+                return;
+
+            eventType.IsArchived = true;
+            await _dbContext.SaveChangesAsync(ct);
+            return;
+        }
+
         await _dbContext.EventTypes
             .Where(et => et.Id == id)
             .ExecuteUpdateAsync(setters => setters
@@ -79,6 +90,17 @@ public class EventTypeRepository
 
     public async Task ArchiveAsync(Guid appId, Guid id, CancellationToken ct = default)
     {
+        if (string.Equals(_dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal))
+        {
+            var eventType = await _dbContext.EventTypes.FirstOrDefaultAsync(et => et.AppId == appId && et.Id == id, ct);
+            if (eventType is null)
+                return;
+
+            eventType.IsArchived = true;
+            await _dbContext.SaveChangesAsync(ct);
+            return;
+        }
+
         await _dbContext.EventTypes
             .Where(et => et.AppId == appId && et.Id == id)
             .ExecuteUpdateAsync(setters => setters

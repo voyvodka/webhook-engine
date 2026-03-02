@@ -381,6 +381,82 @@ Notes:
 - `eventId` — optional client-side event identifier for correlation.
 - `idempotencyKey` — optional. If provided, duplicate sends with same key return the original response (within 24h window).
 
+#### Batch Send Messages
+```
+POST /api/v1/messages/batch
+```
+
+Request:
+```json
+{
+  "messages": [
+    {
+      "eventType": "order.created",
+      "payload": { "orderId": "ord_001" },
+      "eventId": "evt_001"
+    },
+    {
+      "eventTypeId": "0f3e8c63-4fef-4f4f-8f2f-2df0b0d61c11",
+      "payload": { "orderId": "ord_002" }
+    }
+  ]
+}
+```
+
+Response: `202 Accepted`
+```json
+{
+  "data": {
+    "totalEvents": 2,
+    "acceptedEvents": 2,
+    "rejectedEvents": 0,
+    "totalEnqueuedMessages": 4,
+    "results": [
+      {
+        "index": 0,
+        "success": true,
+        "eventType": "order.created",
+        "endpointCount": 2,
+        "messageIds": ["..."]
+      }
+    ]
+  }
+}
+```
+
+#### Replay Messages
+```
+POST /api/v1/messages/replay
+```
+
+Request:
+```json
+{
+  "eventType": "order.created",
+  "from": "2026-02-25T00:00:00Z",
+  "to": "2026-02-26T23:59:59Z",
+  "statuses": ["delivered", "failed"],
+  "maxMessages": 100
+}
+```
+
+Response: `202 Accepted`
+```json
+{
+  "data": {
+    "sourceCount": 18,
+    "replayedCount": 18,
+    "messageIds": ["..."],
+    "eventType": "order.created",
+    "endpointId": null,
+    "from": "2026-02-25T00:00:00Z",
+    "to": "2026-02-26T23:59:59Z",
+    "maxMessages": 100,
+    "statuses": ["delivered", "failed"]
+  }
+}
+```
+
 #### Get Message
 ```
 GET /api/v1/messages/{messageId}
@@ -502,7 +578,8 @@ Response:
       "total": 25,
       "healthy": 22,
       "degraded": 2,
-      "failed": 1
+      "failed": 1,
+      "disabled": 0
     },
     "queueDepth": 30
   }
@@ -543,7 +620,7 @@ GET /api/v1/dashboard/endpoints
 POST /api/v1/dashboard/endpoints
 ```
 
-Request body same as `POST /api/v1/endpoints` but with additional `applicationId` field.
+Request body same as `POST /api/v1/endpoints` but with additional `appId` field.
 
 #### Dashboard — Update Endpoint
 ```
@@ -569,6 +646,22 @@ DELETE /api/v1/dashboard/endpoints/{endpointId}
 ```
 GET /api/v1/dashboard/event-types
     ?appId={uuid}
+    &includeArchived=false
+```
+
+#### Dashboard — Create Event Type
+```
+POST /api/v1/dashboard/event-types
+```
+
+#### Dashboard — Update Event Type
+```
+PUT /api/v1/dashboard/event-types/{eventTypeId}
+```
+
+#### Dashboard — Archive Event Type
+```
+DELETE /api/v1/dashboard/event-types/{eventTypeId}
 ```
 
 #### Dashboard — Messages (Cross-App)

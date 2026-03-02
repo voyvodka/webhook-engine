@@ -3,12 +3,13 @@ import {
   listApplications,
   createApplication,
   deleteApplication,
+  listEndpoints,
   rotateApiKey,
   rotateSigningSecret
 } from "../api/dashboardApi";
 import { Modal } from "../components/Modal";
 import { ConfirmModal } from "../components/ConfirmModal";
-import type { ApplicationRow, Pagination } from "../types";
+import type { ApplicationRow, EndpointRow, Pagination } from "../types";
 import {
   Plus,
   KeyRound,
@@ -60,11 +61,51 @@ const closedConfirm: ConfirmState = {
   onConfirm: () => {}
 };
 
+interface ApplicationEndpointStats {
+  total: number;
+  disabled: number;
+  healthy: number;
+  degraded: number;
+  failed: number;
+}
+
+function summarizeEndpoints(total: number, endpoints: EndpointRow[]): ApplicationEndpointStats {
+  let disabled = 0;
+  let healthy = 0;
+  let degraded = 0;
+  let failed = 0;
+
+  endpoints.forEach((endpoint) => {
+    const normalizedStatus = endpoint.status.toLowerCase();
+
+    if (normalizedStatus === "disabled") {
+      disabled++;
+      return;
+    }
+
+    if (normalizedStatus === "degraded") {
+      degraded++;
+      return;
+    }
+
+    if (normalizedStatus === "failed") {
+      failed++;
+      return;
+    }
+
+    healthy++;
+  });
+
+  return { total, disabled, healthy, degraded, failed };
+}
+
 export function ApplicationsPage() {
   const [apps, setApps] = useState<ApplicationRow[]>([]);
+  const [appStats, setAppStats] = useState<Record<string, ApplicationEndpointStats>>({});
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadingStats, setLoadingStats] = useState(false);
   const [error, setError] = useState("");
 
   // Create modal
@@ -80,6 +121,43 @@ export function ApplicationsPage() {
   // Confirm modal
   const [confirm, setConfirm] = useState<ConfirmState>(closedConfirm);
 
+  const fetchAppStats = useCallback(async (rows: ApplicationRow[]) => {
+    if (rows.length === 0) {
+      setAppStats({});
+      return;
+    }
+
+    setLoadingStats(true);
+    try {
+      const entries = await Promise.all(rows.map(async (app) => {
+        const endpoints: EndpointRow[] = [];
+        let currentPage = 1;
+        let totalPages = 1;
+        let totalCount = 0;
+
+        do {
+          const result = await listEndpoints({ appId: app.id, page: currentPage, pageSize: 200 });
+          endpoints.push(...result.data);
+
+          if (currentPage === 1) {
+            totalPages = result.pagination.totalPages;
+            totalCount = result.pagination.totalCount;
+          }
+
+          currentPage++;
+        } while (currentPage <= totalPages);
+
+        return [app.id, summarizeEndpoints(totalCount, endpoints)] as const;
+      }));
+
+      setAppStats(Object.fromEntries(entries));
+    } catch {
+      setAppStats({});
+    } finally {
+      setLoadingStats(false);
+    }
+  }, []);
+
   const fetchApps = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -87,12 +165,13 @@ export function ApplicationsPage() {
       const result = await listApplications(page, 20);
       setApps(result.data);
       setPagination(result.pagination);
+      await fetchAppStats(result.data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load applications");
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [fetchAppStats, page]);
 
   useEffect(() => {
     fetchApps();
@@ -258,42 +337,69 @@ export function ApplicationsPage() {
         ) : (
           <>
             <div className="overflow-auto">
-              <table className="w-full min-w-[640px]">
+              <table className="w-full min-w-[920px]">
                 <thead>
                   <tr className="text-xs text-text-muted border-b border-border">
                     <th className="text-left font-medium px-4 py-2.5">Name</th>
                     <th className="text-left font-medium px-4 py-2.5">API Key Prefix</th>
                     <th className="text-left font-medium px-4 py-2.5">Status</th>
+                    <th className="text-left font-medium px-4 py-2.5">Endpoints</th>
+                    <th className="text-left font-medium px-4 py-2.5">Health</th>
                     <th className="text-left font-medium px-4 py-2.5">Created</th>
                     <th className="text-right font-medium px-4 py-2.5">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="text-sm">
-                  {apps.map((app) => (
-                    <tr key={app.id} className="border-t border-border-subtle hover:bg-surface-2/50 transition-colors">
-                      <td className="px-4 py-2.5 font-medium">{app.name}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">{app.apiKeyPrefix}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`inline-block text-xs font-medium px-1.5 py-0.5 rounded ${app.isActive ? "text-success bg-success-soft" : "text-danger bg-danger-soft"}`}>
-                          {app.isActive ? "Active" : "Disabled"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-text-muted">{new Date(app.createdAt).toLocaleDateString()}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => requestRotateKey(app.id)} className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent-soft transition-colors" title="Rotate API Key">
-                            <KeyRound className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => requestRotateSecret(app.id)} className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent-soft transition-colors" title="Rotate Signing Secret">
-                            <ShieldCheck className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => requestDelete(app.id, app.name)} className="p-1.5 rounded-md text-text-muted hover:text-danger hover:bg-danger-soft transition-colors" title="Delete">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {apps.map((app) => {
+                    const stats = appStats[app.id];
+
+                    return (
+                      <tr key={app.id} className="border-t border-border-subtle hover:bg-surface-2/50 transition-colors">
+                        <td className="px-4 py-2.5 font-medium">{app.name}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">{app.apiKeyPrefix}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`inline-block text-xs font-medium px-1.5 py-0.5 rounded ${app.isActive ? "text-success bg-success-soft" : "text-danger bg-danger-soft"}`}>
+                            {app.isActive ? "Active" : "Disabled"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-xs text-text-secondary">
+                          {stats ? (
+                            <div>
+                              <span className="font-medium">{stats.total}</span>
+                              {stats.disabled > 0 && <span className="text-text-muted"> ({stats.disabled} disabled)</span>}
+                            </div>
+                          ) : (
+                            <span className="text-text-muted">{loadingStats ? "..." : "0"}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-xs">
+                          {stats ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-success">{stats.healthy} healthy</span>
+                              <span className="text-warning">{stats.degraded} degraded</span>
+                              <span className="text-danger">{stats.failed} failed</span>
+                            </div>
+                          ) : (
+                            <span className="text-text-muted">--</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-xs text-text-muted">{new Date(app.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => requestRotateKey(app.id)} className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent-soft transition-colors" title="Rotate API Key">
+                              <KeyRound className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => requestRotateSecret(app.id)} className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent-soft transition-colors" title="Rotate Signing Secret">
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => requestDelete(app.id, app.name)} className="p-1.5 rounded-md text-text-muted hover:text-danger hover:bg-danger-soft transition-colors" title="Delete">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

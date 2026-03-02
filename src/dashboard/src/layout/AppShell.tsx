@@ -3,6 +3,7 @@ import { useAuth } from "../auth/AuthContext";
 import {
   LayoutDashboard,
   Box,
+  Tags,
   Waypoints,
   Mail,
   FileText,
@@ -14,6 +15,7 @@ import {
 const navItems = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
   { to: "/applications", label: "Applications", icon: Box },
+  { to: "/event-types", label: "Event Types", icon: Tags },
   { to: "/endpoints", label: "Endpoints", icon: Waypoints },
   { to: "/messages", label: "Messages", icon: Mail },
   { to: "/delivery-log", label: "Delivery Logs", icon: FileText }

@@ -5,6 +5,7 @@ import { ApplicationsPage } from "./pages/ApplicationsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DeliveryLogPage } from "./pages/DeliveryLogPage";
 import { EndpointsPage } from "./pages/EndpointsPage";
+import { EventTypesPage } from "./pages/EventTypesPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MessagesPage } from "./pages/MessagesPage";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
@@ -20,6 +21,7 @@ export function App() {
             <Route element={<AppShell />}>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/applications" element={<ApplicationsPage />} />
+              <Route path="/event-types" element={<EventTypesPage />} />
               <Route path="/endpoints" element={<EndpointsPage />} />
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/delivery-log" element={<DeliveryLogPage />} />

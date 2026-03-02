@@ -51,19 +51,15 @@ public class ApplicationsController : ControllerBase
         await _appRepo.CreateAsync(application, ct);
 
         // Return the API key in plain text ONLY on creation — it is never retrievable again
-        return Created($"/api/v1/applications/{application.Id}", new
+        return Created($"/api/v1/applications/{application.Id}", ApiEnvelope.Success(HttpContext, new
         {
-            data = new
-            {
-                id = application.Id,
-                name = application.Name,
-                apiKey,  // Only shown once
-                signingSecret,  // Only shown once
-                isActive = application.IsActive,
-                createdAt = application.CreatedAt
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            id = application.Id,
+            name = application.Name,
+            apiKey,  // Only shown once
+            signingSecret,  // Only shown once
+            isActive = application.IsActive,
+            createdAt = application.CreatedAt
+        }));
     }
 
     [HttpGet]
@@ -71,11 +67,10 @@ public class ApplicationsController : ControllerBase
     {
         var applications = await _appRepo.ListAsync(page, pageSize, ct);
         var totalCount = await _appRepo.CountAsync(ct);
-        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);
 
-        return Ok(new
-        {
-            data = applications.Select(a => new
+        return Ok(ApiEnvelope.Success(HttpContext,
+            applications.Select(a => new
             {
                 id = a.Id,
                 name = a.Name,
@@ -84,20 +79,7 @@ public class ApplicationsController : ControllerBase
                 createdAt = a.CreatedAt,
                 updatedAt = a.UpdatedAt
             }),
-            meta = new
-            {
-                requestId = $"req_{HttpContext.Items["RequestId"]}",
-                pagination = new
-                {
-                    page,
-                    pageSize,
-                    totalCount,
-                    totalPages,
-                    hasNext = page < totalPages,
-                    hasPrev = page > 1
-                }
-            }
-        });
+            pagination));
     }
 
     [HttpGet("{applicationId:guid}")]
@@ -107,19 +89,15 @@ public class ApplicationsController : ControllerBase
         if (application is null)
             return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new
-            {
-                id = application.Id,
-                name = application.Name,
-                apiKeyPrefix = application.ApiKeyPrefix,
-                isActive = application.IsActive,
-                createdAt = application.CreatedAt,
-                updatedAt = application.UpdatedAt
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            id = application.Id,
+            name = application.Name,
+            apiKeyPrefix = application.ApiKeyPrefix,
+            isActive = application.IsActive,
+            createdAt = application.CreatedAt,
+            updatedAt = application.UpdatedAt
+        }));
     }
 
     [HttpPut("{applicationId:guid}")]
@@ -134,19 +112,15 @@ public class ApplicationsController : ControllerBase
 
         await _appRepo.UpdateAsync(application, ct);
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new
-            {
-                id = application.Id,
-                name = application.Name,
-                apiKeyPrefix = application.ApiKeyPrefix,
-                isActive = application.IsActive,
-                createdAt = application.CreatedAt,
-                updatedAt = application.UpdatedAt
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            id = application.Id,
+            name = application.Name,
+            apiKeyPrefix = application.ApiKeyPrefix,
+            isActive = application.IsActive,
+            createdAt = application.CreatedAt,
+            updatedAt = application.UpdatedAt
+        }));
     }
 
     [HttpDelete("{applicationId:guid}")]
@@ -176,16 +150,12 @@ public class ApplicationsController : ControllerBase
         application.ApiKeyHash = newApiKeyHash;
         await _appRepo.UpdateAsync(application, ct);
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new
-            {
-                id = application.Id,
-                name = application.Name,
-                apiKey = newApiKey  // Only shown once
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            id = application.Id,
+            name = application.Name,
+            apiKey = newApiKey  // Only shown once
+        }));
     }
 
     [HttpPost("{applicationId:guid}/rotate-secret")]
@@ -199,16 +169,12 @@ public class ApplicationsController : ControllerBase
         application.SigningSecret = newSigningSecret;
         await _appRepo.UpdateAsync(application, ct);
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new
-            {
-                id = application.Id,
-                name = application.Name,
-                signingSecret = newSigningSecret  // Only shown once
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            id = application.Id,
+            name = application.Name,
+            signingSecret = newSigningSecret  // Only shown once
+        }));
     }
 }
 

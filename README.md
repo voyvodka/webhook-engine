@@ -83,6 +83,7 @@ Dashboard dev server runs on `http://localhost:5173` with API proxy to `localhos
 - [Getting Started](docs/GETTING-STARTED.md) — from zero to first webhook
 - [Self-Hosting Guide](docs/SELF-HOSTING.md) — production deployment and operations
 - [Release Guide](docs/RELEASE.md) — Docker Hub and NuGet publishing flow
+- [Launch Checklist](docs/LAUNCH-CHECKLIST.md) — final pre-launch and go-live tracking
 - [API Reference](docs/API.md) — full endpoint documentation
 - [Architecture](docs/ARCHITECTURE.md) — system design and component overview
 - [Database](docs/DATABASE.md) — schema and PostgreSQL notes
@@ -169,12 +170,18 @@ Base URL: `/api/v1/`
 | `POST` | `/api/v1/endpoints/{id}/disable` | API key | Disable endpoint |
 | `POST` | `/api/v1/endpoints/{id}/enable` | API key | Enable endpoint |
 | `POST` | `/api/v1/messages` | API key | Send message |
+| `POST` | `/api/v1/messages/batch` | API key | Batch send messages |
+| `POST` | `/api/v1/messages/replay` | API key | Replay historical messages |
 | `GET` | `/api/v1/messages` | API key | List messages |
 | `GET` | `/api/v1/messages/{id}` | API key | Get message |
 | `GET` | `/api/v1/messages/{id}/attempts` | API key | List attempts |
 | `POST` | `/api/v1/messages/{id}/retry` | API key | Retry message |
 | `GET` | `/api/v1/dashboard/overview` | Cookie | Dashboard stats |
 | `GET` | `/api/v1/dashboard/timeline` | Cookie | Delivery chart data |
+| `GET` | `/api/v1/dashboard/event-types` | Cookie | List event types (cross-app) |
+| `POST` | `/api/v1/dashboard/event-types` | Cookie | Create event type |
+| `PUT` | `/api/v1/dashboard/event-types/{id}` | Cookie | Update event type |
+| `DELETE` | `/api/v1/dashboard/event-types/{id}` | Cookie | Archive event type |
 
 ### Send a Message
 

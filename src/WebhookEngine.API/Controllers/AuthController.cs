@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebhookEngine.API.Auth;
+using WebhookEngine.API.Contracts;
 using WebhookEngine.Infrastructure.Repositories;
 
 namespace WebhookEngine.API.Controllers;
@@ -28,20 +29,12 @@ public class AuthController : ControllerBase
         var user = await _userRepo.GetByEmailAsync(request.Email, ct);
         if (user is null)
         {
-            return Unauthorized(new
-            {
-                error = new { code = "UNAUTHORIZED", message = "Invalid email or password." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return Unauthorized(ApiEnvelope.Error(HttpContext, "UNAUTHORIZED", "Invalid email or password."));
         }
 
         if (!PasswordHasher.VerifyPassword(request.Password, user.PasswordHash))
         {
-            return Unauthorized(new
-            {
-                error = new { code = "UNAUTHORIZED", message = "Invalid email or password." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return Unauthorized(ApiEnvelope.Error(HttpContext, "UNAUTHORIZED", "Invalid email or password."));
         }
 
         // Create claims and sign in with cookie auth
@@ -66,16 +59,12 @@ public class AuthController : ControllerBase
 
         await _userRepo.UpdateLastLoginAsync(user.Id, ct);
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new
-            {
-                id = user.Id,
-                email = user.Email,
-                role = user.Role
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            id = user.Id,
+            email = user.Email,
+            role = user.Role
+        }));
     }
 
     [HttpPost("logout")]
@@ -84,11 +73,10 @@ public class AuthController : ControllerBase
     {
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new { message = "Logged out successfully." },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            message = "Logged out successfully."
+        }));
     }
 
     [HttpGet("me")]
@@ -98,34 +86,22 @@ public class AuthController : ControllerBase
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
         {
-            return Unauthorized(new
-            {
-                error = new { code = "UNAUTHORIZED", message = "Not authenticated." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return Unauthorized(ApiEnvelope.Error(HttpContext, "UNAUTHORIZED", "Not authenticated."));
         }
 
         var user = await _userRepo.GetByIdAsync(userId, ct);
         if (user is null)
         {
-            return Unauthorized(new
-            {
-                error = new { code = "UNAUTHORIZED", message = "User not found." },
-                meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-            });
+            return Unauthorized(ApiEnvelope.Error(HttpContext, "UNAUTHORIZED", "User not found."));
         }
 
-        return Ok(new
+        return Ok(ApiEnvelope.Success(HttpContext, new
         {
-            data = new
-            {
-                id = user.Id,
-                email = user.Email,
-                role = user.Role,
-                lastLoginAt = user.LastLoginAt
-            },
-            meta = new { requestId = $"req_{HttpContext.Items["RequestId"]}" }
-        });
+            id = user.Id,
+            email = user.Email,
+            role = user.Role,
+            lastLoginAt = user.LastLoginAt
+        }));
     }
 }
 
