@@ -3,6 +3,10 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
+# Claude Code & GSD planning (local-only)
+.claude/
+.planning/
+
 # dotenv files
 .env
 
