@@ -109,6 +109,7 @@ public class ApplicationsController : ControllerBase
 
         application.Name = request.Name ?? application.Name;
         application.IsActive = request.IsActive ?? application.IsActive;
+        application.IdempotencyWindowMinutes = request.IdempotencyWindowMinutes ?? application.IdempotencyWindowMinutes;
 
         await _appRepo.UpdateAsync(application, ct);
 
@@ -118,6 +119,7 @@ public class ApplicationsController : ControllerBase
             name = application.Name,
             apiKeyPrefix = application.ApiKeyPrefix,
             isActive = application.IsActive,
+            idempotencyWindowMinutes = application.IdempotencyWindowMinutes,
             createdAt = application.CreatedAt,
             updatedAt = application.UpdatedAt
         }));
@@ -187,4 +189,5 @@ public class UpdateApplicationRequest
 {
     public string? Name { get; set; }
     public bool? IsActive { get; set; }
+    public int? IdempotencyWindowMinutes { get; set; }
 }

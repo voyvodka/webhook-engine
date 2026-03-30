@@ -22,8 +22,12 @@ public class UpdateApplicationRequestValidator : AbstractValidator<UpdateApplica
             .MaximumLength(255)
             .When(x => x.Name is not null);
 
+        RuleFor(x => x.IdempotencyWindowMinutes)
+            .InclusiveBetween(1, 10080)
+            .When(x => x.IdempotencyWindowMinutes.HasValue);
+
         RuleFor(x => x)
-            .Must(x => x.Name is not null || x.IsActive.HasValue)
+            .Must(x => x.Name is not null || x.IsActive.HasValue || x.IdempotencyWindowMinutes.HasValue)
             .WithMessage("At least one field must be provided.");
     }
 }
