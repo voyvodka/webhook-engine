@@ -18,6 +18,9 @@ docs/*
 !docs/GETTING-STARTED.md
 !docs/SELF-HOSTING.md
 !docs/RELEASE.md
+!docs/triage-flow.md
+!docs/backlog-v0.1.1.md
+!docs/adr/
 
 # User-specific files
 *.rsuser
