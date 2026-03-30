@@ -3,8 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WebhookEngine.API.Contracts;
-using WebhookEngine.Core.Enums;
 using WebhookEngine.Infrastructure.Data;
+using WebhookEngine.Infrastructure.Repositories;
 
 namespace WebhookEngine.API.Controllers;
 
@@ -18,67 +18,45 @@ namespace WebhookEngine.API.Controllers;
 public class DashboardAnalyticsController : ControllerBase
 {
     private readonly WebhookDbContext _dbContext;
+    private readonly DashboardStatsRepository _statsRepository;
 
-    public DashboardAnalyticsController(WebhookDbContext dbContext)
+    public DashboardAnalyticsController(WebhookDbContext dbContext, DashboardStatsRepository statsRepository)
     {
         _dbContext = dbContext;
+        _statsRepository = statsRepository;
     }
 
     [HttpGet("overview")]
     public async Task<IActionResult> Overview(CancellationToken ct)
     {
         var cutoff = DateTime.UtcNow.AddHours(-24);
+        var stats = await _statsRepository.GetOverviewStatsAsync(cutoff, ct);
 
-        // Last 24h message stats — individual CountAsync calls avoid EF "FirstWithoutOrderBy" warning
-        var recentMessages = _dbContext.Messages.AsNoTracking().Where(m => m.CreatedAt >= cutoff);
-        var total = await recentMessages.CountAsync(ct);
-        var delivered = await recentMessages.CountAsync(m => m.Status == MessageStatus.Delivered, ct);
-        var failed = await recentMessages.CountAsync(m => m.Status == MessageStatus.Failed, ct);
-        var pending = await recentMessages.CountAsync(m => m.Status == MessageStatus.Pending, ct);
-        var deadLetter = await recentMessages.CountAsync(m => m.Status == MessageStatus.DeadLetter, ct);
-
-        // Average latency (last 24h)
-        var avgLatency = await _dbContext.MessageAttempts
-            .AsNoTracking()
-            .Where(a => a.CreatedAt >= cutoff && a.Status == AttemptStatus.Success)
-            .AverageAsync(a => (double?)a.LatencyMs, ct) ?? 0;
-
-        // Endpoint health summary — derive from endpoint status
-        var endpointsQuery = _dbContext.Endpoints.AsNoTracking();
-        var totalEndpoints = await endpointsQuery.CountAsync(ct);
-        var healthyEndpoints = await endpointsQuery.CountAsync(e => e.Status == EndpointStatus.Active, ct);
-        var degradedEndpoints = await endpointsQuery.CountAsync(e => e.Status == EndpointStatus.Degraded, ct);
-        var failedEndpoints = await endpointsQuery.CountAsync(e => e.Status == EndpointStatus.Failed, ct);
-        var disabledEndpoints = await endpointsQuery.CountAsync(e => e.Status == EndpointStatus.Disabled, ct);
-
-        // Queue depth (messages currently pending or sending)
-        var queueDepth = await _dbContext.Messages
-            .AsNoTracking()
-            .CountAsync(m => m.Status == MessageStatus.Pending || m.Status == MessageStatus.Sending, ct);
-
-        var successRate = total > 0 ? Math.Round((double)delivered / total * 100, 1) : 0;
+        var successRate = stats.TotalMessages > 0
+            ? Math.Round((double)stats.Delivered / stats.TotalMessages * 100, 1)
+            : 0;
 
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
             last24h = new
             {
-                totalMessages = total,
-                delivered,
-                failed,
-                pending,
-                deadLetter,
+                totalMessages = stats.TotalMessages,
+                delivered = stats.Delivered,
+                failed = stats.Failed,
+                pending = stats.Pending,
+                deadLetter = stats.DeadLetter,
                 successRate,
-                avgLatencyMs = Math.Round(avgLatency, 0)
+                avgLatencyMs = Math.Round(stats.AvgLatencyMs ?? 0, 0)
             },
             endpoints = new
             {
-                total = totalEndpoints,
-                healthy = healthyEndpoints,
-                degraded = degradedEndpoints,
-                failed = failedEndpoints,
-                disabled = disabledEndpoints
+                total = stats.TotalEndpoints,
+                healthy = stats.HealthyEndpoints,
+                degraded = stats.DegradedEndpoints,
+                failed = stats.FailedEndpoints,
+                disabled = stats.DisabledEndpoints
             },
-            queueDepth
+            queueDepth = stats.QueueDepth
         }));
     }
 
