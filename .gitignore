@@ -18,6 +18,9 @@ docs/*
 !docs/GETTING-STARTED.md
 !docs/SELF-HOSTING.md
 !docs/RELEASE.md
+!docs/adr/
+docs/adr/*
+!docs/adr/*.md
 
 # User-specific files
 *.rsuser
