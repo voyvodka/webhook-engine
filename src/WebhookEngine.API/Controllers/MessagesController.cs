@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Entities;
 using WebhookEngine.Core.Enums;
@@ -29,6 +30,7 @@ public class MessagesController : ControllerBase
     }
 
     [HttpPost]
+    [EnableRateLimiting("send-by-appid")]
     public async Task<IActionResult> Send([FromBody] SendMessageRequest request, CancellationToken ct)
     {
         var appId = (Guid)HttpContext.Items["AppId"]!;
@@ -47,6 +49,7 @@ public class MessagesController : ControllerBase
     }
 
     [HttpPost("batch")]
+    [EnableRateLimiting("send-by-appid")]
     public async Task<IActionResult> BatchSend([FromBody] BatchSendMessagesRequest request, CancellationToken ct)
     {
         var appId = (Guid)HttpContext.Items["AppId"]!;
