@@ -11,6 +11,11 @@ namespace WebhookEngine.Worker;
 /// <summary>
 /// Periodically recovers stale locks from crashed workers.
 /// Messages stuck in 'sending' with locked_at older than StaleLockMinutes get reset to 'pending'.
+///
+/// CORR-04: Primary lock safety is provided by PostgresMessageQueue.DequeueAsync which uses
+/// FOR UPDATE SKIP LOCKED within a transaction — locks auto-release on worker crash via
+/// transaction rollback. This worker serves as a fallback safety net (D-08) for edge cases
+/// such as long-running HTTP requests that hold locks beyond the transaction scope.
 /// </summary>
 public class StaleLockRecoveryWorker : BackgroundService
 {

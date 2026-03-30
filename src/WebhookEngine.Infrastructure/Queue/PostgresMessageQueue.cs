@@ -20,6 +20,9 @@ public class PostgresMessageQueue : IMessageQueue
 
     public async Task<IReadOnlyList<Message>> DequeueAsync(int batchSize, string workerId, CancellationToken ct = default)
     {
+        // CORR-04: Transaction-scoped row lock via FOR UPDATE SKIP LOCKED.
+        // Worker crash → transaction rollback → lock auto-released by PostgreSQL.
+        // StaleLockRecoveryWorker handles residual edge cases (D-08).
         // Use raw SQL for SKIP LOCKED — critical for queue performance
         var sql = """
             WITH next_batch AS (
