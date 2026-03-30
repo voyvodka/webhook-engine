@@ -5,7 +5,6 @@ using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Core.Utilities;
 using WebhookEngine.Infrastructure.Data;
-using EndpointEntity = WebhookEngine.Core.Entities.Endpoint;
 
 namespace WebhookEngine.API.Services;
 
@@ -26,8 +25,9 @@ public class DevTrafficGenerator : IDevTrafficGenerator, IDisposable
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<DevTrafficGenerator> _logger;
+    // _stateLock protects only orchestrator lifecycle fields below
     private readonly object _stateLock = new();
-    private readonly Dictionary<Guid, DateTime> _endpointNextAllowedAtUtc = [];
+    private readonly TrafficScheduler _scheduler = new();
 
     private CancellationTokenSource? _loopCts;
     private Task? _loopTask;
@@ -130,6 +130,7 @@ public class DevTrafficGenerator : IDevTrafficGenerator, IDisposable
         }
 
         cts.Dispose();
+        _scheduler.Clear();
         return GetStatus();
     }
 
@@ -293,15 +294,12 @@ public class DevTrafficGenerator : IDevTrafficGenerator, IDisposable
             {
                 var configuredRate = RateLimitResolver.ResolveRateLimitPerMinute(endpoint.MetadataJson);
                 var effectiveRate = configuredRate is > 0 ? configuredRate.Value : DefaultRateLimitPerMinute;
-                return new EndpointTrafficProfile(
-                    endpoint,
-                    effectiveRate,
-                    IsFailureCandidate(endpoint));
+                return EndpointTrafficProfiler.BuildProfile(endpoint, effectiveRate);
             })
             .ToList();
 
         var readyProfiles = endpointProfiles
-            .Where(profile => IsEndpointReady(profile.Endpoint.Id, now))
+            .Where(profile => _scheduler.IsReady(profile.Endpoint.Id, now))
             .ToList();
 
         if (readyProfiles.Count == 0)
@@ -317,7 +315,7 @@ public class DevTrafficGenerator : IDevTrafficGenerator, IDisposable
         }
 
         var boundedMaxMessages = Math.Clamp(maxMessages, 1, 25);
-        var selectedProfiles = SelectProfilesForTick(readyProfiles, boundedMaxMessages);
+        var selectedProfiles = EndpointTrafficProfiler.SelectForTick(readyProfiles, boundedMaxMessages);
 
         var enqueuedCount = 0;
         var messageIds = new List<Guid>(selectedProfiles.Count);
@@ -359,7 +357,7 @@ public class DevTrafficGenerator : IDevTrafficGenerator, IDisposable
             await queue.EnqueueAsync(message, ct);
             enqueuedCount++;
             messageIds.Add(message.Id);
-            MarkEndpointSent(endpoint.Id, profile.EffectiveRatePerMinute, now);
+            _scheduler.MarkSent(endpoint.Id, profile.EffectiveRatePerMinute, now);
         }
 
         return new DevTrafficSeedResult
@@ -373,78 +371,6 @@ public class DevTrafficGenerator : IDevTrafficGenerator, IDisposable
         };
     }
 
-    private bool IsEndpointReady(Guid endpointId, DateTime now)
-    {
-        lock (_stateLock)
-        {
-            if (!_endpointNextAllowedAtUtc.TryGetValue(endpointId, out var nextAllowedAt))
-                return true;
-
-            return now >= nextAllowedAt;
-        }
-    }
-
-    private void MarkEndpointSent(Guid endpointId, int rateLimitPerMinute, DateTime now)
-    {
-        var intervalMs = Math.Max(250, (int)Math.Ceiling(60_000d / Math.Max(1, rateLimitPerMinute)));
-        var nextAllowedAt = now.AddMilliseconds(intervalMs);
-
-        lock (_stateLock)
-        {
-            _endpointNextAllowedAtUtc[endpointId] = nextAllowedAt;
-        }
-    }
-
-    private static List<EndpointTrafficProfile> SelectProfilesForTick(List<EndpointTrafficProfile> readyProfiles, int maxMessages)
-    {
-        if (readyProfiles.Count <= maxMessages)
-            return readyProfiles;
-
-        var result = new List<EndpointTrafficProfile>(maxMessages);
-
-        var successCandidates = readyProfiles.Where(p => !p.IsFailureCandidate).OrderBy(_ => Random.Shared.Next()).ToList();
-        var failureCandidates = readyProfiles.Where(p => p.IsFailureCandidate).OrderBy(_ => Random.Shared.Next()).ToList();
-
-        if (maxMessages >= 2)
-        {
-            if (successCandidates.Count > 0)
-            {
-                result.Add(successCandidates[0]);
-                successCandidates.RemoveAt(0);
-            }
-
-            if (failureCandidates.Count > 0)
-            {
-                result.Add(failureCandidates[0]);
-                failureCandidates.RemoveAt(0);
-            }
-        }
-
-        var remaining = readyProfiles
-            .Except(result)
-            .OrderBy(_ => Random.Shared.Next())
-            .Take(Math.Max(0, maxMessages - result.Count))
-            .ToList();
-
-        result.AddRange(remaining);
-        return result;
-    }
-
-    private static bool IsFailureCandidate(EndpointEntity endpoint)
-    {
-        if (endpoint.Status == EndpointStatus.Failed || endpoint.Status == EndpointStatus.Degraded)
-            return true;
-
-        var url = endpoint.Url.ToLowerInvariant();
-
-        return url.Contains("fail")
-            || url.Contains("invalid")
-            || url.Contains("unreachable")
-            || url.Contains(":5999")
-            || url.Contains(":5998")
-            || url.Contains(":1/");
-    }
-
     private static bool IsDebugBuild()
     {
 #if DEBUG
@@ -453,11 +379,6 @@ public class DevTrafficGenerator : IDevTrafficGenerator, IDisposable
         return false;
 #endif
     }
-
-    private sealed record EndpointTrafficProfile(
-        EndpointEntity Endpoint,
-        int EffectiveRatePerMinute,
-        bool IsFailureCandidate);
 }
 
 public class DevTrafficStatus
