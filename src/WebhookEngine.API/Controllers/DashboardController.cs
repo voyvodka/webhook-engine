@@ -25,6 +25,7 @@ public class DashboardController : ControllerBase
     private readonly MessageRepository _messageRepository;
     private readonly EndpointRepository _endpointRepository;
     private readonly EventTypeRepository _eventTypeRepository;
+    private readonly ApplicationRepository _applicationRepository;
     private readonly IMessageQueue _messageQueue;
     private readonly IDevTrafficGenerator _devTrafficGenerator;
 
@@ -33,6 +34,7 @@ public class DashboardController : ControllerBase
         MessageRepository messageRepository,
         EndpointRepository endpointRepository,
         EventTypeRepository eventTypeRepository,
+        ApplicationRepository applicationRepository,
         IMessageQueue messageQueue,
         IDevTrafficGenerator devTrafficGenerator)
     {
@@ -40,6 +42,7 @@ public class DashboardController : ControllerBase
         _messageRepository = messageRepository;
         _endpointRepository = endpointRepository;
         _eventTypeRepository = eventTypeRepository;
+        _applicationRepository = applicationRepository;
         _messageQueue = messageQueue;
         _devTrafficGenerator = devTrafficGenerator;
     }
@@ -581,10 +584,12 @@ public class DashboardController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
+            var app = await _applicationRepository.GetByIdAsync(request.AppId, ct);
+            var windowMinutes = app?.IdempotencyWindowMinutes ?? 1440;
             var existingMessages = await _messageRepository.ListByIdempotencyKeyAsync(
                 request.AppId,
                 request.IdempotencyKey,
-                DateTime.UtcNow.AddHours(-24),
+                DateTime.UtcNow.AddMinutes(-windowMinutes),
                 ct);
 
             if (existingMessages.Count > 0)

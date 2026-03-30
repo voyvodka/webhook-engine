@@ -16,17 +16,20 @@ public class MessagesController : ControllerBase
     private readonly EndpointRepository _endpointRepo;
     private readonly EventTypeRepository _eventTypeRepo;
     private readonly IMessageQueue _messageQueue;
+    private readonly ApplicationRepository _appRepo;
 
     public MessagesController(
         MessageRepository messageRepo,
         EndpointRepository endpointRepo,
         EventTypeRepository eventTypeRepo,
-        IMessageQueue messageQueue)
+        IMessageQueue messageQueue,
+        ApplicationRepository appRepo)
     {
         _messageRepo = messageRepo;
         _endpointRepo = endpointRepo;
         _eventTypeRepo = eventTypeRepo;
         _messageQueue = messageQueue;
+        _appRepo = appRepo;
     }
 
     [HttpPost]
@@ -249,10 +252,12 @@ public class MessagesController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
+            var app = await _appRepo.GetByIdAsync(appId, ct);
+            var windowMinutes = app?.IdempotencyWindowMinutes ?? 1440;
             var existingMessages = await _messageRepo.ListByIdempotencyKeyAsync(
                 appId,
                 request.IdempotencyKey,
-                DateTime.UtcNow.AddHours(-24),
+                DateTime.UtcNow.AddMinutes(-windowMinutes),
                 ct);
 
             if (existingMessages.Count > 0)
