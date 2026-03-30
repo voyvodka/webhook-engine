@@ -49,24 +49,28 @@ public class CircuitBreakerWorker : BackgroundService
 
                 foreach (var health in expiredCircuits)
                 {
-                    await using var transaction = await dbContext.Database.BeginTransactionAsync(stoppingToken);
+                    var isInMemory = string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal);
+                    var transaction = isInMemory ? null : await dbContext.Database.BeginTransactionAsync(stoppingToken);
                     try
                     {
-                        // Advisory lock key: namespace 100_001 + first 4 bytes of endpointId
-                        // Prevents two concurrent workers from both transitioning the same endpoint Open → HalfOpen
-                        var endpointBytes = health.EndpointId.ToByteArray();
-                        var low = BitConverter.ToUInt32(endpointBytes, 0);
-                        var lockKey = ((long)100_001 << 32) | low;
-
-                        var acquired = await dbContext.Database
-                            .SqlQuery<bool>($"SELECT pg_try_advisory_xact_lock({lockKey})")
-                            .SingleAsync(stoppingToken);
-
-                        if (!acquired)
+                        if (!isInMemory)
                         {
-                            await transaction.RollbackAsync(stoppingToken);
-                            _logger.LogInformation("Endpoint {EndpointId} circuit transition already in progress by another worker", health.EndpointId);
-                            continue;
+                            // Advisory lock key: namespace 100_001 + first 4 bytes of endpointId
+                            // Prevents two concurrent workers from both transitioning the same endpoint Open → HalfOpen
+                            var endpointBytes = health.EndpointId.ToByteArray();
+                            var low = BitConverter.ToUInt32(endpointBytes, 0);
+                            var lockKey = ((long)100_001 << 32) | low;
+
+                            var acquired = await dbContext.Database
+                                .SqlQuery<bool>($"SELECT pg_try_advisory_xact_lock({lockKey})")
+                                .SingleAsync(stoppingToken);
+
+                            if (!acquired)
+                            {
+                                await transaction!.RollbackAsync(stoppingToken);
+                                _logger.LogInformation("Endpoint {EndpointId} circuit transition already in progress by another worker", health.EndpointId);
+                                continue;
+                            }
                         }
 
                         // Re-read under lock to verify state hasn't changed since the initial candidate query
@@ -76,7 +80,8 @@ public class CircuitBreakerWorker : BackgroundService
                         if (freshHealth is null || freshHealth.CircuitState != CircuitState.Open
                             || freshHealth.CooldownUntil is null || freshHealth.CooldownUntil > DateTime.UtcNow)
                         {
-                            await transaction.RollbackAsync(stoppingToken);
+                            if (transaction is not null)
+                                await transaction.RollbackAsync(stoppingToken);
                             continue;
                         }
 
@@ -95,14 +100,21 @@ public class CircuitBreakerWorker : BackgroundService
                         }
 
                         await dbContext.SaveChangesAsync(stoppingToken);
-                        await transaction.CommitAsync(stoppingToken);
+                        if (transaction is not null)
+                            await transaction.CommitAsync(stoppingToken);
 
                         _logger.LogInformation("Endpoint {EndpointId} circuit transitioned to HalfOpen", freshHealth.EndpointId);
                     }
                     catch (Exception ex)
                     {
-                        await transaction.RollbackAsync(stoppingToken);
+                        if (transaction is not null)
+                            await transaction.RollbackAsync(stoppingToken);
                         _logger.LogError(ex, "Failed to transition circuit for endpoint {EndpointId}", health.EndpointId);
+                    }
+                    finally
+                    {
+                        if (transaction is not null)
+                            await transaction.DisposeAsync();
                     }
                 }
 

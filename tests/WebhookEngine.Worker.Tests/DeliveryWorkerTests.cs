@@ -1,4 +1,3 @@
-using System.Reflection;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using WebhookEngine.Core.Options;
@@ -184,11 +183,6 @@ public class DeliveryWorkerTests
 
     private static int? ResolveRateLimitPerMinute(string? metadataJson)
     {
-        var method = typeof(DeliveryWorker).GetMethod(
-            "ResolveRateLimitPerMinute",
-            BindingFlags.NonPublic | BindingFlags.Static);
-
-        method.Should().NotBeNull();
-        return (int?)method!.Invoke(null, [metadataJson]);
+        return WebhookEngine.Core.Utilities.RateLimitResolver.ResolveRateLimitPerMinute(metadataJson);
     }
 }
