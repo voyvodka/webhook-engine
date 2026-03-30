@@ -516,3 +516,4 @@ src/WebhookEngine.API/wwwroot/assets/
 .idea/
 .vscode/
 *.code-workspace
+.planning/
