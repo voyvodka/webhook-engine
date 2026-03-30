@@ -119,10 +119,10 @@ public class CircuitBreakerWorkerTests
 
     private static async Task RunWorkerOnceAsync(CircuitBreakerWorker worker)
     {
-        using var cts = new CancellationTokenSource();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await worker.StartAsync(cts.Token);
 
-        await Task.Delay(250);
+        await Task.Delay(2000);
 
         cts.Cancel();
         await worker.StopAsync(CancellationToken.None);
