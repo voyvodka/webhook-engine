@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using WebhookEngine.Core.Entities;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
+using WebhookEngine.Core.Utilities;
 using WebhookEngine.Infrastructure.Data;
 using EndpointEntity = WebhookEngine.Core.Entities.Endpoint;
 
@@ -290,7 +291,7 @@ public class DevTrafficGenerator : IDevTrafficGenerator, IDisposable
         var endpointProfiles = endpoints
             .Select(endpoint =>
             {
-                var configuredRate = ResolveRateLimitPerMinute(endpoint.MetadataJson);
+                var configuredRate = RateLimitResolver.ResolveRateLimitPerMinute(endpoint.MetadataJson);
                 var effectiveRate = configuredRate is > 0 ? configuredRate.Value : DefaultRateLimitPerMinute;
                 return new EndpointTrafficProfile(
                     endpoint,
@@ -427,37 +428,6 @@ public class DevTrafficGenerator : IDevTrafficGenerator, IDisposable
 
         result.AddRange(remaining);
         return result;
-    }
-
-    private static int? ResolveRateLimitPerMinute(string? metadataJson)
-    {
-        if (string.IsNullOrWhiteSpace(metadataJson))
-            return null;
-
-        try
-        {
-            using var document = JsonDocument.Parse(metadataJson);
-            if (document.RootElement.ValueKind != JsonValueKind.Object)
-                return null;
-
-            if (!document.RootElement.TryGetProperty("rateLimitPerMinute", out var rateLimitElement))
-                return null;
-
-            if (rateLimitElement.ValueKind == JsonValueKind.Number && rateLimitElement.TryGetInt32(out var numericValue))
-                return numericValue > 0 ? numericValue : null;
-
-            if (rateLimitElement.ValueKind == JsonValueKind.String
-                && int.TryParse(rateLimitElement.GetString(), out var stringValue))
-            {
-                return stringValue > 0 ? stringValue : null;
-            }
-
-            return null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
     }
 
     private static bool IsFailureCandidate(EndpointEntity endpoint)
