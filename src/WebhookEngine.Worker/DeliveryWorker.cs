@@ -54,6 +54,7 @@ public class DeliveryWorker : BackgroundService
                 var messageRepo = scope.ServiceProvider.GetRequiredService<MessageRepository>();
                 var endpointRepo = scope.ServiceProvider.GetRequiredService<EndpointRepository>();
                 var notifier = scope.ServiceProvider.GetService<IDeliveryNotifier>();
+                var stateMachine = scope.ServiceProvider.GetRequiredService<IMessageStateMachine>();
 
                 var messages = await messageQueue.DequeueAsync(_deliveryOptions.BatchSize, _workerId, stoppingToken);
 
@@ -70,7 +71,7 @@ public class DeliveryWorker : BackgroundService
                     if (stoppingToken.IsCancellationRequested)
                         break;
 
-                    await ProcessMessageAsync(message, deliveryService, signingService, healthTracker, messageRepo, endpointRepo, notifier, stoppingToken);
+                    await ProcessMessageAsync(message, deliveryService, signingService, healthTracker, messageRepo, endpointRepo, notifier, stateMachine, stoppingToken);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -97,6 +98,7 @@ public class DeliveryWorker : BackgroundService
         MessageRepository messageRepo,
         EndpointRepository endpointRepo,
         IDeliveryNotifier? notifier,
+        IMessageStateMachine stateMachine,
         CancellationToken ct)
     {
         try
@@ -192,6 +194,7 @@ public class DeliveryWorker : BackgroundService
             {
                 _metrics?.RecordDeliverySuccess(result.LatencyMs);
                 await messageRepo.MarkDeliveredAsync(message.Id, currentAttempt, ct);
+                message.Status = MessageStatus.Delivered;
                 await healthTracker.RecordSuccessAsync(message.EndpointId, ct);
                 _logger.LogInformation("Message {MessageId} delivered to {EndpointId} in {LatencyMs}ms", message.Id, message.EndpointId, result.LatencyMs);
 
@@ -207,6 +210,7 @@ public class DeliveryWorker : BackgroundService
                 {
                     _metrics?.RecordDeadLetter();
                     await messageRepo.MarkDeadLetterAsync(message.Id, currentAttempt, ct);
+                    message.Status = MessageStatus.DeadLetter;
                     _logger.LogWarning("Message {MessageId} moved to dead letter after {AttemptCount} attempts", message.Id, currentAttempt);
 
                     if (notifier is not null)
@@ -217,6 +221,7 @@ public class DeliveryWorker : BackgroundService
                     _metrics?.RecordRetryScheduled();
                     var nextRetryAt = CalculateNextRetryAt(currentAttempt);
                     await messageRepo.MarkFailedForRetryAsync(message.Id, currentAttempt, nextRetryAt, ct);
+                    message.Status = MessageStatus.Failed;
                     _logger.LogWarning(
                         "Message {MessageId} delivery failed (attempt {AttemptCount}). Next retry at {NextRetryAt}. Error: {Error}",
                         message.Id,
@@ -232,7 +237,22 @@ public class DeliveryWorker : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing message {MessageId}", message.Id);
-            await messageRepo.UpdateMessageStatusAsync(message.Id, MessageStatus.Pending, ct);
+
+            // CORR-02: Only transition back to Pending if the current status allows it.
+            // Prevents Delivered->Pending and DeadLetter->Pending regression from error recovery.
+            // message.Status is updated in-memory after each DB write so this reflects
+            // the committed state: if MarkDeliveredAsync succeeded, message.Status is Delivered
+            // and IsValid(Delivered, Pending) returns false, blocking the regression.
+            if (stateMachine.IsValid(message.Status, MessageStatus.Pending))
+            {
+                await messageRepo.UpdateMessageStatusAsync(message.Id, MessageStatus.Pending, ct);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Skipping status reset for message {MessageId}: transition {From} -> Pending is invalid",
+                    message.Id, message.Status);
+            }
         }
     }
 

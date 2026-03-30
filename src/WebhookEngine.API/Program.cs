@@ -13,6 +13,7 @@ using WebhookEngine.API.Services;
 using WebhookEngine.API.Startup;
 using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Core.Metrics;
+using WebhookEngine.Core.StateMachine;
 using WebhookEngine.Core.Options;
 using WebhookEngine.Infrastructure.Data;
 using WebhookEngine.Infrastructure.Queue;
@@ -61,6 +62,7 @@ builder.Services.AddScoped<IDeliveryService, HttpDeliveryService>();
 builder.Services.AddSingleton<ISigningService, HmacSigningService>();
 builder.Services.AddScoped<IEndpointHealthTracker, EndpointHealthTracker>();
 builder.Services.AddSingleton<IEndpointRateLimiter, EndpointRateLimiter>();
+builder.Services.AddSingleton<IMessageStateMachine, MessageStateMachine>();
 builder.Services.AddSingleton<IDeliveryNotifier, SignalRDeliveryNotifier>();
 builder.Services.AddSingleton<IDevTrafficGenerator, DevTrafficGenerator>();
 
