@@ -288,7 +288,7 @@ export function DashboardPage() {
 
           {devSeedResult && (
             <p className="text-xs text-text-secondary mt-2">
-              Seed sonucu: {devSeedResult.enqueuedMessages} mesaj, {devSeedResult.targetedEndpoints} endpoint, {devSeedResult.activeApplications} app.
+              Seeded {devSeedResult.enqueuedMessages} messages across {devSeedResult.targetedEndpoints} endpoints in {devSeedResult.activeApplications} apps.
             </p>
           )}
 
