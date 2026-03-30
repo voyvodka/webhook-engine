@@ -32,7 +32,7 @@ public class EndpointRepository
             .FirstOrDefaultAsync(e => e.AppId == appId && e.Id == id, ct);
     }
 
-    public async Task<List<Endpoint>> ListByAppIdAsync(
+    public async Task<List<EndpointListItem>> ListByAppIdAsync(
         Guid appId,
         EndpointStatus? status,
         int page,
@@ -41,8 +41,6 @@ public class EndpointRepository
     {
         var query = _dbContext.Endpoints
             .AsNoTracking()
-            .Include(e => e.Health)
-            .Include(e => e.EventTypes)
             .Where(e => e.AppId == appId)
             .AsQueryable();
 
@@ -52,6 +50,23 @@ public class EndpointRepository
         }
 
         return await query
+            .Select(e => new EndpointListItem
+            {
+                Id = e.Id,
+                AppId = e.AppId,
+                AppName = e.Application != null ? e.Application.Name : null,
+                Url = e.Url,
+                Description = e.Description,
+                Status = e.Status,
+                CircuitState = e.Health != null ? e.Health.CircuitState.ToString() : null,
+                CustomHeadersJson = e.CustomHeadersJson,
+                SecretOverride = e.SecretOverride,
+                MetadataJson = e.MetadataJson,
+                EventTypeNames = e.EventTypes.Select(et => et.Name).ToList(),
+                EventTypeIds = e.EventTypes.Select(et => et.Id).ToList(),
+                CreatedAt = e.CreatedAt,
+                UpdatedAt = e.UpdatedAt
+            })
             .OrderByDescending(e => e.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -110,9 +125,10 @@ public class EndpointRepository
     }
 
     /// <summary>
-    /// Cross-app list for dashboard admin — returns endpoints across all applications.
+    /// Cross-app list for dashboard admin — returns endpoints across all applications
+    /// using Select projection to avoid N+1 on EventTypes.
     /// </summary>
-    public async Task<List<Endpoint>> ListAllAsync(
+    public async Task<List<EndpointListItem>> ListAllAsync(
         Guid? appId,
         EndpointStatus? status,
         int page,
@@ -121,9 +137,6 @@ public class EndpointRepository
     {
         var query = _dbContext.Endpoints
             .AsNoTracking()
-            .Include(e => e.Application)
-            .Include(e => e.Health)
-            .Include(e => e.EventTypes)
             .AsQueryable();
 
         if (appId.HasValue)
@@ -133,6 +146,23 @@ public class EndpointRepository
             query = query.Where(e => e.Status == status.Value);
 
         return await query
+            .Select(e => new EndpointListItem
+            {
+                Id = e.Id,
+                AppId = e.AppId,
+                AppName = e.Application != null ? e.Application.Name : null,
+                Url = e.Url,
+                Description = e.Description,
+                Status = e.Status,
+                CircuitState = e.Health != null ? e.Health.CircuitState.ToString() : null,
+                CustomHeadersJson = e.CustomHeadersJson,
+                SecretOverride = e.SecretOverride,
+                MetadataJson = e.MetadataJson,
+                EventTypeNames = e.EventTypes.Select(et => et.Name).ToList(),
+                EventTypeIds = e.EventTypes.Select(et => et.Id).ToList(),
+                CreatedAt = e.CreatedAt,
+                UpdatedAt = e.UpdatedAt
+            })
             .OrderByDescending(e => e.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -151,4 +181,22 @@ public class EndpointRepository
 
         return await query.CountAsync(ct);
     }
+}
+
+public record EndpointListItem
+{
+    public Guid Id { get; init; }
+    public Guid AppId { get; init; }
+    public string? AppName { get; init; }
+    public string Url { get; init; } = string.Empty;
+    public string? Description { get; init; }
+    public EndpointStatus Status { get; init; }
+    public string? CircuitState { get; init; }
+    public string CustomHeadersJson { get; init; } = "{}";
+    public string? SecretOverride { get; init; }
+    public string MetadataJson { get; init; } = "{}";
+    public List<string> EventTypeNames { get; init; } = [];
+    public List<Guid> EventTypeIds { get; init; } = [];
+    public DateTime CreatedAt { get; init; }
+    public DateTime UpdatedAt { get; init; }
 }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WebhookEngine.Core.Entities;
+using WebhookEngine.Infrastructure.Repositories;
 using EndpointEntity = WebhookEngine.Core.Entities.Endpoint;
 
 namespace WebhookEngine.API.Contracts;
@@ -89,6 +90,24 @@ public static class ApiResponseMapper
             SecretOverride = endpoint.SecretOverride,
             MetadataJson = JsonValueParser.ParseOrEmptyObject(endpoint.MetadataJson),
             FilterEventTypes = endpoint.EventTypes.Select(et => et.Id).ToList(),
+            CreatedAt = endpoint.CreatedAt,
+            UpdatedAt = endpoint.UpdatedAt
+        };
+    }
+
+    public static EndpointResponseDto ToDto(this EndpointListItem endpoint)
+    {
+        return new EndpointResponseDto
+        {
+            Id = endpoint.Id,
+            AppId = endpoint.AppId,
+            Url = endpoint.Url,
+            Description = endpoint.Description,
+            Status = endpoint.Status.ToString().ToLowerInvariant(),
+            CustomHeadersJson = JsonValueParser.ParseOrEmptyObject(endpoint.CustomHeadersJson),
+            SecretOverride = endpoint.SecretOverride,
+            MetadataJson = JsonValueParser.ParseOrEmptyObject(endpoint.MetadataJson),
+            FilterEventTypes = endpoint.EventTypeIds,
             CreatedAt = endpoint.CreatedAt,
             UpdatedAt = endpoint.UpdatedAt
         };

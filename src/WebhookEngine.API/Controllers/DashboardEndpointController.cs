@@ -54,13 +54,13 @@ public class DashboardEndpointController : ControllerBase
             {
                 id = e.Id,
                 appId = e.AppId,
-                appName = e.Application?.Name,
+                appName = e.AppName,
                 url = e.Url,
                 description = e.Description,
                 status = e.Status.ToString().ToLowerInvariant(),
-                circuitState = e.Health?.CircuitState.ToString().ToLowerInvariant() ?? "closed",
-                eventTypes = e.EventTypes.Select(et => et.Name).ToList(),
-                eventTypeIds = e.EventTypes.Select(et => et.Id).ToList(),
+                circuitState = (e.CircuitState ?? "closed").ToLowerInvariant(),
+                eventTypes = e.EventTypeNames,
+                eventTypeIds = e.EventTypeIds,
                 createdAt = e.CreatedAt,
                 updatedAt = e.UpdatedAt
             }),
