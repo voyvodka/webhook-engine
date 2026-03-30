@@ -36,6 +36,9 @@ public class WebhookDbContext : DbContext
             entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
+            entity.Property(e => e.IdempotencyWindowMinutes)
+                .HasColumnName("idempotency_window_minutes")
+                .HasDefaultValue(1440);
 
             entity.HasIndex(e => e.ApiKeyPrefix).IsUnique();
         });
