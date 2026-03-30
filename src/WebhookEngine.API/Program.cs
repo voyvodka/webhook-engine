@@ -1,8 +1,10 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenTelemetry.Metrics;
@@ -33,6 +35,7 @@ builder.Services.Configure<RetryPolicyOptions>(builder.Configuration.GetSection(
 builder.Services.Configure<CircuitBreakerOptions>(builder.Configuration.GetSection(CircuitBreakerOptions.SectionName));
 builder.Services.Configure<DashboardAuthOptions>(builder.Configuration.GetSection(DashboardAuthOptions.SectionName));
 builder.Services.Configure<RetentionOptions>(builder.Configuration.GetSection(RetentionOptions.SectionName));
+builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
 
 // Database
 builder.Services.AddDbContext<WebhookDbContext>(options =>
@@ -132,6 +135,49 @@ builder.Services.AddOpenTelemetry()
         .AddMeter(WebhookMetrics.MeterName)
         .AddPrometheusExporter());
 
+// Rate limiting — per-AppId token bucket (D-01)
+builder.Services.AddRateLimiter(options =>
+{
+    var rlOpts = builder.Configuration
+        .GetSection(RateLimitOptions.SectionName)
+        .Get<RateLimitOptions>() ?? new RateLimitOptions();
+
+    options.AddPolicy("send-by-appid", httpContext =>
+    {
+        var appId = httpContext.Items["AppId"] as Guid? ?? Guid.Empty;
+
+        return RateLimitPartition.GetTokenBucketLimiter(appId, _ =>
+            new TokenBucketRateLimiterOptions
+            {
+                TokenLimit = rlOpts.PermitLimit,
+                ReplenishmentPeriod = TimeSpan.FromSeconds(rlOpts.ReplenishmentPeriodSeconds),
+                TokensPerPeriod = rlOpts.TokensPerPeriod,
+                AutoReplenishment = true,
+                QueueLimit = rlOpts.QueueLimit
+            });
+    });
+
+    // Custom 429 response: ApiEnvelope-compatible format + Retry-After header (D-04)
+    options.OnRejected = async (context, ct) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)retryAfter.TotalSeconds).ToString();
+        }
+
+        context.HttpContext.Response.ContentType = "application/json";
+        var requestId = context.HttpContext.Items["RequestId"]?.ToString() ?? "unknown";
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            error = new { code = "RATE_LIMIT_EXCEEDED", message = "Too many requests. Please retry after the indicated time." },
+            meta = new { requestId = $"req_{requestId}" }
+        }, ct);
+    };
+});
+
 var app = builder.Build();
 
 // Auto-apply EF Core migrations on startup (skip in Testing environment)
@@ -152,6 +198,7 @@ if (!app.Environment.IsEnvironment("Testing"))
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<ApiKeyAuthMiddleware>();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
