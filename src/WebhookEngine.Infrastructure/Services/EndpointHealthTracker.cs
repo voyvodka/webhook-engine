@@ -85,22 +85,11 @@ public class EndpointHealthTracker : IEndpointHealthTracker
     public async Task<CircuitState> GetCircuitStateAsync(Guid endpointId, CancellationToken ct = default)
     {
         var health = await _dbContext.EndpointHealths
+            .AsNoTracking()
             .FirstOrDefaultAsync(h => h.EndpointId == endpointId, ct);
 
         if (health is null)
             return CircuitState.Closed;
-
-        // Transition from Open to HalfOpen if cooldown expired
-        if (health.CircuitState == CircuitState.Open && health.CooldownUntil.HasValue && health.CooldownUntil <= DateTime.UtcNow)
-        {
-            health.CircuitState = CircuitState.HalfOpen;
-            health.CooldownUntil = null;
-            health.ConsecutiveFailures = 0;
-            health.UpdatedAt = DateTime.UtcNow;
-            await UpdateEndpointStatusAsync(endpointId, health, DateTime.UtcNow, ct);
-            await _dbContext.SaveChangesAsync(ct);
-            return CircuitState.HalfOpen;
-        }
 
         return health.CircuitState;
     }
