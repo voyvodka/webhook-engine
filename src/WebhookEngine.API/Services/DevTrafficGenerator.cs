@@ -315,48 +315,57 @@ public class DevTrafficGenerator : IDevTrafficGenerator, IDisposable
         }
 
         var boundedMaxMessages = Math.Clamp(maxMessages, 1, 25);
-        var selectedProfiles = EndpointTrafficProfiler.SelectForTick(readyProfiles, boundedMaxMessages);
+
+        // Distribute messages across ready endpoints (multiple messages per endpoint allowed)
+        var selectedProfiles = EndpointTrafficProfiler.SelectForTick(readyProfiles, Math.Min(boundedMaxMessages, readyProfiles.Count));
+        var assignments = DistributeMessages(selectedProfiles, boundedMaxMessages);
 
         var enqueuedCount = 0;
-        var messageIds = new List<Guid>(selectedProfiles.Count);
+        var messageIds = new List<Guid>(boundedMaxMessages);
 
-        foreach (var profile in selectedProfiles)
+        foreach (var (profile, count) in assignments)
         {
             var endpoint = profile.Endpoint;
 
             var availableEndpointEventTypes = endpoint.EventTypes.Where(et => !et.IsArchived).ToList();
-            var selectedEventType = availableEndpointEventTypes.Count > 0
-                ? availableEndpointEventTypes[Random.Shared.Next(availableEndpointEventTypes.Count)]
-                : eventTypes.First(et => et.AppId == endpoint.AppId);
+            var appEventTypes = eventTypes.Where(et => et.AppId == endpoint.AppId).ToList();
 
-            var orderId = $"ord_{Guid.NewGuid():N}"[..16];
-            var customerId = $"cus_{Random.Shared.Next(1000, 9999)}";
-            var amount = Math.Round(Random.Shared.NextDouble() * 1900 + 100, 2);
-
-            var payload = new
+            for (var i = 0; i < count; i++)
             {
-                orderId,
-                customerId,
-                amount,
-                currency = "TRY",
-                source = "dashboard.dev-generator",
-                generatedAt = now
-            };
+                var selectedEventType = availableEndpointEventTypes.Count > 0
+                    ? availableEndpointEventTypes[Random.Shared.Next(availableEndpointEventTypes.Count)]
+                    : appEventTypes[Random.Shared.Next(appEventTypes.Count)];
 
-            var message = new Message
-            {
-                AppId = endpoint.AppId,
-                EndpointId = endpoint.Id,
-                EventTypeId = selectedEventType.Id,
-                EventId = $"evt_{Guid.NewGuid():N}"[..16],
-                Payload = JsonSerializer.Serialize(payload),
-                Status = MessageStatus.Pending,
-                ScheduledAt = now
-            };
+                var orderId = $"ord_{Guid.NewGuid():N}"[..16];
+                var customerId = $"cus_{Random.Shared.Next(1000, 9999)}";
+                var amount = Math.Round(Random.Shared.NextDouble() * 1900 + 100, 2);
 
-            await queue.EnqueueAsync(message, ct);
-            enqueuedCount++;
-            messageIds.Add(message.Id);
+                var payload = new
+                {
+                    orderId,
+                    customerId,
+                    amount,
+                    currency = "TRY",
+                    source = "dashboard.dev-generator",
+                    generatedAt = now
+                };
+
+                var message = new Message
+                {
+                    AppId = endpoint.AppId,
+                    EndpointId = endpoint.Id,
+                    EventTypeId = selectedEventType.Id,
+                    EventId = $"evt_{Guid.NewGuid():N}"[..16],
+                    Payload = JsonSerializer.Serialize(payload),
+                    Status = MessageStatus.Pending,
+                    ScheduledAt = now
+                };
+
+                await queue.EnqueueAsync(message, ct);
+                enqueuedCount++;
+                messageIds.Add(message.Id);
+            }
+
             _scheduler.MarkSent(endpoint.Id, profile.EffectiveRatePerMinute, now);
         }
 
@@ -369,6 +378,21 @@ public class DevTrafficGenerator : IDevTrafficGenerator, IDisposable
             SeededAtUtc = now,
             MessageIds = messageIds.Select(id => id.ToString()).ToList()
         };
+    }
+
+    /// <summary>
+    /// Distributes totalMessages across selected profiles, ensuring each gets at least 1.
+    /// </summary>
+    private static List<(EndpointTrafficProfile Profile, int Count)> DistributeMessages(
+        List<EndpointTrafficProfile> profiles, int totalMessages)
+    {
+        if (profiles.Count == 0)
+            return [];
+
+        var baseCount = totalMessages / profiles.Count;
+        var remainder = totalMessages % profiles.Count;
+
+        return profiles.Select((p, i) => (p, baseCount + (i < remainder ? 1 : 0))).ToList();
     }
 
     private static bool IsDebugBuild()

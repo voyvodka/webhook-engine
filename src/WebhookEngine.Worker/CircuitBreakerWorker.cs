@@ -62,7 +62,7 @@ public class CircuitBreakerWorker : BackgroundService
                             var lockKey = ((long)100_001 << 32) | low;
 
                             var acquired = await dbContext.Database
-                                .SqlQuery<bool>($"SELECT pg_try_advisory_xact_lock({lockKey})")
+                                .SqlQuery<bool>($"""SELECT pg_try_advisory_xact_lock({lockKey}) AS "Value" """)
                                 .SingleAsync(stoppingToken);
 
                             if (!acquired)

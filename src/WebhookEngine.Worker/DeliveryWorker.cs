@@ -108,10 +108,10 @@ public class DeliveryWorker : BackgroundService
             var circuitState = await healthTracker.GetCircuitStateAsync(message.EndpointId, ct);
             if (circuitState == CircuitState.Open)
             {
-                _logger.LogWarning("Circuit open for endpoint {EndpointId}, skipping message {MessageId}", message.EndpointId, message.Id);
+                _logger.LogDebug("Circuit open for endpoint {EndpointId}, deferring message {MessageId}", message.EndpointId, message.Id);
 
                 var health = await healthTracker.GetHealthAsync(message.EndpointId, ct);
-                var nextTryAt = health?.CooldownUntil ?? DateTime.UtcNow.AddSeconds(30);
+                var nextTryAt = health?.CooldownUntil ?? DateTime.UtcNow.AddMinutes(1);
 
                 await messageRepo.ReschedulePendingAsync(message.Id, nextTryAt, ct);
                 return;

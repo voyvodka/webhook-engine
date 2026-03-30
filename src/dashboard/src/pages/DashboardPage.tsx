@@ -288,7 +288,11 @@ export function DashboardPage() {
 
           {devSeedResult && (
             <p className="text-xs text-text-secondary mt-2">
-              Seeded {devSeedResult.enqueuedMessages} messages across {devSeedResult.targetedEndpoints} endpoints in {devSeedResult.activeApplications} apps.
+              {devSeedResult.enqueuedMessages > 0
+                ? `Seeded ${devSeedResult.enqueuedMessages} messages across ${devSeedResult.targetedEndpoints} endpoints in ${devSeedResult.activeApplications} app(s).`
+                : devSeedResult.error
+                  ? devSeedResult.error
+                  : `No messages sent — ${devSeedResult.activeApplications === 0 ? "no active applications found. Create an application with endpoints first." : "no active endpoints available. Endpoints may be disabled or rate-limited."}`}
             </p>
           )}
 
