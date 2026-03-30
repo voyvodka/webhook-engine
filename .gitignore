@@ -24,6 +24,7 @@ docs/*
 !docs/RELEASE.md
 !docs/triage-flow.md
 !docs/backlog-v0.1.1.md
+!docs/typescript-sdk-demand-criteria.md
 !docs/adr/
 docs/adr/*
 !docs/adr/*.md
