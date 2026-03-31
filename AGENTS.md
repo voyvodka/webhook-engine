@@ -22,7 +22,7 @@ WebhookEngine/
 ├── src/
 │   ├── WebhookEngine.Core/           # Domain: entities, enums, interfaces, models, metrics, options
 │   ├── WebhookEngine.Infrastructure/  # EF Core, PostgreSQL queue, repositories, services
-│   ├── WebhookEngine.Application/     # DI registration (CQRS scaffold exists but not yet implemented)
+│   ├── WebhookEngine.Application/     # DI registration (CQRS scaffold removed — see ADR-002)
 │   ├── WebhookEngine.Worker/          # Background services (delivery, retry, circuit breaker, stale lock, retention)
 │   ├── WebhookEngine.API/             # ASP.NET Core host, controllers, middleware, hubs, validators, auth
 │   ├── WebhookEngine.Sdk/             # .NET SDK (NuGet)
@@ -91,7 +91,7 @@ docker compose -f docker/docker-compose.dev.yml up       # dev (PostgreSQL only)
 | Files                | Match class name              | `HmacSigningService.cs`          |
 
 ### Architecture Patterns
-- **Controller-based:** Business logic currently lives in controllers (Application layer CQRS scaffold exists but is not yet implemented)
+- **Controller-based:** Business logic lives in controllers (Application layer CQRS scaffold removed — see ADR-002)
 - **Repository pattern:** One repository per aggregate root in `Infrastructure/Repositories/`
 - **Options pattern:** Configuration classes in `Core/Options/` (e.g., `RetryPolicyOptions`, `DeliveryOptions`, `CircuitBreakerOptions`, `RetentionOptions`, `DashboardAuthOptions`)
 - **Dependency injection:** Constructor injection everywhere — no service locator
@@ -105,7 +105,8 @@ docker compose -f docker/docker-compose.dev.yml up       # dev (PostgreSQL only)
 ```
 Entities/          Application, DashboardUser, Endpoint, EndpointHealth, EventType, Message, MessageAttempt
 Enums/             AttemptStatus, CircuitState, EndpointStatus, MessageStatus
-Interfaces/        IDeliveryNotifier, IDeliveryService, IEndpointHealthTracker, IMessageQueue, ISigningService
+Interfaces/        IDeliveryNotifier, IDeliveryService, IEndpointHealthTracker, IEndpointRateLimiter, IMessageQueue, IMessageStateMachine, ISigningService
+Utilities/         RateLimitResolver
 Metrics/           WebhookMetrics (Prometheus counters/histograms)
 Models/            DeliveryRequest, DeliveryResult, SignedHeaders
 Options/           CircuitBreakerOptions, DashboardAuthOptions, DeliveryOptions, RetentionOptions, RetryPolicyOptions
@@ -116,8 +117,8 @@ Options/           CircuitBreakerOptions, DashboardAuthOptions, DeliveryOptions,
 Data/              WebhookDbContext
 Migrations/        EF Core migrations (auto-applied on startup)
 Queue/             PostgresMessageQueue (SKIP LOCKED based queue)
-Repositories/      ApplicationRepository, DashboardUserRepository, EndpointRepository, EventTypeRepository, MessageRepository
-Services/          EndpointHealthTracker, HmacSigningService, HttpDeliveryService
+Repositories/      ApplicationRepository, DashboardStatsRepository, DashboardUserRepository, EndpointRepository, EventTypeRepository, MessageRepository
+Services/          EndpointHealthTracker, EndpointRateLimiter, HmacSigningService, HttpDeliveryService
 ```
 
 #### WebhookEngine.Worker
@@ -132,8 +133,9 @@ RetentionCleanupWorker.cs    # Daily cleanup of expired messages (03:00 UTC)
 #### WebhookEngine.API
 ```
 Auth/              PasswordHasher
-Controllers/       ApplicationsController, AuthController, DashboardController, EndpointsController,
-                   EventTypesController, HealthController, MessagesController
+Controllers/       ApplicationsController, AuthController, DashboardAnalyticsController,
+                   DashboardEndpointController, DashboardMessagesController, DevTrafficController,
+                   EndpointsController, EventTypesController, HealthController, MessagesController
 Hubs/              DeliveryHub + SignalRDeliveryNotifier (live delivery status via SignalR)
 Middleware/        ApiKeyAuthMiddleware, ExceptionHandlingMiddleware, RequestLoggingMiddleware
 Startup/           DashboardAdminSeeder (seeds first admin user from env vars)

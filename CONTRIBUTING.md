@@ -25,7 +25,7 @@ dotnet build WebhookEngine.sln
 dotnet run --project src/WebhookEngine.API
 ```
 
-The API starts at `http://localhost:5100`. Database migrations are applied automatically on startup.
+The API starts at `http://localhost:5128`. Database migrations are applied automatically on startup.
 
 ### 3. Build & Run the Dashboard
 
@@ -35,7 +35,7 @@ yarn install
 yarn dev
 ```
 
-The dev server starts at `http://localhost:5173` and proxies API requests to `localhost:5100`.
+The dev server starts at `http://localhost:5173` and proxies API requests to `localhost:5128`.
 
 For production builds:
 
