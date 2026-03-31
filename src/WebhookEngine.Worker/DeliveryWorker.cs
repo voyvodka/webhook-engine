@@ -108,12 +108,28 @@ public class DeliveryWorker : BackgroundService
             var circuitState = await healthTracker.GetCircuitStateAsync(message.EndpointId, ct);
             if (circuitState == CircuitState.Open)
             {
-                _logger.LogDebug("Circuit open for endpoint {EndpointId}, deferring message {MessageId}", message.EndpointId, message.Id);
+                var currentAttemptForCircuit = message.AttemptCount + 1;
+
+                if (currentAttemptForCircuit >= message.MaxRetries)
+                {
+                    _metrics?.RecordDeadLetter();
+                    await messageRepo.MarkDeadLetterAsync(message.Id, currentAttemptForCircuit, ct);
+                    _logger.LogWarning(
+                        "Message {MessageId} moved to dead letter — circuit open for endpoint {EndpointId}, max retries ({MaxRetries}) exhausted",
+                        message.Id, message.EndpointId, message.MaxRetries);
+
+                    if (notifier is not null)
+                        await notifier.NotifyDeadLetterAsync(message.Id, message.EndpointId, currentAttemptForCircuit, ct);
+                    return;
+                }
+
+                _logger.LogDebug("Circuit open for endpoint {EndpointId}, deferring message {MessageId} (attempt {Attempt}/{MaxRetries})",
+                    message.EndpointId, message.Id, currentAttemptForCircuit, message.MaxRetries);
 
                 var health = await healthTracker.GetHealthAsync(message.EndpointId, ct);
                 var nextTryAt = health?.CooldownUntil ?? DateTime.UtcNow.AddMinutes(1);
 
-                await messageRepo.ReschedulePendingAsync(message.Id, nextTryAt, ct);
+                await messageRepo.MarkFailedForRetryAsync(message.Id, currentAttemptForCircuit, nextTryAt, ct);
                 return;
             }
 

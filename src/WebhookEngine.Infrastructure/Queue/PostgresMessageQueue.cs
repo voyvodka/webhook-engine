@@ -23,16 +23,15 @@ public class PostgresMessageQueue : IMessageQueue
         // CORR-04: Transaction-scoped row lock via FOR UPDATE SKIP LOCKED.
         // Worker crash → transaction rollback → lock auto-released by PostgreSQL.
         // StaleLockRecoveryWorker handles residual edge cases (D-08).
-        // Use raw SQL for SKIP LOCKED — critical for queue performance
-        // Skip messages for endpoints with open circuits to avoid dequeue-reschedule churn
+        // Use raw SQL for SKIP LOCKED — critical for queue performance.
+        // Circuit-open messages are dequeued so DeliveryWorker can increment attemptCount
+        // and eventually dead-letter them — preventing infinite Pending limbo.
         var sql = """
             WITH next_batch AS (
                 SELECT m.id
                 FROM messages m
-                LEFT JOIN endpoint_health eh ON eh.endpoint_id = m.endpoint_id
                 WHERE m.status = 'Pending'
                   AND m.scheduled_at <= NOW()
-                  AND (eh.circuit_state IS NULL OR eh.circuit_state <> 'Open')
                 ORDER BY m.scheduled_at ASC
                 LIMIT {0}
                 FOR UPDATE OF m SKIP LOCKED
