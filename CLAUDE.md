@@ -318,6 +318,54 @@ Queue-based webhook delivery engine with retry logic, circuit breaker, HMAC sign
 ## Cross-Cutting Concerns
 <!-- GSD:architecture-end -->
 
+## Release & Versioning
+
+### Versioning
+- Semantic versioning: `v{major}.{minor}.{patch}` (e.g., v0.1.0, v0.1.1, v1.0.0)
+- Tags: always prefixed with `v` (e.g., `v0.1.1`)
+- Annotated tags with summary of changes
+
+### Release Workflow
+When creating a release (tag + push + GitHub release):
+
+1. **Pre-release checks**: Run full local CI simulation before tagging:
+   - `dotnet build WebhookEngine.sln --configuration Release` (0 errors, 0 warnings)
+   - `dotnet test WebhookEngine.sln --no-build --configuration Release` (all tests pass)
+   - `cd src/dashboard && yarn lint && yarn typecheck && yarn build` (all pass)
+
+2. **Commit & Tag**: Commit pending changes, create annotated tag, push both
+
+3. **GitHub Release**: Create via `gh release create` with:
+   - Title: `v{version} — {Short Name}` (e.g., `v0.1.1 — Stabilization Patch`)
+   - Body structure:
+     ```
+     ## WebhookEngine v{version}
+
+     {1-2 sentence summary}
+
+     ### Features / Fixes / Changes
+     - **category:** description
+
+     ### Quick Start (for major/minor releases)
+     docker pull + compose command
+
+     ### Links
+     - Docker Hub, NuGet, docs links
+     ```
+
+4. **Verify**: Confirm CI and Release workflows pass on GitHub Actions
+
+### CI/CD Pipelines
+- **CI** (`ci.yml`): Triggers on push to main — backend build+test, frontend lint+typecheck+build, Docker build
+- **Release** (`release.yml`): Triggers on `v*` tags — publishes Docker image to Docker Hub (`voyvodka/webhook-engine`) and NuGet package (`WebhookEngine.Sdk`)
+
+### GitHub Repository Settings
+Keep these in sync when releasing:
+- **Description**: Matches project summary
+- **Homepage**: Docker Hub link
+- **Topics**: Keep relevant (webhook, dotnet, react, docker, etc.)
+- **Releases**: Every tag gets a GitHub release with detailed notes
+
 <!-- GSD:workflow-start source:GSD defaults -->
 ## GSD Workflow Enforcement
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { HubConnectionBuilder, HubConnection, LogLevel, HubConnectionState } from "@microsoft/signalr";
+import { HubConnectionBuilder, HubConnection, LogLevel, HubConnectionState, IRetryPolicy, RetryContext } from "@microsoft/signalr";
 
 export interface DeliveryEvent {
   messageId: string;
@@ -10,6 +10,13 @@ export interface DeliveryEvent {
   error?: string;
   timestamp: string;
 }
+
+/** Infinite retry with capped exponential backoff (max 30s). */
+const infiniteRetryPolicy: IRetryPolicy = {
+  nextRetryDelayInMilliseconds(retryContext: RetryContext) {
+    return Math.min(1000 * Math.pow(2, retryContext.previousRetryCount), 30_000);
+  },
+};
 
 /**
  * Connects to the SignalR /hubs/deliveries endpoint and provides
@@ -32,7 +39,7 @@ export function useDeliveryFeed(maxEvents = 50) {
 
     const connection = new HubConnectionBuilder()
       .withUrl("/hubs/deliveries")
-      .withAutomaticReconnect()
+      .withAutomaticReconnect(infiniteRetryPolicy)
       .configureLogging(LogLevel.Warning)
       .build();
 
@@ -51,9 +58,19 @@ export function useDeliveryFeed(maxEvents = 50) {
     };
 
     const handleClose = () => {
-      if (isMounted) {
-        setConnected(false);
-      }
+      if (!isMounted) return;
+      setConnected(false);
+
+      // withAutomaticReconnect only kicks in after a successful connection.
+      // If the connection was never established or all built-in retries
+      // are exhausted, manually restart with backoff.
+      setTimeout(() => {
+        if (isMounted && connection.state === HubConnectionState.Disconnected) {
+          void connection.start().then(() => {
+            if (isMounted) setConnected(true);
+          }).catch(() => { /* next onclose will retry */ });
+        }
+      }, 5_000);
     };
 
     const handleReconnected = () => {

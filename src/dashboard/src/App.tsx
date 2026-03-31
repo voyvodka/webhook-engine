@@ -24,7 +24,6 @@ export function App() {
               <Route path="/event-types" element={<EventTypesPage />} />
               <Route path="/endpoints" element={<EndpointsPage />} />
               <Route path="/messages" element={<MessagesPage />} />
-              <Route path="/delivery-log" element={<DeliveryLogPage />} />
               <Route path="/delivery-log/:messageId" element={<DeliveryLogPage />} />
             </Route>
           </Route>
