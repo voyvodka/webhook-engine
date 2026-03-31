@@ -38,19 +38,19 @@ public class DashboardStatsRepository
             .SqlQueryRaw<DashboardOverviewStats>(
                 """
                 SELECT
-                    COUNT(*) FILTER (WHERE m.created_at >= @p0)                                   AS total_messages,
-                    COUNT(*) FILTER (WHERE m.created_at >= @p0 AND m.status = 'Delivered')        AS delivered,
-                    COUNT(*) FILTER (WHERE m.created_at >= @p0 AND m.status = 'Failed')           AS failed,
-                    COUNT(*) FILTER (WHERE m.created_at >= @p0 AND m.status = 'Pending')          AS pending,
-                    COUNT(*) FILTER (WHERE m.created_at >= @p0 AND m.status = 'DeadLetter')       AS dead_letter,
-                    COUNT(*) FILTER (WHERE m.status IN ('Pending','Sending'))                      AS queue_depth,
+                    COUNT(*) FILTER (WHERE m.created_at >= @p0)                                   AS "TotalMessages",
+                    COUNT(*) FILTER (WHERE m.created_at >= @p0 AND m.status = 'Delivered')        AS "Delivered",
+                    COUNT(*) FILTER (WHERE m.created_at >= @p0 AND m.status = 'Failed')           AS "Failed",
+                    COUNT(*) FILTER (WHERE m.created_at >= @p0 AND m.status = 'Pending')          AS "Pending",
+                    COUNT(*) FILTER (WHERE m.created_at >= @p0 AND m.status = 'DeadLetter')       AS "DeadLetter",
+                    COUNT(*) FILTER (WHERE m.status IN ('Pending','Sending'))                      AS "QueueDepth",
                     (SELECT COALESCE(AVG(a.latency_ms), 0) FROM message_attempts a
-                     WHERE a.created_at >= @p0 AND a.status = 'Success')                          AS avg_latency_ms,
-                    (SELECT COUNT(*) FROM endpoints)                                               AS total_endpoints,
-                    (SELECT COUNT(*) FROM endpoints WHERE status = 'Active')                      AS healthy_endpoints,
-                    (SELECT COUNT(*) FROM endpoints WHERE status = 'Degraded')                    AS degraded_endpoints,
-                    (SELECT COUNT(*) FROM endpoints WHERE status = 'Failed')                      AS failed_endpoints,
-                    (SELECT COUNT(*) FROM endpoints WHERE status = 'Disabled')                    AS disabled_endpoints
+                     WHERE a.created_at >= @p0 AND a.status = 'Success')                          AS "AvgLatencyMs",
+                    (SELECT COUNT(*) FROM endpoints)                                               AS "TotalEndpoints",
+                    (SELECT COUNT(*) FROM endpoints WHERE status = 'Active')                      AS "HealthyEndpoints",
+                    (SELECT COUNT(*) FROM endpoints WHERE status = 'Degraded')                    AS "DegradedEndpoints",
+                    (SELECT COUNT(*) FROM endpoints WHERE status = 'Failed')                      AS "FailedEndpoints",
+                    (SELECT COUNT(*) FROM endpoints WHERE status = 'Disabled')                    AS "DisabledEndpoints"
                 FROM messages m
                 """,
                 cutoff)
