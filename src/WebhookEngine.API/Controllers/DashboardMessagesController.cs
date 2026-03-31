@@ -1,11 +1,9 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
-using WebhookEngine.Infrastructure.Data;
 using WebhookEngine.Infrastructure.Repositories;
 
 namespace WebhookEngine.API.Controllers;
@@ -19,20 +17,20 @@ namespace WebhookEngine.API.Controllers;
 [Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme)]
 public class DashboardMessagesController : ControllerBase
 {
-    private readonly WebhookDbContext _dbContext;
+    private readonly ApplicationRepository _applicationRepository;
     private readonly MessageRepository _messageRepository;
     private readonly EndpointRepository _endpointRepository;
     private readonly EventTypeRepository _eventTypeRepository;
     private readonly IMessageQueue _messageQueue;
 
     public DashboardMessagesController(
-        WebhookDbContext dbContext,
+        ApplicationRepository applicationRepository,
         MessageRepository messageRepository,
         EndpointRepository endpointRepository,
         EventTypeRepository eventTypeRepository,
         IMessageQueue messageQueue)
     {
-        _dbContext = dbContext;
+        _applicationRepository = applicationRepository;
         _messageRepository = messageRepository;
         _endpointRepository = endpointRepository;
         _eventTypeRepository = eventTypeRepository;
@@ -123,8 +121,8 @@ public class DashboardMessagesController : ControllerBase
     [HttpPost("messages/send")]
     public async Task<IActionResult> SendMessage([FromBody] DashboardSendMessageRequest request, CancellationToken ct)
     {
-        var appExists = await _dbContext.Applications.AsNoTracking().AnyAsync(a => a.Id == request.AppId, ct);
-        if (!appExists)
+        var app = await _applicationRepository.GetByIdAsync(request.AppId, ct);
+        if (app is null)
         {
             return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
         }
@@ -176,10 +174,11 @@ public class DashboardMessagesController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
+            var windowMinutes = app.IdempotencyWindowMinutes;
             var existingMessages = await _messageRepository.ListByIdempotencyKeyAsync(
                 request.AppId,
                 request.IdempotencyKey,
-                DateTime.UtcNow.AddHours(-24),
+                DateTime.UtcNow.AddMinutes(-windowMinutes),
                 ct);
 
             if (existingMessages.Count > 0)
