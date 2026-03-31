@@ -337,6 +337,7 @@ When creating a release (tag + push + GitHub release):
 
 3. **GitHub Release**: Create via `gh release create` with:
    - Title: `v{version} — {Short Name}` (e.g., `v0.1.1 — Stabilization Patch`)
+   - **Never** include "Generated with Claude Code" or similar AI attribution lines in release notes
    - Body structure:
      ```
      ## WebhookEngine v{version}
