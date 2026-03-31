@@ -6,7 +6,6 @@ import {
   Tags,
   Waypoints,
   Mail,
-  FileText,
   LogOut,
   Webhook,
   ChevronRight
@@ -17,8 +16,7 @@ const navItems = [
   { to: "/applications", label: "Applications", icon: Box },
   { to: "/event-types", label: "Event Types", icon: Tags },
   { to: "/endpoints", label: "Endpoints", icon: Waypoints },
-  { to: "/messages", label: "Messages", icon: Mail },
-  { to: "/delivery-log", label: "Delivery Logs", icon: FileText }
+  { to: "/messages", label: "Messages", icon: Mail }
 ];
 
 export function AppShell() {

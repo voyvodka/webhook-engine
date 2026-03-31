@@ -68,16 +68,16 @@ public class DashboardAnalyticsController : ControllerBase
     {
         var (startTime, intervalMinutes) = ParseTimelineParams(period, interval);
 
-        // Raw query for time-bucketed aggregation — performance-critical, raw SQL is acceptable
+        // Bucket by attempt time (not message creation) for accurate delivery timeline
         var buckets = await _dbContext.Database
             .SqlQueryRaw<TimelineBucket>(
                 """
                 SELECT
-                    date_bin((@p0 || ' minutes')::interval, created_at, TIMESTAMPTZ '2000-01-01 00:00:00+00') AS timestamp,
-                    COUNT(*) FILTER (WHERE status = 'Delivered') AS delivered,
-                    COUNT(*) FILTER (WHERE status = 'Failed' OR status = 'DeadLetter') AS failed
-                FROM messages
-                WHERE created_at >= @p1
+                    date_bin((@p0 || ' minutes')::interval, a.created_at, TIMESTAMPTZ '2000-01-01 00:00:00+00') AS "Timestamp",
+                    COUNT(*) FILTER (WHERE a.status = 'Success') AS "Delivered",
+                    COUNT(*) FILTER (WHERE a.status = 'Failed' OR a.status = 'Timeout') AS "Failed"
+                FROM message_attempts a
+                WHERE a.created_at >= @p1
                 GROUP BY 1
                 ORDER BY 1
                 """,

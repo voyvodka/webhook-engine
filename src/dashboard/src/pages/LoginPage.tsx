@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthContext";
-import { Webhook, ArrowRight, AlertCircle } from "lucide-react";
+import { Webhook, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 
 interface LocationState {
   from?: string;
@@ -12,8 +12,8 @@ export function LoginPage() {
   const location = useLocation();
   const { user, login } = useAuth();
 
-  const [email, setEmail] = useState("admin@example.com");
-  const [password, setPassword] = useState("changeme");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,12 +30,15 @@ export function LoginPage() {
     setError(null);
     setIsSubmitting(true);
 
+    const minDelay = new Promise((r) => setTimeout(r, 600));
+
     try {
-      await login(email, password);
+      const [result] = await Promise.allSettled([login(email, password), minDelay]);
+      if (result.status === "rejected") throw result.reason;
       navigate(from, { replace: true });
     } catch (err) {
+      await minDelay;
       setError(err instanceof Error ? err.message : "Login failed");
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -69,6 +72,7 @@ export function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="username"
+                placeholder="admin@example.com"
                 required
                 className="w-full px-3 py-2 text-sm bg-surface-2 border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50 transition-colors"
               />
@@ -81,17 +85,20 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
+                placeholder="••••••••"
                 required
-                className="w-full px-3 py-2 text-sm bg-surface-2 border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50 transition-colors"
+                className="w-full px-3 py-2 text-sm font-mono bg-surface-2 border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50 transition-colors"
               />
             </label>
 
-            {error && (
+            <div
+              className={`overflow-hidden transition-all duration-200 ${error ? "max-h-12 opacity-100" : "max-h-0 opacity-0"}`}
+            >
               <div className="flex items-center gap-2 text-danger text-xs bg-danger-soft rounded-lg px-3 py-2">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                 {error}
               </div>
-            )}
+            </div>
 
             <button
               type="submit"
@@ -99,7 +106,10 @@ export function LoginPage() {
               className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-accent text-zinc-950 hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isSubmitting ? (
-                <span>Signing in...</span>
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Signing in...</span>
+                </>
               ) : (
                 <>
                   <span>Sign in</span>
