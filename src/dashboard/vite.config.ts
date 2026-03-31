@@ -7,12 +7,12 @@ export default defineConfig({
   build: {
     outDir: "../WebhookEngine.API/wwwroot",
     emptyOutDir: true,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          vendor: ["react", "react-dom", "react-router"],
-          charts: ["recharts"],
-          signalr: ["@microsoft/signalr"]
+        manualChunks(id: string) {
+          if (id.includes("react-dom") || id.includes("react-router") || id.includes("/react/")) return "vendor";
+          if (id.includes("recharts")) return "charts";
+          if (id.includes("signalr")) return "signalr";
         }
       }
     }
