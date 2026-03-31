@@ -75,7 +75,9 @@ WebhookEngine/
 │   │   │   ├── IDeliveryNotifier.cs     # Abstraction for real-time notifications
 │   │   │   ├── IDeliveryService.cs      # Abstraction for HTTP delivery
 │   │   │   ├── IEndpointHealthTracker.cs
+│   │   │   ├── IEndpointRateLimiter.cs
 │   │   │   ├── IMessageQueue.cs         # Abstraction for job queuing
+│   │   │   ├── IMessageStateMachine.cs  # Guards message status transitions
 │   │   │   └── ISigningService.cs       # Abstraction for HMAC signing
 │   │   ├── Metrics/
 │   │   │   └── WebhookMetrics.cs        # Prometheus counters/histograms
@@ -97,30 +99,20 @@ WebhookEngine/
 │   │   ├── Queue/
 │   │   │   └── PostgresMessageQueue.cs  # SKIP LOCKED based queue
 │   │   ├── Services/
+│   │   │   ├── EndpointHealthTracker.cs
+│   │   │   ├── EndpointRateLimiter.cs
 │   │   │   ├── HmacSigningService.cs
-│   │   │   ├── HttpDeliveryService.cs
-│   │   │   └── EndpointHealthTracker.cs
+│   │   │   └── HttpDeliveryService.cs
 │   │   └── Repositories/
 │   │       ├── ApplicationRepository.cs
+│   │       ├── DashboardStatsRepository.cs  # Single-query dashboard aggregation
 │   │       ├── DashboardUserRepository.cs
 │   │       ├── EndpointRepository.cs
 │   │       ├── EventTypeRepository.cs
 │   │       └── MessageRepository.cs
 │   │
-│   ├── WebhookEngine.Application/        # DI registration (CQRS scaffold exists but not yet implemented)
-│   │   ├── Applications/
-│   │   │   ├── Commands/               # (scaffold — empty)
-│   │   │   └── Queries/                # (scaffold — empty)
-│   │   ├── Endpoints/
-│   │   │   ├── Commands/               # (scaffold — empty)
-│   │   │   └── Queries/                # (scaffold — empty)
-│   │   ├── Messages/
-│   │   │   ├── Commands/               # (scaffold — empty)
-│   │   │   └── Queries/                # (scaffold — empty)
-│   │   ├── Common/
-│   │   │   ├── Behaviors/              # (scaffold — empty)
-│   │   │   └── Mappings/               # (scaffold — empty)
-│   │   └── DependencyInjection.cs      # Service registration
+│   ├── WebhookEngine.Application/        # DI registration (CQRS scaffold removed — see ADR-002)
+│   │   └── WebhookEngine.Application.csproj
 │   │
 │   ├── WebhookEngine.Worker/            # Background delivery processing
 │   │   ├── DeliveryWorker.cs            # IHostedService - polls queue, delivers
@@ -134,8 +126,11 @@ WebhookEngine/
 │   │   │   └── PasswordHasher.cs
 │   │   ├── Controllers/
 │   │   │   ├── ApplicationsController.cs
-│   │   │   ├── AuthController.cs        # Dashboard login/logout/me
-│   │   │   ├── DashboardController.cs   # Aggregated stats for dashboard
+│   │   │   ├── AuthController.cs              # Dashboard login/logout/me
+│   │   │   ├── DashboardAnalyticsController.cs # Overview stats, timeline
+│   │   │   ├── DashboardEndpointController.cs  # Dashboard endpoint management
+│   │   │   ├── DashboardMessagesController.cs  # Dashboard message operations
+│   │   │   ├── DevTrafficController.cs         # Dev traffic generator controls
 │   │   │   ├── EndpointsController.cs
 │   │   │   ├── EventTypesController.cs
 │   │   │   ├── HealthController.cs
@@ -212,9 +207,16 @@ WebhookEngine/
 │   ├── ARCHITECTURE.md                  # (this file)
 │   ├── DATABASE.md
 │   ├── API.md
+│   ├── GETTING-STARTED.md
+│   ├── SELF-HOSTING.md
+│   ├── RELEASE.md
 │   ├── MVP-ROADMAP.md
 │   ├── COMPETITIVE-ANALYSIS.md
-│   └── BUSINESS-MODEL.md
+│   ├── BUSINESS-MODEL.md
+│   ├── adr/                             # Architecture Decision Records
+│   ├── triage-flow.md
+│   ├── backlog-v0.1.1.md
+│   └── typescript-sdk-demand-criteria.md
 │
 ├── README.md
 ├── LICENSE                              # MIT
