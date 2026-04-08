@@ -8,11 +8,11 @@
 
     <!-- NuGet package metadata -->
     <PackageId>WebhookEngine.Sdk</PackageId>
-    <Version>1.0.0-preview.1</Version>
+    <Version>0.1.3</Version>
     <Authors>WebhookEngine</Authors>
     <Description>.NET SDK for WebhookEngine — self-hosted webhook delivery platform. Send webhooks, manage endpoints and event types, retry failed deliveries.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/voyvodka/webhook-engine</PackageProjectUrl>
+    <PackageProjectUrl>https://webhook.sametozkan.com.tr</PackageProjectUrl>
     <RepositoryUrl>https://github.com/voyvodka/webhook-engine</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>webhook;webhooks;delivery;sdk;aspnetcore;dotnet</PackageTags>

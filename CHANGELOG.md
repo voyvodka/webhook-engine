@@ -10,6 +10,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 - No unreleased changes yet.
 
+## [0.1.3] - 2026-04-08
+
+### Added
+- Landing page at [webhook.sametozkan.com.tr](https://webhook.sametozkan.com.tr) — project overview, features, quick start, and links to GitHub, Docker Hub, NuGet, and docs.
+
+### Changed
+- `README.md`: added website, Docker Hub, and NuGet links to the header.
+- `WebhookEngine.Sdk`: version aligned with main project (`0.1.3`); `PackageProjectUrl` updated to the landing page.
+
 ## [0.1.0] - 2026-03-02
 
 ### Added

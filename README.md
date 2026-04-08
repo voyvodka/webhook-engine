@@ -1,5 +1,7 @@
 # WebhookEngine
 
+**[webhook.sametozkan.com.tr](https://webhook.sametozkan.com.tr)** · [Docker Hub](https://hub.docker.com/r/voyvodka/webhook-engine) · [NuGet](https://www.nuget.org/packages/WebhookEngine.Sdk)
+
 Self-hosted webhook delivery platform with reliable at-least-once delivery, exponential backoff retries, per-endpoint circuit breakers, and a real-time dashboard.
 
 ## Features
@@ -83,7 +85,6 @@ Dashboard dev server runs on `http://localhost:5173` with API proxy to `localhos
 - [Getting Started](docs/GETTING-STARTED.md) — from zero to first webhook
 - [Self-Hosting Guide](docs/SELF-HOSTING.md) — production deployment and operations
 - [Release Guide](docs/RELEASE.md) — Docker Hub and NuGet publishing flow
-- [Launch Checklist](docs/LAUNCH-CHECKLIST.md) — final pre-launch and go-live tracking
 - [Roadmap](docs/ROADMAP.md) — current phase status and upcoming priorities
 - [PRD](docs/PRD.md) — product scope, goals, and requirement definitions
 - [API Reference](docs/API.md) — full endpoint documentation
