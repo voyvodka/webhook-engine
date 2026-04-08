@@ -83,7 +83,10 @@
       --font-mono:    'JetBrains Mono', monospace;
     }
 
-    html { scroll-behavior: smooth; }
+    html {
+      scroll-behavior: smooth;
+      overflow-x: hidden;
+    }
 
     body {
       background: var(--bg);
@@ -93,6 +96,7 @@
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
       overflow-x: hidden;
+      min-width: 0;
     }
 
     /* ── NOISE OVERLAY ── */
@@ -248,13 +252,15 @@
     .hero h1 {
       font-family: var(--font-display);
       font-weight: 800;
-      font-size: clamp(52px, 9vw, 100px);
+      font-size: clamp(36px, 9vw, 100px);
       line-height: 0.95;
       letter-spacing: -0.04em;
       color: var(--text);
       margin-bottom: 12px;
       opacity: 0;
       animation: fadeUp 0.7s ease 0.2s forwards;
+      overflow-wrap: break-word;
+      word-break: break-word;
     }
 
     .hero h1 .accent { color: var(--accent); }
@@ -928,9 +934,35 @@
       .stats-grid { grid-template-columns: 1fr 1fr; }
       .features-grid { grid-template-columns: 1fr; }
       .links-grid { grid-template-columns: 1fr 1fr; }
-      .nav-links { gap: 4px; }
       .footer-inner { flex-direction: column; gap: 16px; text-align: center; }
       .footer-links { flex-wrap: wrap; justify-content: center; }
+
+      /* Nav */
+      .nav-link { display: none; }
+      .version-badge { display: none; }
+      .nav-inner { padding: 14px 16px; }
+
+      /* Hero actions stack */
+      .hero-actions { flex-direction: column; align-items: center; }
+      .btn-primary, .btn-secondary { width: 100%; max-width: 280px; justify-content: center; }
+
+      /* Delivery viz: hide node labels, keep dots + line + status */
+      .viz-node { font-size: 0; gap: 0; }
+      .viz-node-dot { width: 12px; height: 12px; }
+      .viz-track { padding: 18px 16px; }
+      .delivery-viz { margin-top: 40px; }
+
+      /* Code block */
+      .code-body { font-size: 11px; padding: 16px 14px; }
+
+      /* Arch diagram */
+      .arch-badge { font-size: 8px; padding: 3px 8px; }
+    }
+
+    @media (max-width: 400px) {
+      .logo-wordmark { font-size: 14px; }
+      .nav-cta { font-size: 10px; padding: 6px 10px; }
+      .stats-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
