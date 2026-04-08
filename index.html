@@ -3,11 +3,61 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebhookEngine — Reliable Webhook Delivery</title>
-  <meta name="description" content="Self-hosted webhook delivery with at-least-once guarantees, exponential backoff, circuit breakers, HMAC signing, and a real-time dashboard. One Docker command." />
-  <meta property="og:title" content="WebhookEngine" />
-  <meta property="og:description" content="Self-hosted webhook delivery engine. Reliable, observable, zero-dependency infrastructure." />
+  <meta name="robots" content="index, follow" />
+  <title>WebhookEngine — Self-Hosted Webhook Delivery for .NET</title>
+  <meta name="description" content="Self-hosted webhook delivery engine built with .NET 10 and PostgreSQL. At-least-once delivery, exponential backoff retries, circuit breakers, HMAC signing, and a real-time React dashboard. One Docker command." />
+  <meta name="keywords" content="webhook delivery, self-hosted webhook, .NET webhook, ASP.NET Core webhook, webhook engine, reliable webhooks, webhook retry, circuit breaker, HMAC signing, open source webhook" />
+  <meta name="author" content="Samet Özkan" />
+  <link rel="canonical" href="https://webhook.sametozkan.com.tr" />
+
+  <!-- Open Graph -->
   <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://webhook.sametozkan.com.tr" />
+  <meta property="og:site_name" content="WebhookEngine" />
+  <meta property="og:title" content="WebhookEngine — Self-Hosted Webhook Delivery for .NET" />
+  <meta property="og:description" content="Self-hosted webhook delivery engine built with .NET 10 and PostgreSQL. At-least-once delivery, retries, circuit breakers, HMAC signing. One Docker command." />
+  <meta property="og:image" content="https://opengraph.github.com/repo/voyvodka/webhook-engine" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="600" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="WebhookEngine — Self-Hosted Webhook Delivery for .NET" />
+  <meta name="twitter:description" content="Self-hosted webhook delivery engine. At-least-once delivery, retries, circuit breakers, HMAC signing. PostgreSQL + .NET 10 + React dashboard." />
+  <meta name="twitter:image" content="https://opengraph.github.com/repo/voyvodka/webhook-engine" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23070A0E'/%3E%3Cpath d='M9 16 L14 11 L19 16 L14 21 Z' fill='none' stroke='%233EFFA0' stroke-width='1.5' stroke-linejoin='round'/%3E%3Ccircle cx='22' cy='11' r='2' fill='%233EFFA0' opacity='0.6'/%3E%3Ccircle cx='22' cy='16' r='2' fill='%233EFFA0'/%3E%3Ccircle cx='22' cy='21' r='2' fill='%233EFFA0' opacity='0.4'/%3E%3C/svg%3E" />
+  <meta name="theme-color" content="#070A0E" />
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "WebhookEngine",
+    "description": "Self-hosted webhook delivery engine built with .NET 10 and PostgreSQL. Provides at-least-once delivery guarantees, exponential backoff retries, per-endpoint circuit breakers, HMAC-SHA256 signing, and a real-time React dashboard.",
+    "url": "https://webhook.sametozkan.com.tr",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Linux, macOS, Windows",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "Samet Özkan",
+      "url": "https://www.sametozkan.com.tr"
+    },
+    "license": "https://opensource.org/licenses/MIT",
+    "codeRepository": "https://github.com/voyvodka/webhook-engine",
+    "softwareVersion": "0.1.3",
+    "programmingLanguage": ["C#", "TypeScript"],
+    "keywords": "webhook, delivery, .NET, ASP.NET Core, PostgreSQL, self-hosted, open source"
+  }
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Figtree:ital,wght@0,300;0,400;0,500;0,600;1,300&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -887,7 +937,7 @@
 <body>
 
   <!-- NAV -->
-  <nav>
+  <nav aria-label="Main navigation">
     <div class="nav-inner">
       <a href="/" class="logo">
         <svg class="logo-icon" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -916,6 +966,7 @@
     </div>
   </nav>
 
+  <main>
   <!-- HERO -->
   <section class="hero">
     <div class="wrap">
@@ -923,7 +974,7 @@
         <span class="eyebrow-dot"></span>
         Self-Hosted · Open Source · .NET 10
       </div>
-      <h1>Webhooks<br/>that <span class="accent">arrive.</span></h1>
+      <h1>Self-Hosted Webhook<br/>Delivery that <span class="accent">arrives.</span></h1>
       <p class="hero-sub">
         At-least-once delivery with exponential backoff, per-endpoint circuit breakers, HMAC signing, and a real-time dashboard. One Docker command.
       </p>
@@ -1233,6 +1284,7 @@
     </div>
   </section>
 
+  </main>
   <!-- FOOTER -->
   <footer>
     <div class="footer-inner">
