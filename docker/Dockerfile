@@ -1,14 +1,14 @@
 # ============================================================
 # Stage 1: Dashboard build (React SPA)
 # ============================================================
-FROM node:20-alpine AS dashboard-build
+FROM oven/bun:1-alpine AS dashboard-build
 WORKDIR /dashboard
 
-COPY src/dashboard/package.json src/dashboard/yarn.lock ./
-RUN yarn install --frozen-lockfile
+COPY src/dashboard/package.json src/dashboard/bun.lock ./
+RUN bun install --frozen-lockfile
 
 COPY src/dashboard/ .
-RUN yarn build
+RUN bun run build
 
 # ============================================================
 # Stage 2: .NET restore + publish
@@ -20,7 +20,6 @@ WORKDIR /src
 COPY WebhookEngine.sln .
 COPY src/WebhookEngine.Core/WebhookEngine.Core.csproj src/WebhookEngine.Core/
 COPY src/WebhookEngine.Infrastructure/WebhookEngine.Infrastructure.csproj src/WebhookEngine.Infrastructure/
-COPY src/WebhookEngine.Application/WebhookEngine.Application.csproj src/WebhookEngine.Application/
 COPY src/WebhookEngine.Worker/WebhookEngine.Worker.csproj src/WebhookEngine.Worker/
 COPY src/WebhookEngine.API/WebhookEngine.API.csproj src/WebhookEngine.API/
 COPY src/WebhookEngine.Sdk/WebhookEngine.Sdk.csproj src/WebhookEngine.Sdk/

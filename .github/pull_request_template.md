@@ -23,7 +23,7 @@ List what you ran to verify this change.
 
 - [ ] `dotnet build WebhookEngine.sln`
 - [ ] `dotnet test WebhookEngine.sln`
-- [ ] `cd src/dashboard && yarn build`
+- [ ] `cd src/dashboard && bun run build`
 - [ ] Manual test completed (describe below if relevant)
 
 ## Notes for Reviewers

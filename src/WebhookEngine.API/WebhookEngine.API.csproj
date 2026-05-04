@@ -21,7 +21,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\WebhookEngine.Application\WebhookEngine.Application.csproj" />
     <ProjectReference Include="..\WebhookEngine.Infrastructure\WebhookEngine.Infrastructure.csproj" />
     <ProjectReference Include="..\WebhookEngine.Worker\WebhookEngine.Worker.csproj" />
   </ItemGroup>

@@ -22,7 +22,6 @@ WebhookEngine/
 ├── src/
 │   ├── WebhookEngine.Core/           # Domain: entities, enums, interfaces, models, metrics, options
 │   ├── WebhookEngine.Infrastructure/  # EF Core, PostgreSQL queue, repositories, services
-│   ├── WebhookEngine.Application/     # DI registration (CQRS scaffold removed — see ADR-002)
 │   ├── WebhookEngine.Worker/          # Background services (delivery, retry, circuit breaker, stale lock, retention)
 │   ├── WebhookEngine.API/             # ASP.NET Core host, controllers, middleware, hubs, validators, auth
 │   ├── WebhookEngine.Sdk/             # .NET SDK (NuGet)
@@ -30,7 +29,6 @@ WebhookEngine/
 ├── tests/
 │   ├── WebhookEngine.Core.Tests/
 │   ├── WebhookEngine.Infrastructure.Tests/
-│   ├── WebhookEngine.Application.Tests/
 │   ├── WebhookEngine.API.Tests/       # Integration tests
 │   └── WebhookEngine.Worker.Tests/
 ├── docker/
@@ -66,10 +64,10 @@ dotnet test --filter "FullyQualifiedName~ClassName.MethodName"
 # Run tests matching a pattern
 dotnet test --filter "DisplayName~circuit_breaker"
 
-# Dashboard (React SPA) — uses Yarn, NOT npm
-cd src/dashboard && yarn install
-cd src/dashboard && yarn dev        # dev server
-cd src/dashboard && yarn build      # production build → copies to API/wwwroot
+# Dashboard (React SPA) — uses Bun, NOT npm/yarn/pnpm
+cd src/dashboard && bun install
+cd src/dashboard && bun run dev     # dev server
+cd src/dashboard && bun run build   # production build → copies to API/wwwroot
 
 # Docker
 docker compose -f docker/docker-compose.yml up          # production (app + postgres)
@@ -91,7 +89,7 @@ docker compose -f docker/docker-compose.dev.yml up       # dev (PostgreSQL only)
 | Files                | Match class name              | `HmacSigningService.cs`          |
 
 ### Architecture Patterns
-- **Controller-based:** Business logic lives in controllers (Application layer CQRS scaffold removed — see ADR-002)
+- **Controller-based:** Business logic lives in controllers (Application layer fully removed — see ADR-002)
 - **Repository pattern:** One repository per aggregate root in `Infrastructure/Repositories/`
 - **Options pattern:** Configuration classes in `Core/Options/` (e.g., `RetryPolicyOptions`, `DeliveryOptions`, `CircuitBreakerOptions`, `RetentionOptions`, `DashboardAuthOptions`)
 - **Dependency injection:** Constructor injection everywhere — no service locator
@@ -167,7 +165,7 @@ wwwroot/           React dashboard build output
 | Directories      | lowercase     | `pages/`, `components/`, `hooks/`, `api/` |
 
 ### Frontend Rules
-- Use **Yarn** for all dependency management (never npm or pnpm)
+- Use **Bun** for all dependency management (never npm, yarn, or pnpm)
 - Vite for build tooling
 - **Tailwind CSS v4** for styling (dark theme with custom tokens)
 - **Lucide React** for icons
