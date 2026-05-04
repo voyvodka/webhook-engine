@@ -66,12 +66,12 @@ public class UpdateEventTypeRequestValidator : AbstractValidator<UpdateEventType
 
 public class CreateEndpointRequestValidator : AbstractValidator<CreateEndpointRequest>
 {
-    public CreateEndpointRequestValidator()
+    public CreateEndpointRequestValidator(EndpointUrlPolicy urlPolicy)
     {
         RuleFor(x => x.Url)
             .NotEmpty()
-            .Must(BeValidHttpsUrl)
-            .WithMessage("Url must be a valid HTTPS URL.");
+            .Must(urlPolicy.IsValid)
+            .WithMessage(urlPolicy.ValidationMessage);
 
         RuleFor(x => x.Description)
             .MaximumLength(500)
@@ -82,27 +82,16 @@ public class CreateEndpointRequestValidator : AbstractValidator<CreateEndpointRe
             .When(x => x.TransformExpression is not null)
             .WithMessage("TransformExpression must not exceed 4096 characters.");
     }
-
-    private static bool BeValidHttpsUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            return false;
-        }
-
-        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
-            && uri.Scheme == Uri.UriSchemeHttps;
-    }
 }
 
 public class UpdateEndpointRequestValidator : AbstractValidator<UpdateEndpointRequest>
 {
-    public UpdateEndpointRequestValidator()
+    public UpdateEndpointRequestValidator(EndpointUrlPolicy urlPolicy)
     {
         RuleFor(x => x.Url)
-            .Must(BeValidHttpsUrl)
+            .Must(urlPolicy.IsValid)
             .When(x => x.Url is not null)
-            .WithMessage("Url must be a valid HTTPS URL.");
+            .WithMessage(urlPolicy.ValidationMessage);
 
         RuleFor(x => x.Description)
             .MaximumLength(500)
@@ -124,30 +113,19 @@ public class UpdateEndpointRequestValidator : AbstractValidator<UpdateEndpointRe
                 || x.TransformEnabled is not null)
             .WithMessage("At least one field must be provided.");
     }
-
-    private static bool BeValidHttpsUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            return false;
-        }
-
-        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
-            && uri.Scheme == Uri.UriSchemeHttps;
-    }
 }
 
 public class DashboardCreateEndpointRequestValidator : AbstractValidator<DashboardCreateEndpointRequest>
 {
-    public DashboardCreateEndpointRequestValidator()
+    public DashboardCreateEndpointRequestValidator(EndpointUrlPolicy urlPolicy)
     {
         RuleFor(x => x.AppId)
             .NotEmpty();
 
         RuleFor(x => x.Url)
             .NotEmpty()
-            .Must(BeValidHttpsUrl)
-            .WithMessage("Url must be a valid HTTPS URL.");
+            .Must(urlPolicy.IsValid)
+            .WithMessage(urlPolicy.ValidationMessage);
 
         RuleFor(x => x.Description)
             .MaximumLength(500)
@@ -158,27 +136,16 @@ public class DashboardCreateEndpointRequestValidator : AbstractValidator<Dashboa
             .When(x => x.TransformExpression is not null)
             .WithMessage("TransformExpression must not exceed 4096 characters.");
     }
-
-    private static bool BeValidHttpsUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            return false;
-        }
-
-        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
-            && uri.Scheme == Uri.UriSchemeHttps;
-    }
 }
 
 public class DashboardUpdateEndpointRequestValidator : AbstractValidator<DashboardUpdateEndpointRequest>
 {
-    public DashboardUpdateEndpointRequestValidator()
+    public DashboardUpdateEndpointRequestValidator(EndpointUrlPolicy urlPolicy)
     {
         RuleFor(x => x.Url)
-            .Must(BeValidHttpsUrl)
+            .Must(urlPolicy.IsValid)
             .When(x => x.Url is not null)
-            .WithMessage("Url must be a valid HTTPS URL.");
+            .WithMessage(urlPolicy.ValidationMessage);
 
         RuleFor(x => x.Description)
             .MaximumLength(500)
@@ -199,17 +166,6 @@ public class DashboardUpdateEndpointRequestValidator : AbstractValidator<Dashboa
                 || x.TransformExpression is not null
                 || x.TransformEnabled is not null)
             .WithMessage("At least one field must be provided.");
-    }
-
-    private static bool BeValidHttpsUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            return false;
-        }
-
-        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
-            && uri.Scheme == Uri.UriSchemeHttps;
     }
 }
 
