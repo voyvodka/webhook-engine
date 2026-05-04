@@ -25,6 +25,9 @@ public sealed class EndpointResponseDto
     public JsonElement CustomHeadersJson { get; init; }
     public string? SecretOverride { get; init; }
     public JsonElement MetadataJson { get; init; }
+    public string? TransformExpression { get; init; }
+    public bool TransformEnabled { get; init; }
+    public DateTime? TransformValidatedAt { get; init; }
     public List<Guid> FilterEventTypes { get; init; } = [];
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
@@ -89,6 +92,9 @@ public static class ApiResponseMapper
             CustomHeadersJson = JsonValueParser.ParseOrEmptyObject(endpoint.CustomHeadersJson),
             SecretOverride = endpoint.SecretOverride,
             MetadataJson = JsonValueParser.ParseOrEmptyObject(endpoint.MetadataJson),
+            TransformExpression = endpoint.TransformExpression,
+            TransformEnabled = endpoint.TransformEnabled,
+            TransformValidatedAt = endpoint.TransformValidatedAt,
             FilterEventTypes = endpoint.EventTypes.Select(et => et.Id).ToList(),
             CreatedAt = endpoint.CreatedAt,
             UpdatedAt = endpoint.UpdatedAt
@@ -107,6 +113,9 @@ public static class ApiResponseMapper
             CustomHeadersJson = JsonValueParser.ParseOrEmptyObject(endpoint.CustomHeadersJson),
             SecretOverride = endpoint.SecretOverride,
             MetadataJson = JsonValueParser.ParseOrEmptyObject(endpoint.MetadataJson),
+            TransformExpression = endpoint.TransformExpression,
+            TransformEnabled = endpoint.TransformEnabled,
+            TransformValidatedAt = endpoint.TransformValidatedAt,
             FilterEventTypes = endpoint.EventTypeIds,
             CreatedAt = endpoint.CreatedAt,
             UpdatedAt = endpoint.UpdatedAt

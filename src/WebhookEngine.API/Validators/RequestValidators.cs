@@ -76,6 +76,11 @@ public class CreateEndpointRequestValidator : AbstractValidator<CreateEndpointRe
         RuleFor(x => x.Description)
             .MaximumLength(500)
             .When(x => x.Description is not null);
+
+        RuleFor(x => x.TransformExpression)
+            .MaximumLength(4096)
+            .When(x => x.TransformExpression is not null)
+            .WithMessage("TransformExpression must not exceed 4096 characters.");
     }
 
     private static bool BeValidHttpsUrl(string? url)
@@ -103,13 +108,20 @@ public class UpdateEndpointRequestValidator : AbstractValidator<UpdateEndpointRe
             .MaximumLength(500)
             .When(x => x.Description is not null);
 
+        RuleFor(x => x.TransformExpression)
+            .MaximumLength(4096)
+            .When(x => x.TransformExpression is not null)
+            .WithMessage("TransformExpression must not exceed 4096 characters.");
+
         RuleFor(x => x)
             .Must(x => x.Url is not null
                 || x.Description is not null
                 || x.FilterEventTypes is not null
                 || x.CustomHeaders is not null
                 || x.Metadata is not null
-                || x.SecretOverride is not null)
+                || x.SecretOverride is not null
+                || x.TransformExpression is not null
+                || x.TransformEnabled is not null)
             .WithMessage("At least one field must be provided.");
     }
 
@@ -140,6 +152,11 @@ public class DashboardCreateEndpointRequestValidator : AbstractValidator<Dashboa
         RuleFor(x => x.Description)
             .MaximumLength(500)
             .When(x => x.Description is not null);
+
+        RuleFor(x => x.TransformExpression)
+            .MaximumLength(4096)
+            .When(x => x.TransformExpression is not null)
+            .WithMessage("TransformExpression must not exceed 4096 characters.");
     }
 
     private static bool BeValidHttpsUrl(string? url)
@@ -167,13 +184,20 @@ public class DashboardUpdateEndpointRequestValidator : AbstractValidator<Dashboa
             .MaximumLength(500)
             .When(x => x.Description is not null);
 
+        RuleFor(x => x.TransformExpression)
+            .MaximumLength(4096)
+            .When(x => x.TransformExpression is not null)
+            .WithMessage("TransformExpression must not exceed 4096 characters.");
+
         RuleFor(x => x)
             .Must(x => x.Url is not null
                 || x.Description is not null
                 || x.FilterEventTypes is not null
                 || x.CustomHeaders is not null
                 || x.Metadata is not null
-                || x.SecretOverride is not null)
+                || x.SecretOverride is not null
+                || x.TransformExpression is not null
+                || x.TransformEnabled is not null)
             .WithMessage("At least one field must be provided.");
     }
 
