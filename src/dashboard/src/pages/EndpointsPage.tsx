@@ -109,7 +109,11 @@ export function EndpointsPage() {
     }
   }, [appFilter, page, statusFilter]);
 
-  useEffect(() => { fetchEndpoints(); }, [fetchEndpoints]);
+  useEffect(() => {
+    Promise.resolve()
+      .then(() => fetchEndpoints())
+      .catch(() => { /* surfaced via fetchEndpoints' setError */ });
+  }, [fetchEndpoints]);
 
   useEffect(() => {
     const fetchApplications = async () => {
@@ -124,7 +128,9 @@ export function EndpointsPage() {
 
   useEffect(() => {
     if (!showCreate || !createAppId) return;
-    ensureEventTypesLoaded(createAppId).catch(() => { /* no-op */ });
+    Promise.resolve()
+      .then(() => ensureEventTypesLoaded(createAppId))
+      .catch(() => { /* no-op — event types optional in create form */ });
   }, [createAppId, ensureEventTypesLoaded, showCreate]);
 
   // ── Handlers ──────────────────────────────────

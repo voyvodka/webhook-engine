@@ -107,7 +107,9 @@ export function EventTypesPage() {
   }, []);
 
   useEffect(() => {
-    fetchEventTypes();
+    Promise.resolve()
+      .then(() => fetchEventTypes())
+      .catch(() => { /* surfaced via fetchEventTypes' setError */ });
   }, [fetchEventTypes]);
 
   const resetCreateForm = () => {

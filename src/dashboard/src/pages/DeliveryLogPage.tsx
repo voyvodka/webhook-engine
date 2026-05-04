@@ -33,31 +33,29 @@ function StatusBadge({ status }: { status: string }) {
 export function DeliveryLogPage() {
   const { messageId } = useParams<{ messageId?: string }>();
   const [message, setMessage] = useState<MessageDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState<boolean>(!!messageId);
+  const [fetchError, setFetchError] = useState("");
+
+  const error = !messageId
+    ? "No message ID provided. Navigate here from the Messages page."
+    : fetchError;
 
   useEffect(() => {
-    if (!messageId) {
-      setLoading(false);
-      setError("No message ID provided. Navigate here from the Messages page.");
-      return;
-    }
+    if (!messageId) return;
 
     let cancelled = false;
     async function load() {
-      setLoading(true);
-      setError("");
       try {
         const data = await getMessage(messageId!);
         if (!cancelled) setMessage(data);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load message");
+        if (!cancelled) setFetchError(e instanceof Error ? e.message : "Failed to load message");
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    load();
+    void load();
     return () => { cancelled = true; };
   }, [messageId]);
 
