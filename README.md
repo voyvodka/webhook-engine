@@ -44,7 +44,7 @@ The app starts on `http://localhost:5100`. Dashboard login: `admin@example.com` 
 
 ### Local Development
 
-**Prerequisites:** .NET 10 SDK, PostgreSQL 17+, Node.js 20+, Yarn
+**Prerequisites:** .NET 10 SDK, PostgreSQL 17+, Node.js 20+, [Bun](https://bun.sh/) 1.1+
 
 1. **Start PostgreSQL** (or use the dev compose file):
 
@@ -74,8 +74,8 @@ The API starts on `http://localhost:5128`.
 
 ```bash
 cd src/dashboard
-yarn install
-yarn dev
+bun install
+bun run dev
 ```
 
 Dashboard dev server runs on `http://localhost:5173` with API proxy to `localhost:5128`.
@@ -128,7 +128,6 @@ Dashboard dev server runs on `http://localhost:5173` with API proxy to `localhos
 src/
   WebhookEngine.Core/            # Domain: entities, enums, interfaces, options
   WebhookEngine.Infrastructure/   # EF Core, PostgreSQL queue, repositories, services
-  WebhookEngine.Application/      # DI registration (CQRS scaffold, not yet implemented)
   WebhookEngine.Worker/           # Background services (delivery, retry, circuit breaker)
   WebhookEngine.API/              # ASP.NET Core host, controllers, middleware
   WebhookEngine.Sdk/              # .NET client SDK
@@ -136,7 +135,6 @@ src/
 tests/
   WebhookEngine.Core.Tests/
   WebhookEngine.Infrastructure.Tests/
-  WebhookEngine.Application.Tests/
   WebhookEngine.API.Tests/
   WebhookEngine.Worker.Tests/
 ```
@@ -284,7 +282,7 @@ dotnet test tests/WebhookEngine.Core.Tests
 dotnet test --filter "DisplayName~HmacSigning"
 
 # Dashboard build
-cd src/dashboard && yarn install && yarn build
+cd src/dashboard && bun install && bun run build
 ```
 
 ## Docker

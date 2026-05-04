@@ -111,9 +111,6 @@ WebhookEngine/
 │   │       ├── EventTypeRepository.cs
 │   │       └── MessageRepository.cs
 │   │
-│   ├── WebhookEngine.Application/        # DI registration (CQRS scaffold removed — see ADR-002)
-│   │   └── WebhookEngine.Application.csproj
-│   │
 │   ├── WebhookEngine.Worker/            # Background delivery processing
 │   │   ├── DeliveryWorker.cs            # IHostedService - polls queue, delivers
 │   │   ├── RetryScheduler.cs            # Schedules retries based on backoff policy
@@ -193,7 +190,6 @@ WebhookEngine/
 ├── tests/
 │   ├── WebhookEngine.Core.Tests/
 │   ├── WebhookEngine.Infrastructure.Tests/
-│   ├── WebhookEngine.Application.Tests/
 │   ├── WebhookEngine.API.Tests/         # Integration tests
 │   └── WebhookEngine.Worker.Tests/
 │

@@ -41,3 +41,27 @@ No MediatR packages are added at this time. If CQRS is adopted in a future miles
 - `WebhookEngine.Application` project stays in the solution; build and deployment are unchanged.
 - The `.csproj` retains its `Core` and `Infrastructure` project references for future use.
 - `AddApplicationServices` was never called from `Program.cs`, so no call site cleanup is needed.
+
+## Update — 2026-05-05
+
+The original decision retained the `WebhookEngine.Application` project in the solution as a placeholder for future application-layer code. After several months without any code being added to it, this rationale no longer holds — the empty project remained pure tech debt: an extra `.csproj`, an extra `ProjectReference` from the API host, an extra Dockerfile `COPY` line, and an empty `WebhookEngine.Application.Tests` project referencing it.
+
+### Revised Decision
+
+`WebhookEngine.Application` and `WebhookEngine.Application.Tests` are fully removed from the solution. Concretely:
+
+- Solution entries for both projects deleted from `WebhookEngine.sln`
+- `<ProjectReference>` to `WebhookEngine.Application` removed from `src/WebhookEngine.API/WebhookEngine.API.csproj`
+- `src/WebhookEngine.Application/` and `tests/WebhookEngine.Application.Tests/` directories deleted
+- `COPY src/WebhookEngine.Application/...` line removed from `docker/Dockerfile`
+- Documentation references (`docs/ARCHITECTURE.md`, `README.md`, `CONTRIBUTING.md`, `AGENTS.md`, `CLAUDE.md`) updated
+
+### Rationale for Revision
+
+If a CQRS or application-services layer is needed in a future milestone (e.g. for the Phase 3 notification workflow engine or Phase 4 multi-tenant identity flows), the project will be **recreated from scratch** with concrete handlers from day one — not as an empty scaffold. The cost of recreating an empty `.csproj` is seconds; the cost of carrying a misleading empty project for months is contributor confusion and Dockerfile/sln drift.
+
+### Consequences of Revision
+
+- API project's dependency graph is now `Core ← Infrastructure ← Worker ← API` — strictly linear, no orphan branches.
+- Solution file is shorter and cleaner; no GUIDs reference deleted projects.
+- Future "application services" work starts with a clean recreation, with full intent documented from the first commit.

@@ -7,8 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-### Added
-- No unreleased changes yet.
+### Changed
+- **Frontend toolchain:** migrated dashboard package manager from Yarn to [Bun](https://bun.sh/) 1.1+. `yarn.lock` replaced with `bun.lock`; CI, Dockerfile, contributor docs, and PR template now reference `bun` commands. No runtime behavior changes.
+
+### Removed
+- **`WebhookEngine.Application` project:** removed from the solution along with its `WebhookEngine.Application.Tests` companion. The project had been empty since the CQRS scaffold removal in v0.1.0 (see ADR-002). Solution entries, the API project's `ProjectReference`, the Dockerfile `COPY` line, and documentation references have all been cleaned up. ADR-002 was updated with the revised decision. No runtime behavior changes — the project never contained executable code.
 
 ## [0.1.3] - 2026-04-08
 

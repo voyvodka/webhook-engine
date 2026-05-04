@@ -5,7 +5,7 @@ Thanks for your interest in contributing! This guide covers how to set up the pr
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Node.js 20+](https://nodejs.org/) and [Yarn](https://yarnpkg.com/)
+- [Node.js 20+](https://nodejs.org/) and [Bun](https://bun.sh/) 1.1+
 - [Docker](https://www.docker.com/) (for PostgreSQL)
 
 ## Local Development Setup
@@ -31,8 +31,8 @@ The API starts at `http://localhost:5128`. Database migrations are applied autom
 
 ```bash
 cd src/dashboard
-yarn install
-yarn dev
+bun install
+bun run dev
 ```
 
 The dev server starts at `http://localhost:5173` and proxies API requests to `localhost:5128`.
@@ -40,7 +40,7 @@ The dev server starts at `http://localhost:5173` and proxies API requests to `lo
 For production builds:
 
 ```bash
-yarn build
+bun run build
 ```
 
 This outputs to the API's `wwwroot/` directory.
@@ -66,7 +66,6 @@ Integration tests use [Testcontainers](https://dotnet.testcontainers.org/) and r
 src/
   WebhookEngine.Core/            # Domain: entities, enums, interfaces
   WebhookEngine.Infrastructure/   # EF Core, PostgreSQL queue, repositories
-  WebhookEngine.Application/      # DI registration (CQRS scaffold — not yet active)
   WebhookEngine.Worker/           # Background services (delivery, retry, etc.)
   WebhookEngine.API/              # ASP.NET Core host, controllers, middleware
   WebhookEngine.Sdk/              # .NET SDK (NuGet package)
@@ -93,7 +92,7 @@ samples/
 
 ### TypeScript Dashboard
 
-- Yarn only (not npm or pnpm)
+- Bun only (not npm, yarn, or pnpm)
 - Tailwind CSS v4 for styling
 - Lucide React for icons
 - ESLint + TypeScript strict mode
@@ -111,7 +110,7 @@ Before starting work on a feature or bug fix, check existing issues or open a ne
 3. Make your changes
 4. Ensure the build passes: `dotnet build WebhookEngine.sln`
 5. Ensure tests pass: `dotnet test WebhookEngine.sln`
-6. Ensure the dashboard builds: `cd src/dashboard && yarn build`
+6. Ensure the dashboard builds: `cd src/dashboard && bun run build`
 7. Commit with a clear message describing the change
 8. Open a pull request against `main`
 
