@@ -8,8 +8,15 @@ namespace WebhookEngine.Infrastructure.Tests.Services;
 
 public class JmesPathPayloadTransformerTests
 {
+    // Timeout default is intentionally generous in tests because CI runners
+    // (especially the first warmup of JmesPath.Net's JIT) can take >100ms
+    // for a single evaluation. Production default is 100ms — see
+    // TransformationOptions. Tests that specifically exercise the timeout path
+    // pass a low value explicitly.
+    private const int CiSafeTimeoutMs = 5000;
+
     private static JmesPathPayloadTransformer CreateTransformer(
-        int timeoutMs = 100,
+        int timeoutMs = CiSafeTimeoutMs,
         int maxOutputBytes = 256 * 1024)
     {
         var options = Options.Create(new TransformationOptions

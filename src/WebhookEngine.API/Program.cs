@@ -123,6 +123,7 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
     });
+builder.Services.AddSingleton<WebhookEngine.API.Validators.EndpointUrlPolicy>();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddMvcCore(options => options.Filters.Add<FluentValidationFilter>());
 
