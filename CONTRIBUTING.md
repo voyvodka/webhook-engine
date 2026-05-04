@@ -5,7 +5,7 @@ Thanks for your interest in contributing! This guide covers how to set up the pr
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Node.js 20+](https://nodejs.org/) and [Bun](https://bun.sh/) 1.1+
+- [Node.js 20+](https://nodejs.org/) and [Bun](https://bun.sh/) 1.2+
 - [Docker](https://www.docker.com/) (for PostgreSQL)
 
 ## Local Development Setup

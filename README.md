@@ -44,7 +44,7 @@ The app starts on `http://localhost:5100`. Dashboard login: `admin@example.com` 
 
 ### Local Development
 
-**Prerequisites:** .NET 10 SDK, PostgreSQL 17+, Node.js 20+, [Bun](https://bun.sh/) 1.1+
+**Prerequisites:** .NET 10 SDK, PostgreSQL 17+, Node.js 20+, [Bun](https://bun.sh/) 1.2+
 
 1. **Start PostgreSQL** (or use the dev compose file):
 
