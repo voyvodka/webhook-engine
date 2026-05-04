@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+- **Payload transformation schema and API (ADR-003 Phase 1):** endpoints now accept `transformExpression` (JMESPath, max 4096 chars), `transformEnabled` (kill switch, default `false`), and a server-managed `transformValidatedAt` timestamp on create/update. Both the public Bearer-key API (`POST /api/v1/endpoints`, `PUT /api/v1/endpoints/{id}`) and the dashboard endpoints (`POST /api/v1/dashboard/endpoints`, `PUT /api/v1/dashboard/endpoints/{id}`) carry the new fields, and `EndpointResponseDto` exposes them on read. Stored only — pipeline integration (delivery-time application with `JmesPath.Net` + 100 ms timeout + fail-open) and the dashboard editor land in ADR-003 Phase 2 and Phase 3 respectively.
+- **Security automations:** CodeQL workflow (csharp + javascript-typescript, push/PR/Mondays at 06:30 UTC), Dependency Review action on PRs (high-severity fail + GPL/LGPL/AGPL/EUPL/SSPL deny-list), and Dependabot config covering NuGet, npm, GitHub Actions, and Docker base images. Five repo labels (`dependencies`, `nuget`, `npm`, `ci`, `docker`) created to support the Dependabot config.
+
 ### Changed
 - **Frontend toolchain:** migrated dashboard package manager from Yarn to [Bun](https://bun.sh/) 1.2+. `yarn.lock` replaced with `bun.lock` (text format introduced in Bun 1.2); CI, Dockerfile, contributor docs, and PR template now reference `bun` commands. No runtime behavior changes.
 

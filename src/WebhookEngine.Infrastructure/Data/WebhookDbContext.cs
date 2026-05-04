@@ -75,6 +75,9 @@ public class WebhookDbContext : DbContext
             entity.Property(e => e.CustomHeadersJson).HasColumnName("custom_headers").HasColumnType("jsonb").HasDefaultValueSql("'{}'");
             entity.Property(e => e.SecretOverride).HasColumnName("secret_override").HasMaxLength(64);
             entity.Property(e => e.MetadataJson).HasColumnName("metadata").HasColumnType("jsonb").HasDefaultValueSql("'{}'");
+            entity.Property(e => e.TransformExpression).HasColumnName("transform_expression").HasMaxLength(4096);
+            entity.Property(e => e.TransformEnabled).HasColumnName("transform_enabled").HasDefaultValue(false);
+            entity.Property(e => e.TransformValidatedAt).HasColumnName("transform_validated_at");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
 

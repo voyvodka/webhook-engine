@@ -62,6 +62,9 @@ public class EndpointRepository
                 CustomHeadersJson = e.CustomHeadersJson,
                 SecretOverride = e.SecretOverride,
                 MetadataJson = e.MetadataJson,
+                TransformExpression = e.TransformExpression,
+                TransformEnabled = e.TransformEnabled,
+                TransformValidatedAt = e.TransformValidatedAt,
                 EventTypeNames = e.EventTypes.Select(et => et.Name).ToList(),
                 EventTypeIds = e.EventTypes.Select(et => et.Id).ToList(),
                 CreatedAt = e.CreatedAt,
@@ -158,6 +161,9 @@ public class EndpointRepository
                 CustomHeadersJson = e.CustomHeadersJson,
                 SecretOverride = e.SecretOverride,
                 MetadataJson = e.MetadataJson,
+                TransformExpression = e.TransformExpression,
+                TransformEnabled = e.TransformEnabled,
+                TransformValidatedAt = e.TransformValidatedAt,
                 EventTypeNames = e.EventTypes.Select(et => et.Name).ToList(),
                 EventTypeIds = e.EventTypes.Select(et => et.Id).ToList(),
                 CreatedAt = e.CreatedAt,
@@ -195,6 +201,9 @@ public record EndpointListItem
     public string CustomHeadersJson { get; init; } = "{}";
     public string? SecretOverride { get; init; }
     public string MetadataJson { get; init; } = "{}";
+    public string? TransformExpression { get; init; }
+    public bool TransformEnabled { get; init; }
+    public DateTime? TransformValidatedAt { get; init; }
     public List<string> EventTypeNames { get; init; } = [];
     public List<Guid> EventTypeIds { get; init; } = [];
     public DateTime CreatedAt { get; init; }

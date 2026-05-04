@@ -37,7 +37,9 @@ public class EndpointsController : ControllerBase
             Url = request.Url,
             Description = request.Description,
             CustomHeadersJson = System.Text.Json.JsonSerializer.Serialize(request.CustomHeaders ?? new Dictionary<string, string>()),
-            MetadataJson = System.Text.Json.JsonSerializer.Serialize(request.Metadata ?? new Dictionary<string, string>())
+            MetadataJson = System.Text.Json.JsonSerializer.Serialize(request.Metadata ?? new Dictionary<string, string>()),
+            TransformExpression = string.IsNullOrWhiteSpace(request.TransformExpression) ? null : request.TransformExpression,
+            TransformEnabled = request.TransformEnabled ?? false
         };
 
         if (request.FilterEventTypes is not null && request.FilterEventTypes.Count > 0)
@@ -113,6 +115,16 @@ public class EndpointsController : ControllerBase
 
         if (request.SecretOverride is not null)
             endpoint.SecretOverride = string.IsNullOrWhiteSpace(request.SecretOverride) ? null : request.SecretOverride;
+
+        if (request.TransformExpression is not null)
+        {
+            // Treat empty/whitespace as a clear, otherwise store the new expression and reset validation timestamp.
+            endpoint.TransformExpression = string.IsNullOrWhiteSpace(request.TransformExpression) ? null : request.TransformExpression;
+            endpoint.TransformValidatedAt = null;
+        }
+
+        if (request.TransformEnabled is not null)
+            endpoint.TransformEnabled = request.TransformEnabled.Value;
 
         if (request.FilterEventTypes is not null)
         {
@@ -236,6 +248,8 @@ public class CreateEndpointRequest
     public List<Guid>? FilterEventTypes { get; set; }
     public Dictionary<string, string>? CustomHeaders { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
+    public string? TransformExpression { get; set; }
+    public bool? TransformEnabled { get; set; }
 }
 
 public class UpdateEndpointRequest
@@ -246,4 +260,6 @@ public class UpdateEndpointRequest
     public Dictionary<string, string>? CustomHeaders { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
     public string? SecretOverride { get; set; }
+    public string? TransformExpression { get; set; }
+    public bool? TransformEnabled { get; set; }
 }

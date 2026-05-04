@@ -83,7 +83,9 @@ public class DashboardEndpointController : ControllerBase
             Description = request.Description,
             SecretOverride = string.IsNullOrWhiteSpace(request.SecretOverride) ? null : request.SecretOverride,
             CustomHeadersJson = System.Text.Json.JsonSerializer.Serialize(request.CustomHeaders ?? new Dictionary<string, string>()),
-            MetadataJson = System.Text.Json.JsonSerializer.Serialize(request.Metadata ?? new Dictionary<string, string>())
+            MetadataJson = System.Text.Json.JsonSerializer.Serialize(request.Metadata ?? new Dictionary<string, string>()),
+            TransformExpression = string.IsNullOrWhiteSpace(request.TransformExpression) ? null : request.TransformExpression,
+            TransformEnabled = request.TransformEnabled ?? false
         };
 
         if (request.FilterEventTypes is not null && request.FilterEventTypes.Count > 0)
@@ -117,6 +119,9 @@ public class DashboardEndpointController : ControllerBase
             circuitState = created?.Health?.CircuitState.ToString().ToLowerInvariant() ?? "closed",
             eventTypes = created?.EventTypes.Select(et => et.Name).ToList() ?? [],
             eventTypeIds = created?.EventTypes.Select(et => et.Id).ToList() ?? [],
+            transformExpression = endpoint.TransformExpression,
+            transformEnabled = endpoint.TransformEnabled,
+            transformValidatedAt = endpoint.TransformValidatedAt,
             createdAt = endpoint.CreatedAt,
             updatedAt = endpoint.UpdatedAt
         }));
@@ -146,6 +151,16 @@ public class DashboardEndpointController : ControllerBase
 
         if (request.Metadata is not null)
             endpoint.MetadataJson = System.Text.Json.JsonSerializer.Serialize(request.Metadata);
+
+        if (request.TransformExpression is not null)
+        {
+            // Empty/whitespace clears the expression; any new expression resets validation timestamp.
+            endpoint.TransformExpression = string.IsNullOrWhiteSpace(request.TransformExpression) ? null : request.TransformExpression;
+            endpoint.TransformValidatedAt = null;
+        }
+
+        if (request.TransformEnabled is not null)
+            endpoint.TransformEnabled = request.TransformEnabled.Value;
 
         if (request.FilterEventTypes is not null)
         {
@@ -180,6 +195,9 @@ public class DashboardEndpointController : ControllerBase
             circuitState = updated?.Health?.CircuitState.ToString().ToLowerInvariant() ?? "closed",
             eventTypes = updated?.EventTypes.Select(et => et.Name).ToList() ?? [],
             eventTypeIds = updated?.EventTypes.Select(et => et.Id).ToList() ?? [],
+            transformExpression = endpoint.TransformExpression,
+            transformEnabled = endpoint.TransformEnabled,
+            transformValidatedAt = endpoint.TransformValidatedAt,
             createdAt = endpoint.CreatedAt,
             updatedAt = endpoint.UpdatedAt
         }));
@@ -375,6 +393,8 @@ public class DashboardCreateEndpointRequest
     public Dictionary<string, string>? CustomHeaders { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
     public string? SecretOverride { get; set; }
+    public string? TransformExpression { get; set; }
+    public bool? TransformEnabled { get; set; }
 }
 
 public class DashboardUpdateEndpointRequest
@@ -385,6 +405,8 @@ public class DashboardUpdateEndpointRequest
     public Dictionary<string, string>? CustomHeaders { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
     public string? SecretOverride { get; set; }
+    public string? TransformExpression { get; set; }
+    public bool? TransformEnabled { get; set; }
 }
 
 public class DashboardCreateEventTypeRequest
