@@ -175,7 +175,18 @@ export function ApplicationsPage() {
   }, [fetchAppStats, page]);
 
   useEffect(() => {
-    fetchApps();
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => fetchApps())
+      .catch(() => { /* surfaced via fetchApps' setError */ })
+      .finally(() => {
+        if (cancelled) {
+          /* component unmounted before fetch settled */
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [fetchApps]);
 
   const handleCreate = async () => {

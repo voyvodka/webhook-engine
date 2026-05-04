@@ -104,11 +104,17 @@ export function MessagesPage() {
     }
   }, [afterFilter, appFilter, beforeFilter, endpointFilter, eventTypeFilter, page, statusFilter]);
 
-  useEffect(() => { fetchMessages(); }, [fetchMessages]);
+  useEffect(() => {
+    Promise.resolve()
+      .then(() => fetchMessages())
+      .catch(() => { /* surfaced via fetchMessages' setError */ });
+  }, [fetchMessages]);
 
   useEffect(() => {
     if (events.length === 0) return;
-    fetchMessages(false).catch(() => { /* no-op */ });
+    Promise.resolve()
+      .then(() => fetchMessages(false))
+      .catch(() => { /* no-op — silent refresh on real-time event */ });
   }, [events.length, fetchMessages]);
 
   useEffect(() => {

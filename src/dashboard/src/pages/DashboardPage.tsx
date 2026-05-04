@@ -129,7 +129,9 @@ export function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    void refreshDashboardData(true);
+    Promise.resolve()
+      .then(() => refreshDashboardData(true))
+      .catch(() => { /* surfaced via fallback state */ });
 
     return () => {
       isMountedRef.current = false;
@@ -137,7 +139,9 @@ export function DashboardPage() {
   }, [refreshDashboardData]);
 
   useEffect(() => {
-    void loadDevStatus();
+    Promise.resolve()
+      .then(() => loadDevStatus())
+      .catch(() => { /* dev tools optional, errors swallowed */ });
   }, [loadDevStatus]);
 
   useEffect(() => {
