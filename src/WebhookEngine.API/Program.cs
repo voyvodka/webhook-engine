@@ -36,6 +36,7 @@ builder.Services.Configure<CircuitBreakerOptions>(builder.Configuration.GetSecti
 builder.Services.Configure<DashboardAuthOptions>(builder.Configuration.GetSection(DashboardAuthOptions.SectionName));
 builder.Services.Configure<RetentionOptions>(builder.Configuration.GetSection(RetentionOptions.SectionName));
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
+builder.Services.Configure<TransformationOptions>(builder.Configuration.GetSection(TransformationOptions.SectionName));
 
 // Database
 builder.Services.AddDbContext<WebhookDbContext>(options =>
@@ -69,6 +70,7 @@ builder.Services.AddSingleton<IEndpointRateLimiter, EndpointRateLimiter>();
 builder.Services.AddSingleton<IMessageStateMachine, MessageStateMachine>();
 builder.Services.AddSingleton<IDeliveryNotifier, SignalRDeliveryNotifier>();
 builder.Services.AddSingleton<IDevTrafficGenerator, DevTrafficGenerator>();
+builder.Services.AddSingleton<IPayloadTransformer, JmesPathPayloadTransformer>();
 
 // Background Workers
 builder.Services.AddHostedService<DeliveryWorker>();
