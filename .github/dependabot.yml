@@ -1,0 +1,91 @@
+# Dependabot configuration for WebhookEngine.
+#
+# Four ecosystems: NuGet (the .NET solution at root), npm (the React
+# dashboard at src/dashboard — Bun reads the same package.json so npm
+# updates are compatible), GitHub Actions (root workflows), and Docker
+# (base image bumps for the multi-stage Dockerfile under /docker).
+#
+# Cadence is weekly — Monday mornings — so dependency noise lands before
+# the week's feature work starts. Minor and patch updates are grouped per
+# ecosystem to keep the PR queue short; majors stay ungrouped so upstream
+# breaking changes get individual review.
+#
+# Pre-release handling: Dependabot does not open PRs for pre-release
+# versions unless the package is already on a pre-release track, so the
+# "latest stable, no pre-releases" policy is satisfied by default.
+
+version: 2
+updates:
+  # ── .NET backend (NuGet) ────────────────────────────────────────
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Istanbul
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - nuget
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # ── Frontend (npm — Bun reads the same package.json) ────────────
+  - package-ecosystem: npm
+    directory: /src/dashboard
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Istanbul
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - npm
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # ── CI workflows ────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Istanbul
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - ci
+
+  # ── Docker base images ──────────────────────────────────────────
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Istanbul
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - docker
