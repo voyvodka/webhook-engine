@@ -1,10 +1,10 @@
 # Roadmap
 # WebhookEngine — Strategic Roadmap
 
-**Last Updated:** 2026-04-09
+**Last Updated:** 2026-05-04
 **Status:** Active — Phase 2 (Traction & Feedback)
 
-> **Note:** Phase 1 is complete. Phase 2 core tasks (2.2, 2.3, 2.4) are done. Remaining Phase 2 items and beyond are planned.
+> **Note:** Phase 1 is complete (launch posts and the engineering blog post remain deferred). Phase 2 core tasks (2.2, 2.3, 2.4) are done. Remaining Phase 2 items (payload transformation, TypeScript SDK, application layer cleanup) are planned.
 
 ---
 
