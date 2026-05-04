@@ -19,7 +19,9 @@ public class DeliveryWorker : BackgroundService
     private readonly ILogger<DeliveryWorker> _logger;
     private readonly DeliveryOptions _deliveryOptions;
     private readonly RetryPolicyOptions _retryPolicy;
+    private readonly TransformationOptions _transformationOptions;
     private readonly IEndpointRateLimiter _endpointRateLimiter;
+    private readonly IPayloadTransformer _payloadTransformer;
     private readonly WebhookMetrics? _metrics;
     private readonly string _workerId = $"worker_{Environment.MachineName}_{Guid.NewGuid().ToString("N")[..8]}";
 
@@ -28,14 +30,18 @@ public class DeliveryWorker : BackgroundService
         ILogger<DeliveryWorker> logger,
         IOptions<DeliveryOptions> deliveryOptions,
         IOptions<RetryPolicyOptions> retryPolicy,
+        IOptions<TransformationOptions> transformationOptions,
         IEndpointRateLimiter endpointRateLimiter,
+        IPayloadTransformer payloadTransformer,
         WebhookMetrics? metrics = null)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
         _deliveryOptions = deliveryOptions.Value;
         _retryPolicy = retryPolicy.Value;
+        _transformationOptions = transformationOptions.Value;
         _endpointRateLimiter = endpointRateLimiter;
+        _payloadTransformer = payloadTransformer;
         _metrics = metrics;
     }
 
@@ -169,9 +175,15 @@ public class DeliveryWorker : BackgroundService
                 return;
             }
 
-            // Sign the payload
+            // Apply payload transformation (ADR-003) before signing — the receiver
+            // verifies the signature against the body they actually receive, so the
+            // transformed payload is what we sign. Fail-open: any error keeps the
+            // original payload and lets delivery proceed.
+            var deliveryPayload = ApplyTransformation(message.Payload, endpoint, message.Id);
+
+            // Sign the (possibly transformed) payload
             var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var signedHeaders = signingService.Sign(message.Id.ToString(), timestamp, message.Payload, signingSecret);
+            var signedHeaders = signingService.Sign(message.Id.ToString(), timestamp, deliveryPayload, signingSecret);
 
             var customHeaders = ParseCustomHeaders(endpoint.CustomHeadersJson);
             var requestHeaders = BuildRequestHeaders(signedHeaders, customHeaders);
@@ -181,7 +193,7 @@ public class DeliveryWorker : BackgroundService
             {
                 MessageId = message.Id.ToString(),
                 EndpointUrl = endpoint.Url,
-                Payload = message.Payload,
+                Payload = deliveryPayload,
                 SignedHeaders = signedHeaders,
                 CustomHeaders = customHeaders
             };
@@ -278,6 +290,34 @@ public class DeliveryWorker : BackgroundService
         var backoffIndex = Math.Min(currentAttempt - 1, _retryPolicy.BackoffSchedule.Length - 1);
         var backoffSeconds = _retryPolicy.BackoffSchedule[backoffIndex];
         return DateTime.UtcNow.AddSeconds(backoffSeconds);
+    }
+
+    private string ApplyTransformation(string originalPayload, Core.Entities.Endpoint endpoint, Guid messageId)
+    {
+        // Skip when globally disabled or per-endpoint not configured.
+        if (!_transformationOptions.Enabled
+            || !endpoint.TransformEnabled
+            || string.IsNullOrWhiteSpace(endpoint.TransformExpression))
+        {
+            return originalPayload;
+        }
+
+        var result = _payloadTransformer.Transform(endpoint.TransformExpression, originalPayload);
+
+        if (result.IsSuccess && result.TransformedPayload is not null)
+        {
+            _metrics?.RecordTransformationApplied();
+            _logger.LogInformation(
+                "Applied JMESPath transformation for message {MessageId} on endpoint {EndpointId}",
+                messageId, endpoint.Id);
+            return result.TransformedPayload;
+        }
+
+        _metrics?.RecordTransformationFailedOpen();
+        _logger.LogWarning(
+            "JMESPath transformation failed for message {MessageId} on endpoint {EndpointId}; falling back to original payload. Error: {Error}",
+            messageId, endpoint.Id, result.Error);
+        return originalPayload;
     }
 
     private static Dictionary<string, string> ParseCustomHeaders(string? customHeadersJson)

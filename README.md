@@ -272,7 +272,7 @@ All configuration is via `appsettings.json` or environment variables (double-und
 # Build
 dotnet build WebhookEngine.sln
 
-# Run all tests (136 tests)
+# Run all tests (142 tests)
 dotnet test WebhookEngine.sln
 
 # Run specific test project

@@ -21,6 +21,8 @@ public sealed class WebhookMetrics
     private readonly Counter<long> _staleLockRecovered;
     private readonly Histogram<double> _deliveryDurationMs;
     private readonly UpDownCounter<long> _queueDepth;
+    private readonly Counter<long> _transformationsApplied;
+    private readonly Counter<long> _transformationsFailedOpen;
 
     public WebhookMetrics(IMeterFactory meterFactory)
     {
@@ -80,6 +82,16 @@ public sealed class WebhookMetrics
             "webhookengine.queue.depth",
             unit: "{message}",
             description: "Approximate queue depth (enqueue increments, dequeue decrements)");
+
+        _transformationsApplied = meter.CreateCounter<long>(
+            "webhookengine.transformations.applied",
+            unit: "{transformation}",
+            description: "Successful payload transformations applied before delivery");
+
+        _transformationsFailedOpen = meter.CreateCounter<long>(
+            "webhookengine.transformations.failed_open",
+            unit: "{transformation}",
+            description: "Payload transformations that failed and fell back to the original payload");
     }
 
     public void RecordMessageEnqueued(int count = 1) => _messagesEnqueued.Add(count);
@@ -111,4 +123,8 @@ public sealed class WebhookMetrics
     public void RecordQueueEnqueue(int count = 1) => _queueDepth.Add(count);
 
     public void RecordQueueDequeue(int count) => _queueDepth.Add(-count);
+
+    public void RecordTransformationApplied() => _transformationsApplied.Add(1);
+
+    public void RecordTransformationFailedOpen() => _transformationsFailedOpen.Add(1);
 }
