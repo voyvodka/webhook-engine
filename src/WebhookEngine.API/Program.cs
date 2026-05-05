@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 using Serilog;
 using WebhookEngine.API.Hubs;
@@ -189,6 +190,10 @@ builder.Services.AddSignalR();
 builder.Services.AddMemoryCache(o => o.SizeLimit = 10_000);
 builder.Services.AddScoped<DeliveryLookupCache>();
 
+// Readiness gate — flipped to true after migrations + admin seeding
+// complete. /health/ready reads this; orchestrators should probe that.
+builder.Services.AddSingleton<AppReadinessGate>();
+
 // OpenAPI
 builder.Services.AddOpenApi(options =>
 {
@@ -206,12 +211,21 @@ builder.Services.AddOpenApi(options =>
 
 // OpenTelemetry Metrics + Prometheus
 builder.Services.AddSingleton<WebhookMetrics>();
+var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
         .AddRuntimeInstrumentation()
         .AddMeter(WebhookMetrics.MeterName)
-        .AddPrometheusExporter());
+        .AddPrometheusExporter())
+    .WithTracing(tracing =>
+    {
+        tracing.AddAspNetCoreInstrumentation();
+        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
+        }
+    });
 
 // Rate limiting — per-AppId token bucket (D-01)
 builder.Services.AddRateLimiter(options =>
@@ -258,18 +272,58 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
-// Auto-apply EF Core migrations on startup (skip in Testing environment)
+// Auto-apply EF Core migrations on startup (skip in Testing environment).
+// Wrapped in a session-level Postgres advisory lock so multi-replica
+// deployments don't race the migration history table.
 if (!app.Environment.IsEnvironment("Testing"))
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<WebhookDbContext>();
-    await db.Database.MigrateAsync();
+
+    var isPostgres = string.Equals(
+        db.Database.ProviderName,
+        "Npgsql.EntityFrameworkCore.PostgreSQL",
+        StringComparison.Ordinal);
+
+    if (isPostgres)
+    {
+        // Namespace 200_000 reserved for migration coordination; key 1
+        // covers the whole schema (per-table coordination is overkill).
+        const long migrationLockKey = (200_000L << 32) | 1L;
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_lock({migrationLockKey})");
+        try
+        {
+            await db.Database.MigrateAsync();
+        }
+        finally
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_unlock({migrationLockKey})");
+        }
+    }
+    else
+    {
+        await db.Database.MigrateAsync();
+    }
 
     var dashboardAuthOptions = scope.ServiceProvider
         .GetRequiredService<IOptions<DashboardAuthOptions>>()
         .Value;
 
-    await DashboardAdminSeeder.SeedAsync(db, dashboardAuthOptions, app.Logger);
+    await DashboardAdminSeeder.SeedAsync(
+        db,
+        dashboardAuthOptions,
+        app.Logger,
+        app.Environment.IsDevelopment());
+
+    app.Services.GetRequiredService<AppReadinessGate>().MarkReady();
+}
+else
+{
+    // Testing env: nothing to bootstrap, tests are ready as soon as the
+    // host is up.
+    app.Services.GetRequiredService<AppReadinessGate>().MarkReady();
 }
 
 // Middleware pipeline (order matters)
