@@ -84,6 +84,66 @@ Detailed rules live in `.claude/rules/` — consult them while writing code.
 
 ---
 
+## PR Workflow & Labels
+
+`main` is protected — direct push is reserved for trivial admin overrides. Anything else flows through a feature branch + PR + green CI + squash-merge. The repo deletes head branches automatically on merge.
+
+### Branch naming
+- `feature/<short-slug>` — new functionality (`feature/dashboard-logo`)
+- `fix/<short-slug>` — bug or security fix (`fix/codeql-log-forging-and-pii`)
+- `refactor/<short-slug>` — internal restructuring with no behavior change
+- `docs/<short-slug>` — docs-only or repo-meta updates (`docs/pr-label-policy`)
+- `chore/<short-slug>` — config / tooling tweaks
+- `dependabot/...` — created automatically; do not rename
+
+### Post-merge cleanup (remote + local)
+
+The repo has `delete_branch_on_merge=true` enabled, so merged head branches disappear from `origin` automatically. To stay in sync locally, the repo's `.git/config` carries `fetch.prune=true`, which means **every** `git fetch` / `git pull` removes stale `origin/...` tracking refs in one step. After a PR merges, run:
+
+```bash
+git checkout main && git pull --ff-only origin main
+git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads \
+  | awk '$2=="[gone]" && $1!="main" {print $1}' \
+  | xargs -r git branch -D
+```
+
+The `awk` line drops every local branch whose upstream has gone away (the merged feature branch). Runs as a no-op when there is nothing to clean.
+
+### Required labels per PR
+Every PR carries **at least one type label** and **at least one area label** so the changelog can be grouped at release time. Apply via `gh pr edit <n> --add-label <label>` or the PR sidebar.
+
+**Type (pick one):**
+| Label | When |
+|---|---|
+| `enhancement` | New user-visible feature or improvement |
+| `bug` | Defect fix that restores intended behavior |
+| `security` | Resolves a CodeQL/secret-scanning/CVE alert or hardens a vulnerability |
+| `performance` | Measurable latency / throughput / memory improvement |
+| `regression` | Reverts or repairs a behavior previously working |
+| `documentation` | Public docs (`docs/`, `README`, `CHANGELOG`, ADRs) or `CLAUDE.md` |
+| `dependencies` | Lib/SDK/runtime version bump (Dependabot adds this automatically) |
+
+**Area (pick all that apply):**
+| Label | Touches |
+|---|---|
+| `api` | `src/WebhookEngine.API/` controllers, middleware, DTOs, validators |
+| `worker` | `src/WebhookEngine.Worker/` background services |
+| `infrastructure` | `src/WebhookEngine.Infrastructure/` repos, queue, services, migrations |
+| `database` | EF migrations, schema, indexes, raw SQL |
+| `dashboard` | `src/dashboard/` React SPA |
+| `sdk` | `src/WebhookEngine.Sdk/` and `samples/signature-verification/` |
+| `ci` | `.github/workflows/`, `.github/dependabot.yml`, build/release tooling |
+| `docker` | `docker/Dockerfile`, compose files, base-image bumps |
+| `nuget` | NuGet package bumps (Dependabot ecosystem label) |
+| `npm` | npm/Bun package bumps (Dependabot ecosystem label) |
+
+**Priority and triage labels** (`priority: p0/p1/p2`, `status: needs-triage/triaged/blocked`) are applied to issues, not normally to PRs. Use `good first issue` / `help wanted` only on issues open for contribution.
+
+### Release-note grouping
+The Unreleased section of `CHANGELOG.md` mirrors the type labels (`### Added` / `### Changed` / `### Fixed` / `### Removed` / `### Security`). When merging, append the PR's user-facing summary under the section matching its type label.
+
+---
+
 ## Release & Versioning
 
 - **SemVer:** `v{major}.{minor}.{patch}`; tags are prefixed with `v`.
