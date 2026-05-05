@@ -70,12 +70,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Sync the repository README to the Docker Hub "Overview" tab so what
-      # users see on Docker Hub matches the GitHub README. The repo logo
-      # itself is a one-time manual upload via the Docker Hub web UI;
-      # description sync runs on every release.
+      # Sync the repository README to the Docker Hub "Overview" tab. Treated
+      # as best-effort: if the DOCKERHUB_TOKEN doesn't carry the
+      # "repo:write_metadata" scope (PAT v2 introduced finer-grained scopes
+      # mid-release), the step fails 403 but the image push above is already
+      # committed. Operators can fix the token scope in repo Settings without
+      # blocking a subsequent release.
       - name: Sync Docker Hub description
         uses: peter-evans/dockerhub-description@v4
+        continue-on-error: true
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
