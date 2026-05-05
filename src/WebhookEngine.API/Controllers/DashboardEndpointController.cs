@@ -1,11 +1,10 @@
-using System.Net;
-using System.Net.Sockets;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WebhookEngine.API.Contracts;
+using WebhookEngine.API.Validators;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Core.Models;
@@ -33,6 +32,7 @@ public class DashboardEndpointController : ControllerBase
     private readonly IPayloadTransformer _payloadTransformer;
     private readonly IDeliveryService _deliveryService;
     private readonly ISigningService _signingService;
+    private readonly EndpointUrlPolicy _urlPolicy;
 
     public DashboardEndpointController(
         WebhookDbContext dbContext,
@@ -40,7 +40,8 @@ public class DashboardEndpointController : ControllerBase
         EventTypeRepository eventTypeRepository,
         IPayloadTransformer payloadTransformer,
         IDeliveryService deliveryService,
-        ISigningService signingService)
+        ISigningService signingService,
+        EndpointUrlPolicy urlPolicy)
     {
         _dbContext = dbContext;
         _endpointRepository = endpointRepository;
@@ -48,6 +49,7 @@ public class DashboardEndpointController : ControllerBase
         _payloadTransformer = payloadTransformer;
         _deliveryService = deliveryService;
         _signingService = signingService;
+        _urlPolicy = urlPolicy;
     }
 
     // ──────────────────────────────────────────────────
@@ -93,7 +95,7 @@ public class DashboardEndpointController : ControllerBase
             return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
         }
 
-        var dnsError = await CheckHostResolvableAsync(request.Url, ct);
+        var dnsError = await _urlPolicy.CheckHostSafeAsync(request.Url, ct);
         if (dnsError is not null)
         {
             return UnprocessableEntity(ApiEnvelope.Error(HttpContext, "UNPROCESSABLE", dnsError));
@@ -162,7 +164,7 @@ public class DashboardEndpointController : ControllerBase
 
         if (request.Url is not null)
         {
-            var dnsError = await CheckHostResolvableAsync(request.Url, ct);
+            var dnsError = await _urlPolicy.CheckHostSafeAsync(request.Url, ct);
             if (dnsError is not null)
             {
                 return UnprocessableEntity(ApiEnvelope.Error(HttpContext, "UNPROCESSABLE", dnsError));
@@ -477,28 +479,6 @@ public class DashboardEndpointController : ControllerBase
 
         await _eventTypeRepository.ArchiveAsync(eventTypeId, ct);
         return NoContent();
-    }
-
-    private static async Task<string?> CheckHostResolvableAsync(string url, CancellationToken ct)
-    {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-        {
-            return null;
-        }
-
-        try
-        {
-            await Dns.GetHostAddressesAsync(uri.Host, ct);
-            return null;
-        }
-        catch (SocketException)
-        {
-            return $"Cannot resolve host '{uri.Host}'. Check the URL or DNS configuration.";
-        }
-        catch (ArgumentException)
-        {
-            return $"Invalid host '{uri.Host}'.";
-        }
     }
 }
 
