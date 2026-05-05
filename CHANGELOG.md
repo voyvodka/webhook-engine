@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+- **Idempotency race condition closed (audit Concurrency H1).** Two concurrent requests with the same `idempotencyKey` previously slipped past the time-window pre-check and double-enqueued the message — both threads saw an empty lookup and both inserted. A new partial unique index on `(app_id, endpoint_id, idempotency_key) WHERE idempotency_key IS NOT NULL` now serializes inserts at the database, and the controllers (`POST /api/v1/messages`, `POST /api/v1/messages/batch`, `POST /api/v1/dashboard/messages`) catch the resulting `23505` conflict to perform a Stripe-style replay: fetch the winning row for that `(app, endpoint, key)` triple and return its id as if it had been freshly enqueued. The window-based reuse semantics are preserved — `RetentionCleanupWorker` now NULL-outs `idempotency_key` on rows past the per-app `IdempotencyWindowMinutes` so the same key can be re-used in a fresh window without violating the index. The companion non-unique index `idx_messages_app_idempotency` is kept for the lookup path. Migration `20260505140607_AddIdempotencyUniqueIndex` is defensive: it NULL-outs any pre-existing duplicate triples (keeping the most-recent row per group) before creating the unique index, so the migration cannot fail on legacy data.
+
 ## [0.1.4] - 2026-05-05
 
 ### Fixed

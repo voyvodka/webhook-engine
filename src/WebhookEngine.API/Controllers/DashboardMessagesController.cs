@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
@@ -223,8 +225,21 @@ public class DashboardMessagesController : ControllerBase
                 ScheduledAt = DateTime.UtcNow
             };
 
-            await _messageQueue.EnqueueAsync(message, ct);
-            messageIds.Add(message.Id);
+            try
+            {
+                await _messageQueue.EnqueueAsync(message, ct);
+                messageIds.Add(message.Id);
+            }
+            catch (DbUpdateException ex) when (IsIdempotencyConflict(ex))
+            {
+                if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+                {
+                    var winner = await _messageRepository.GetByEndpointAndIdempotencyKeyAsync(
+                        request.AppId, endpoint.Id, request.IdempotencyKey, ct);
+                    if (winner is not null)
+                        messageIds.Add(winner.Id);
+                }
+            }
         }
 
         return Accepted(ApiEnvelope.Success(HttpContext, new
@@ -234,6 +249,13 @@ public class DashboardMessagesController : ControllerBase
             eventType = eventTypeName
         }));
     }
+
+    private static bool IsIdempotencyConflict(DbUpdateException ex)
+        => ex.InnerException is PostgresException
+        {
+            SqlState: "23505",
+            ConstraintName: "idx_messages_app_endpoint_idempotency"
+        };
 
     [HttpPost("messages/{messageId:guid}/retry")]
     public async Task<IActionResult> RetryMessage(Guid messageId, CancellationToken ct)
