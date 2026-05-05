@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using WebhookEngine.API.Auth;
+using WebhookEngine.API.Services;
 using WebhookEngine.Core.Entities;
 using WebhookEngine.Core.Options;
 using WebhookEngine.Infrastructure.Data;
@@ -42,6 +43,6 @@ public static class DashboardAdminSeeder
         dbContext.DashboardUsers.Add(user);
         await dbContext.SaveChangesAsync(ct);
 
-        logger.LogInformation("Dashboard admin user seeded for {Email}.", adminEmail);
+        logger.LogInformation("Dashboard admin user seeded for {Email}.", LogSanitizer.RedactEmail(adminEmail));
     }
 }
