@@ -41,6 +41,11 @@ jobs:
           context: .
           file: docker/Dockerfile
           push: true
+          # Force a fresh pull of base images on every release so security
+          # patches in the upstream Microsoft / Bun / Alpine images flow
+          # into the published WebhookEngine image instead of being
+          # shadowed by the GHA build cache.
+          pull: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
