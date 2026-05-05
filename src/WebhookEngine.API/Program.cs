@@ -139,7 +139,9 @@ builder.Services
         options.Cookie.Name = "webhookengine_dashboard";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
         options.SlidingExpiration = true;
         options.ExpireTimeSpan = TimeSpan.FromDays(7);
 
@@ -327,6 +329,8 @@ else
 }
 
 // Middleware pipeline (order matters)
+app.UseMiddleware<SecurityHeadersMiddleware>();
+app.UseMiddleware<MetricsAuthMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<ApiKeyAuthMiddleware>();
