@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using WebhookEngine.API.Services;
 
 namespace WebhookEngine.API.Middleware;
 
@@ -30,8 +31,8 @@ public class RequestLoggingMiddleware
             stopwatch.Stop();
             _logger.LogInformation(
                 "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMs}ms [req_{RequestId}]",
-                context.Request.Method,
-                context.Request.Path,
+                LogSanitizer.ForLog(context.Request.Method),
+                LogSanitizer.ForLog(context.Request.Path),
                 context.Response.StatusCode,
                 stopwatch.ElapsedMilliseconds,
                 requestId);
