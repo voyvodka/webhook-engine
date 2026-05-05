@@ -514,6 +514,7 @@ src/dashboard/dist/
 # Dashboard build output bundled into API host (generated)
 src/WebhookEngine.API/wwwroot/index.html
 src/WebhookEngine.API/wwwroot/assets/
+src/WebhookEngine.API/wwwroot/favicon.svg
 
 # Environment files
 .env
