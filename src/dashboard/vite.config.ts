@@ -13,6 +13,7 @@ export default defineConfig({
           if (id.includes("react-dom") || id.includes("react-router") || id.includes("/react/")) return "vendor";
           if (id.includes("recharts")) return "charts";
           if (id.includes("signalr")) return "signalr";
+          if (id.includes("@codemirror") || id.includes("@uiw/react-codemirror") || id.includes("@lezer")) return "codemirror";
         }
       }
     }
