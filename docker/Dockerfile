@@ -1,10 +1,7 @@
 # ============================================================
 # Stage 1: Dashboard build (React SPA)
 # ============================================================
-# Image digests pinned for reproducible builds + Dependabot-tracked security
-# updates. The mutable tag (oven/bun:1-alpine, dotnet/sdk:10.0,
-# dotnet/aspnet:10.0-alpine) is kept alongside so Dependabot can detect when
-# a newer digest is published and open an automatic bump PR.
+# Image digests pinned so Dependabot can track and bump them.
 FROM oven/bun:1-alpine@sha256:4de475389889577f346c636f956b42a5c31501b654664e9ae5726f94d7bb5349 AS dashboard-build
 WORKDIR /dashboard
 

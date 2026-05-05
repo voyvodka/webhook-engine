@@ -4,12 +4,6 @@ using WebhookEngine.Infrastructure.Data;
 
 namespace WebhookEngine.Infrastructure.Tests.EndToEnd;
 
-/// <summary>
-/// Spins up a real PostgreSQL container once per test class and runs the
-/// production EF Core migrations against it. Tests share the same container
-/// for speed, and reset their data via <see cref="ResetAsync"/> before each
-/// scenario so they cannot bleed into one another.
-/// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
 #pragma warning disable CS0618 // PostgreSqlBuilder() constructor is marked obsolete in 4.11; tracked upstream — chained .WithImage(...) keeps the call equivalent.
@@ -27,8 +21,6 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         await _container.StartAsync();
 
-        // Apply the production migrations exactly the way the API host would
-        // on startup, so the schema under test matches what runs in prod.
         var options = new DbContextOptionsBuilder<WebhookDbContext>()
             .UseNpgsql(ConnectionString)
             .Options;
@@ -42,10 +34,6 @@ public sealed class PostgresFixture : IAsyncLifetime
         await _container.DisposeAsync();
     }
 
-    /// <summary>
-    /// Truncates every test-managed table and resets identity sequences. Cheap
-    /// enough to call from every test; faster than DROP/CREATE database.
-    /// </summary>
     public async Task ResetAsync()
     {
         var options = new DbContextOptionsBuilder<WebhookDbContext>()

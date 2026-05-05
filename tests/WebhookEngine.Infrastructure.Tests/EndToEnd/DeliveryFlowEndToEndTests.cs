@@ -20,16 +20,6 @@ using ApplicationEntity = WebhookEngine.Core.Entities.Application;
 
 namespace WebhookEngine.Infrastructure.Tests.EndToEnd;
 
-/// <summary>
-/// End-to-end coverage for <see cref="DeliveryWorker"/> against a real
-/// PostgreSQL database. The outbound HTTP call is the only mocked piece —
-/// queue, repositories, state machine, signing, and circuit-breaker tracking
-/// all run their production code paths so the assertions reflect what would
-/// actually happen on a live system.
-///
-/// Each test boots a fresh service provider and a fresh worker so the
-/// scenarios cannot interfere with each other.
-/// </summary>
 public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
 {
     private readonly PostgresFixture _fixture;

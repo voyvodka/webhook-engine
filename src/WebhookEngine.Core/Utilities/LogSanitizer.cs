@@ -1,25 +1,8 @@
 namespace WebhookEngine.Core.Utilities;
 
 /// <summary>
-/// Helpers for safely emitting user-controlled values into log entries.
-///
-/// <para>
-/// <b>Log forging</b> (CodeQL <c>cs/log-forging</c>): an attacker can put
-/// <c>\r\n</c> sequences into request paths, headers, message bodies, or
-/// dashboard-supplied configuration (e.g. JMESPath transform expressions)
-/// to inject fake log lines. <see cref="ForLog"/> strips control characters
-/// and caps length so the output is single-line and bounded.
-/// </para>
-/// <para>
-/// <b>PII exposure</b> (CodeQL <c>cs/exposure-of-sensitive-information</c>):
-/// some structured logs include identifiers like email addresses that
-/// shouldn't appear verbatim in shared logs. <see cref="RedactEmail"/> keeps
-/// just enough of the local part for an operator to recognise the user.
-/// </para>
-///
-/// Lives in <c>Core</c> so both the API host and the Infrastructure layer
-/// (workers, services) can reuse it without taking a project reference back
-/// up the dependency graph.
+/// CodeQL <c>cs/log-forging</c> + <c>cs/exposure-of-sensitive-information</c>
+/// helpers. Lives in Core so API and Infrastructure can both consume it.
 /// </summary>
 public static class LogSanitizer
 {

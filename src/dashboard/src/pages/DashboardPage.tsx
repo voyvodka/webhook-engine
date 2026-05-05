@@ -192,7 +192,7 @@ export function DashboardPage() {
   const handleSeedOnce = async () => {
     setDevActionLoading(true);
     try {
-      const result = await seedDevTraffic({ messages: 12 });
+      const result = await seedDevTraffic({ messages: 1 });
       setDevSeedResult(result);
       await Promise.all([loadDevStatus(), refreshDashboardData(false)]);
     } finally {
