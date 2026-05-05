@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+- **Multi-architecture Docker image:** the published image now ships for both `linux/amd64` and `linux/arm64`. Previous releases were amd64-only, which meant Apple Silicon Macs and arm64 Linux servers got `no matching manifest for linux/arm64/v8` when running `docker pull voyvodka/webhook-engine`. The release workflow gains a QEMU setup step and the build action now passes `platforms: linux/amd64,linux/arm64`.
+- **Removed phantom "unknown / unknown" tag entry on Docker Hub:** `docker/build-push-action`'s default provenance + SBOM attestations were landing on Docker Hub as a separate "unknown / unknown" platform row alongside the real architectures. `provenance: false` and `sbom: false` are now set explicitly so each tag lists only the platforms it actually contains.
+
 ### Security
 - **Docker base image refresh (Docker Scout cleanup):** all three Dockerfile stages (`oven/bun:1-alpine`, `mcr.microsoft.com/dotnet/sdk:10.0`, `mcr.microsoft.com/dotnet/aspnet:10.0-alpine`) now ship with SHA-256 digest pins so Dependabot can track and bump them, and the release workflow forces `pull: true` to bypass the GitHub Actions build cache when fetching upstream layers. The published image picks up the latest Alpine 3.23.4 patches: openssl/libcrypto3/libssl3 `3.5.5-r0` → `3.5.6-r0` (1 critical + 5 high CVEs cleared) and musl `1.2.5-r21` → `1.2.5-r23` (1 high CVE cleared). The remaining busybox advisory has no upstream patch yet and persists across the Alpine ecosystem.
 
