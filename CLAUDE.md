@@ -72,15 +72,46 @@ Detailed rules live in `.claude/rules/` — consult them while writing code.
 | `.claude/rules/core-domain.md` | Entity / Enum / Interface / Options conventions |
 | `.claude/rules/infrastructure.md` | EF Core, repositories, queue, advisory locks, migrations |
 | `.claude/rules/backend-api.md` | Controllers, middleware, validators, SignalR, ApiEnvelope |
-| `.claude/rules/workers.md` | BackgroundService pattern (scope-per-iteration, error backoff) |
-| `.claude/rules/context7.md` | When and how to use Context7 for library/framework docs |
+| `.claude/rules/workers.md` | `BackgroundService` pattern (scope-per-iteration, error backoff) |
+| `.claude/rules/dashboard.md` | React 19 + Vite 7 + Tailwind 4 + Bun conventions, SignalR client, lazy routes |
+| `.claude/rules/sdk.md` | `WebhookEngine.Sdk` public surface, `WebhookVerifier`, NuGet metadata |
+| `.claude/rules/testing.md` | xUnit + Testcontainers (no mocked DB), race-condition tests, naming |
+| `.claude/rules/context7.md` | When and how to use Context7 for library / framework docs |
 
 **Highlights:**
 - C# 4-space indent; async methods end with `Async`; `CancellationToken ct = default` is the last parameter; PascalCase namespaces.
-- React: PascalCase components, camelCase hooks/utilities, named exports, strict TypeScript.
+- React: PascalCase components, camelCase hooks / utilities, named exports (default export only for lazy-loaded pages), strict TypeScript.
 - All API responses use `ApiEnvelope`; validation goes through FluentValidation.
 - Read queries always use `.AsNoTracking()`.
+- Status transitions on `Message` go through `MessageRepository.Mark*Async` CAS guards (`WHERE LockedBy = @lockedBy AND Status = Sending`); callers must check the `bool` result.
+- `EndpointHealth` mutations go through `EndpointHealthTracker.WithEndpointLockAsync` (advisory-lock namespace `100_001`).
+- HTTP delivery uses the named `webhook-delivery` client only — never `new HttpClient()`. `SocketsHttpHandler.ConnectCallback` pins resolved IPs (DNS-rebinding defense).
 - `WebhookMetrics? metrics = null` is the optional-dependency pattern.
+
+---
+
+## Agents
+
+Specialist subagents live in `.claude/agents/`. Each one owns a domain — call the right one before you start work in that domain so the agent can apply its rules from the first read of the code.
+
+| Agent | When to call |
+|---|---|
+| `dotnet-api-expert` | Any change to controllers, middleware, validators, request / response DTOs, SignalR hub events, OpenAPI / Scalar surface, or anything crossing `/api/v1/*`. The `v1` prefix is immutable. |
+| `dotnet-engine-expert` | Any change to the 5 `BackgroundService`s, the PostgreSQL queue, `MessageStateMachine`, advisory-lock circuit breaker, HMAC signing pipeline, or the `webhook-delivery` HttpClient. |
+| `infrastructure-expert` | Any change to `WebhookDbContext`, repositories, migrations, partial indexes, or advisory-lock namespaces. **Migrations are never auto-generated** — they require explicit user consent. |
+| `dashboard-expert` | Any React component / page / hook / route / api-client change. Bun-only (overrides the global Yarn default). Build output ships to `WebhookEngine.API/wwwroot/`. |
+| `sdk-expert` | Any change inside `src/WebhookEngine.Sdk/`. The package targets `net10.0` only; zero external NuGet dependencies; `WebhookVerifier` uses `CryptographicOperations.FixedTimeEquals`. |
+| `release-manager` | SemVer tags, CHANGELOG releases, Docker Hub multi-arch publish, NuGet publish, GitHub Releases, repo-settings sync. NEVER includes any AI-attribution line in public-facing artifacts. |
+| `test-expert` | Any test change. xUnit + FluentAssertions + NSubstitute + Testcontainers. **Never mocks the database** (project rule from a past mock-vs-prod incident). |
+| `opensource-guardian` | `.github/workflows/`, `.github/dependabot.yml`, repo labels, branch-protection settings, license decisions, CodeQL / Dependency Review triage, CVE response. |
+| `reviewer` | Read-only quality gate. Call before merging significant changes, when writing an ADR, or when classifying a breaking change. Outputs verdict + punch list — never edits code. |
+
+Built-in helpers (always available):
+- `Explore` — fast read-only search agent for locating code (single targeted lookup → "very thorough" multi-location).
+- `Plan` — software-architect agent for designing implementation strategies before coding.
+- `general-purpose` — open-ended research / multi-step tasks not covered by a domain agent.
+
+When two agents overlap (e.g., a controller change that also adds a repository method), call the agent whose domain owns the **primary** concern; the agent will coordinate with the others (the `Before you do anything` section in each agent file lists its peer dependencies). For any change that touches `main` directly (rare — admin override only), still pair with `reviewer` before pushing.
 
 ---
 
