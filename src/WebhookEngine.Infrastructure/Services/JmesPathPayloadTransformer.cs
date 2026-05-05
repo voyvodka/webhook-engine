@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Core.Options;
+using WebhookEngine.Core.Utilities;
 
 namespace WebhookEngine.Infrastructure.Services;
 
@@ -34,6 +35,12 @@ public sealed class JmesPathPayloadTransformer : IPayloadTransformer
             return PayloadTransformResult.FailOpen("Expression is empty.");
         }
 
+        // The expression is dashboard-supplied (user-controlled), so it must
+        // pass through LogSanitizer.ForLog before reaching any log entry —
+        // otherwise CR/LF inside the expression could forge fake log lines
+        // (CodeQL cs/log-forging).
+        var safeExpression = LogSanitizer.ForLog(expression);
+
         // Run the JMESPath evaluation on a thread-pool task so we can enforce a
         // hard wall-clock timeout even if the expression hits a pathological
         // pattern that the parser does not detect ahead of time.
@@ -45,7 +52,7 @@ public sealed class JmesPathPayloadTransformer : IPayloadTransformer
             {
                 _logger.LogWarning(
                     "JMESPath transformation timed out after {TimeoutMs}ms for expression {Expression}",
-                    _options.TimeoutMs, expression);
+                    _options.TimeoutMs, safeExpression);
                 return PayloadTransformResult.FailOpen($"Timeout after {_options.TimeoutMs}ms.");
             }
         }
@@ -54,12 +61,12 @@ public sealed class JmesPathPayloadTransformer : IPayloadTransformer
             _logger.LogWarning(
                 ex.InnerException,
                 "JMESPath transformation failed for expression {Expression}",
-                expression);
+                safeExpression);
             return PayloadTransformResult.FailOpen(ex.InnerException.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "JMESPath transformation failed for expression {Expression}", expression);
+            _logger.LogWarning(ex, "JMESPath transformation failed for expression {Expression}", safeExpression);
             return PayloadTransformResult.FailOpen(ex.Message);
         }
 
@@ -76,7 +83,7 @@ public sealed class JmesPathPayloadTransformer : IPayloadTransformer
         {
             _logger.LogWarning(
                 "JMESPath transformation output exceeded {MaxOutputBytes} bytes ({ActualBytes}) for expression {Expression}",
-                _options.MaxOutputBytes, byteCount, expression);
+                _options.MaxOutputBytes, byteCount, safeExpression);
             return PayloadTransformResult.FailOpen(
                 $"Output size {byteCount} exceeds limit {_options.MaxOutputBytes}.");
         }

@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using WebhookEngine.API.Services;
+using WebhookEngine.Core.Utilities;
 
 namespace WebhookEngine.API.Middleware;
 
