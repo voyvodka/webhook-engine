@@ -131,6 +131,11 @@ builder.Services.AddMvcCore(options => options.Filters.Add<FluentValidationFilte
 // SignalR
 builder.Services.AddSignalR();
 
+// In-memory cache used by ApiKeyAuthMiddleware to avoid hitting the
+// applications table on every public-API request. Invalidated on
+// application update/delete/rotate.
+builder.Services.AddMemoryCache();
+
 // OpenAPI
 builder.Services.AddOpenApi(options =>
 {

@@ -16,18 +16,23 @@ tests/benchmark/run-bench.sh down                 # tear down + drop volume
 
 The bench compose file lifts the default rate limits (defaults are conservative and would shape the curve before any internal bottleneck appeared) so the benchmark measures the engine, not the rate limiter. See `tests/benchmark/docker-compose.bench.yml`.
 
-## Baseline (v0.1.4)
+## Baseline (v0.1.4) vs after API-key auth cache
 
-| Scenario | Target rate | Sustained | p50 | p95 | p99 |
-|---|---|---|---|---|---|
-| `single-send` | 1000 req/s | **916 req/s** | 3.3 ms | 299 ms | 509 ms |
-| `batch-send` (50 msg / batch) | 2500 msg/s | **2500 msg/s** | 79 ms | 324 ms | — |
-| `mixed` (send + list) | 350 req/s | **350 req/s** | 2.7 ms | 10 ms | — |
+The first optimization pass added an in-memory cache for API key prefix → application lookup, replacing a DB query on every public-API request with a 30 s cache hit.
 
-Measurement details:
-- All numbers from a 60 s window on Apple Silicon, 0 % HTTP failures across all scenarios.
-- `single-send` p50→p95 jumps **~96×** (3.3 ms → 299 ms). Median is fast; the long tail comes from the bottlenecks inventoried below.
-- Light mixed load is comfortably handled — list endpoint p95 stays under 10 ms.
+| Scenario | Metric | Baseline | After auth cache | Δ |
+|---|---|---|---|---|
+| `single-send` 1000/s | sustained | 916 req/s | **999 req/s** | +9 % |
+| | p50 | 3.3 ms | **1.75 ms** | -47 % |
+| | p95 | **299 ms** | **3.57 ms** | **-99 %** (~84×) |
+| | p99 | 509 ms | **8.37 ms** | -98 % (~61×) |
+| `batch-send` (50 msg/batch) | p50 | 79 ms | 52.5 ms | -34 % |
+| | p95 | 324 ms | **69.8 ms** | -78 % |
+| `mixed` (send + list) | p95 | 10 ms | 8.16 ms | -18 % |
+
+Why the gain is so large on `single-send`: every public-API request previously round-tripped to PostgreSQL through `ApplicationRepository.GetByApiKeyPrefixAsync`. Under burst that drove Npgsql's connection pool to recycle aggressively (the original `DISCARD ALL` count was 987 K in 60 s), which in turn made every other query queue behind connection acquisition. The cache eliminates the auth round-trip on the hot path; the dominoes that were toppling because of it stop.
+
+All numbers from a 60 s window on Apple Silicon, 0 % HTTP failures across all scenarios.
 
 ## Bottleneck inventory (from `pg_stat_statements`)
 
@@ -50,15 +55,15 @@ After ~220 K messages enqueued during the baseline runs:
 
 - **Default rate limit is too tight for production traffic.** `WebhookEngine:RateLimit` defaults to `PermitLimit=100, TokensPerPeriod=2, QueueLimit=0`. That sustains only 2 req/s per app long-term, with a 100-burst bucket. The bench compose lifts these to 20 000 to measure the engine; the production defaults should be revisited so a self-hosted operator does not hit a wall at 2 req/s.
 
-## Planned optimizations
+## Optimization log
 
-These follow as separate PRs so each can be measured in isolation:
+| Optimization | Status | Effect |
+|---|---|---|
+| In-memory cache for API key auth (30 s TTL, invalidated on app update/delete/rotate) | ✅ shipped | single-send p95 -99 %, p99 -98 %, sustained 916→999 req/s |
+| Memory cache for endpoint + event-type lookup in the delivery path | planned | drops `SELECT endpoints` / `event_types` from every enqueue |
+| Production rate limit defaults | planned | raise floor (e.g. 500 burst, 100/s sustain), document the knob |
+| `AsNoTracking` on read-only navigation paths | planned | eliminate `FOR KEY SHARE` locks on ownership rows |
+| Connection pool tuning | planned | explicit `Max Pool Size`, `Connection Idle Lifetime`; evaluate `Multiplexing=true` |
+| Pagination count short-circuit | planned | cached / approximate counts on dashboard list endpoint |
 
-1. **Memory cache for API key auth** — drops `SELECT applications` from every request to one per cache TTL.
-2. **Memory cache for endpoint + event-type lookup** in the delivery path — drops `SELECT endpoints` / `event_types` from every enqueue.
-3. **Production rate limit defaults** — raise the floor to a sensible self-host baseline (e.g. 500 burst, 100/s sustain) and document the knob.
-4. **`AsNoTracking` on read-only navigation paths** — eliminate the FOR KEY SHARE locks taken by EF for ownership rows that are never mutated in the same scope.
-5. **Connection pool tuning** — explicit `Max Pool Size`, `Connection Idle Lifetime`, evaluate `Multiplexing=true` (Npgsql 9.x).
-6. **Pagination count short-circuit** — return cached / approximate counts on the dashboard list endpoint when the client is paging.
-
-After each optimization the same three k6 scenarios are re-run; a before/after table is appended to this document.
+After each optimization ships, the same three k6 scenarios are re-run and the before/after row is appended to the table above.

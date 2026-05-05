@@ -3,7 +3,9 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using WebhookEngine.API.Contracts;
+using WebhookEngine.API.Middleware;
 using WebhookEngine.Infrastructure.Repositories;
 using AppEntity = WebhookEngine.Core.Entities.Application;
 
@@ -22,10 +24,17 @@ namespace WebhookEngine.API.Controllers;
 public class ApplicationsController : ControllerBase
 {
     private readonly ApplicationRepository _appRepo;
+    private readonly IMemoryCache _cache;
 
-    public ApplicationsController(ApplicationRepository appRepo)
+    public ApplicationsController(ApplicationRepository appRepo, IMemoryCache cache)
     {
         _appRepo = appRepo;
+        _cache = cache;
+    }
+
+    private void InvalidateAuthCache(string apiKeyPrefix)
+    {
+        _cache.Remove(ApiKeyAuthMiddleware.CacheKeyFor(apiKeyPrefix));
     }
 
     [HttpPost]
@@ -115,6 +124,7 @@ public class ApplicationsController : ControllerBase
         application.IdempotencyWindowMinutes = request.IdempotencyWindowMinutes ?? application.IdempotencyWindowMinutes;
 
         await _appRepo.UpdateAsync(application, ct);
+        InvalidateAuthCache(application.ApiKeyPrefix);
 
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
@@ -136,6 +146,7 @@ public class ApplicationsController : ControllerBase
             return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
 
         await _appRepo.DeleteAsync(applicationId, ct);
+        InvalidateAuthCache(application.ApiKeyPrefix);
         return NoContent();
     }
 
@@ -154,6 +165,7 @@ public class ApplicationsController : ControllerBase
 
         application.ApiKeyHash = newApiKeyHash;
         await _appRepo.UpdateAsync(application, ct);
+        InvalidateAuthCache(application.ApiKeyPrefix);
 
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
@@ -173,6 +185,7 @@ public class ApplicationsController : ControllerBase
         var newSigningSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         application.SigningSecret = newSigningSecret;
         await _appRepo.UpdateAsync(application, ct);
+        InvalidateAuthCache(application.ApiKeyPrefix);
 
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
