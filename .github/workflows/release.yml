@@ -46,6 +46,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Sync the repository README to the Docker Hub "Overview" tab so what
+      # users see on Docker Hub matches the GitHub README. The repo logo
+      # itself is a one-time manual upload via the Docker Hub web UI;
+      # description sync runs on every release.
+      - name: Sync Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: voyvodka/webhook-engine
+          short-description: "Self-hosted webhook delivery platform — PostgreSQL queue, retry, HMAC signing, React dashboard."
+          readme-filepath: ./README.md
+
   nuget:
     name: Publish NuGet Package
     runs-on: ubuntu-latest
