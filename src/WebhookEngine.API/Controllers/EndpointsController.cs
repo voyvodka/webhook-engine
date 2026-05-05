@@ -9,6 +9,9 @@ using Endpoint = WebhookEngine.Core.Entities.Endpoint;
 namespace WebhookEngine.API.Controllers;
 
 [ApiController]
+[Produces("application/json")]
+[ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
+[ProducesResponseType<ApiErrorResponse>(StatusCodes.Status500InternalServerError)]
 [Route("api/v1/endpoints")]
 public class EndpointsController : ControllerBase
 {
