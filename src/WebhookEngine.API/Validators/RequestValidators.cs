@@ -213,10 +213,6 @@ public class ValidateTransformRequestValidator : AbstractValidator<ValidateTrans
             .MaximumLength(4096)
             .WithMessage("Expression must be 1-4096 characters.");
 
-        // Sample payload is bounded so the validate endpoint cannot be used to
-        // burn CPU / memory on huge inputs. 64 KB matches what is reasonable
-        // for a UI editor — production payloads are guarded separately by
-        // TransformationOptions.MaxOutputBytes.
         RuleFor(x => x.SamplePayload)
             .NotEmpty()
             .Must(payload => System.Text.Encoding.UTF8.GetByteCount(payload) <= 65536)

@@ -1,10 +1,5 @@
 name: Deploy Pages
 
-# Replaces the legacy Jekyll-on-every-push behavior. Only runs when the
-# landing-page content actually changes, when a release is published, or
-# when manually triggered. Dependabot / API / docs / CI churn no longer
-# produces a Pages deployment.
-
 on:
   push:
     branches: [main]
@@ -14,12 +9,6 @@ on:
       - "robots.txt"
       - "sitemap.xml"
       - ".github/workflows/pages.yml"
-  # Release events were producing a duplicate run on the same commit that the
-  # version-bump push had already deployed — the second run lost the
-  # concurrency lock and showed up as a failure on the workflow timeline.
-  # The push trigger above already covers landing changes (the version badge
-  # is bumped in the same commit that creates the tag), so no separate
-  # release trigger is needed.
   workflow_dispatch:
 
 permissions:

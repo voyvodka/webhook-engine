@@ -23,9 +23,6 @@ const DEFAULT_SAMPLE = `{
   "amount": 4200
 }`;
 
-// CodeMirror dark theme tuned to the dashboard's design tokens.
-// Surface and border match Tailwind's bg-surface-2 / border-border so the
-// editor blends into the modal instead of looking like a foreign widget.
 const dashboardEditorTheme = EditorView.theme(
   {
     "&": {

@@ -35,10 +35,7 @@ public sealed class JmesPathPayloadTransformer : IPayloadTransformer
             return PayloadTransformResult.FailOpen("Expression is empty.");
         }
 
-        // The expression is dashboard-supplied (user-controlled), so it must
-        // pass through LogSanitizer.ForLog before reaching any log entry —
-        // otherwise CR/LF inside the expression could forge fake log lines
-        // (CodeQL cs/log-forging).
+        // CodeQL cs/log-forging: expression is user-controlled.
         var safeExpression = LogSanitizer.ForLog(expression);
 
         // Run the JMESPath evaluation on a thread-pool task so we can enforce a

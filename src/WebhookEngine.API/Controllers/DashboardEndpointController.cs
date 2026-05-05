@@ -262,13 +262,6 @@ public class DashboardEndpointController : ControllerBase
     // Payload Transformation
     // ──────────────────────────────────────────────────
 
-    /// <summary>
-    /// Validates a JMESPath expression against a sample payload. Used by the
-    /// dashboard expression editor to give live feedback before persisting the
-    /// expression on an endpoint. Reuses the same transformer (and its timeout
-    /// + size guards) that runs in the delivery pipeline, so what passes here
-    /// will behave identically at delivery time.
-    /// </summary>
     [HttpPost("transform/validate")]
     public IActionResult ValidateTransform([FromBody] ValidateTransformRequest request)
     {

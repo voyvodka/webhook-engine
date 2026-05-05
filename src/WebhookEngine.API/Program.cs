@@ -131,9 +131,7 @@ builder.Services.AddMvcCore(options => options.Filters.Add<FluentValidationFilte
 // SignalR
 builder.Services.AddSignalR();
 
-// OpenAPI document generation (Microsoft.AspNetCore.OpenApi).
-// The actual document + Scalar UI are only mapped in Development / Staging — see
-// the middleware pipeline below. Production runs without API docs surface.
+// OpenAPI
 builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer((document, _, _) =>
@@ -230,9 +228,6 @@ app.MapControllers();
 app.MapHub<DeliveryHub>("/hubs/deliveries");
 app.MapPrometheusScrapingEndpoint(); // GET /metrics
 
-// OpenAPI document + Scalar UI are exposed only outside production. Ops can
-// opt in to Staging exposure for SDK auto-generation; production deployments
-// keep the API surface unindexed by default.
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
     app.MapOpenApi("/openapi/{documentName}.json");

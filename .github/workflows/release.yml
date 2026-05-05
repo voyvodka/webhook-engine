@@ -17,9 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # QEMU enables cross-architecture builds on the standard amd64 runner —
-      # required for the linux/arm64 leg of the manifest list so Apple Silicon
-      # Macs and arm64 servers can `docker pull voyvodka/webhook-engine`.
+      # QEMU is required for the linux/arm64 leg of the manifest list.
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
         with:
@@ -49,20 +47,12 @@ jobs:
           context: .
           file: docker/Dockerfile
           push: true
-          # Multi-arch publish so `docker pull` works on Apple Silicon Macs
-          # and arm64 Linux servers (without this only linux/amd64 ships and
-          # arm64 hosts get "no matching manifest" errors).
           platforms: linux/amd64,linux/arm64
-          # Force a fresh pull of base images on every release so security
-          # patches in the upstream Microsoft / Bun / Alpine images flow
-          # into the published WebhookEngine image instead of being
-          # shadowed by the GHA build cache.
+          # Force a fresh pull so upstream base-image security patches are
+          # not shadowed by the GHA build cache.
           pull: true
-          # Disable build provenance / SBOM attestations. They land on Docker
-          # Hub as a phantom "unknown/unknown" platform entry that confuses
-          # users browsing the tag list and isn't useful for a single-binary
-          # OSS tool. Re-enable later if/when supply-chain attestation
-          # becomes a documented project deliverable.
+          # Skip provenance/SBOM attestations — they show up on Docker Hub
+          # as a phantom "unknown/unknown" tag entry.
           provenance: false
           sbom: false
           tags: ${{ steps.meta.outputs.tags }}
@@ -70,12 +60,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Sync the repository README to the Docker Hub "Overview" tab. Treated
-      # as best-effort: if the DOCKERHUB_TOKEN doesn't carry the
-      # "repo:write_metadata" scope (PAT v2 introduced finer-grained scopes
-      # mid-release), the step fails 403 but the image push above is already
-      # committed. Operators can fix the token scope in repo Settings without
-      # blocking a subsequent release.
+      # Best-effort: a PAT without repo:write_metadata returns 403 here.
+      # The image push above is already committed, so don't fail the job.
       - name: Sync Docker Hub description
         uses: peter-evans/dockerhub-description@v4
         continue-on-error: true
