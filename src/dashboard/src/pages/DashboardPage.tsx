@@ -192,10 +192,6 @@ export function DashboardPage() {
   const handleSeedOnce = async () => {
     setDevActionLoading(true);
     try {
-      // "Seed Once" should match its name — one click, one message.
-      // The previous hardcoded 12 fanned out across active endpoints
-      // (e.g. 2 endpoints → 6 messages each) which surprised users.
-      // For larger batches use the looped generator (Start) instead.
       const result = await seedDevTraffic({ messages: 1 });
       setDevSeedResult(result);
       await Promise.all([loadDevStatus(), refreshDashboardData(false)]);
