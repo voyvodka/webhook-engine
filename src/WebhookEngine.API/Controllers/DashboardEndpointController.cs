@@ -10,6 +10,7 @@ using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Core.Models;
 using WebhookEngine.Infrastructure.Data;
 using WebhookEngine.Infrastructure.Repositories;
+using WebhookEngine.Infrastructure.Services;
 using Endpoint = WebhookEngine.Core.Entities.Endpoint;
 
 namespace WebhookEngine.API.Controllers;
@@ -131,6 +132,7 @@ public class DashboardEndpointController : ControllerBase
         }
 
         await _endpointRepository.CreateAsync(endpoint, ct);
+        DeliveryLookupCache.InvalidateApplication(endpoint.AppId);
         var created = await _endpointRepository.GetByIdAsync(endpoint.Id, ct);
 
         return Created($"/api/v1/dashboard/endpoints/{endpoint.Id}", ApiEnvelope.Success(HttpContext, new
@@ -214,6 +216,7 @@ public class DashboardEndpointController : ControllerBase
         }
 
         await _endpointRepository.UpdateAsync(endpoint, ct);
+        DeliveryLookupCache.InvalidateApplication(endpoint.AppId);
         var updated = await _endpointRepository.GetByIdAsync(endpoint.Id, ct);
 
         return Ok(ApiEnvelope.Success(HttpContext, new
@@ -246,6 +249,7 @@ public class DashboardEndpointController : ControllerBase
 
         endpoint.Status = EndpointStatus.Disabled;
         await _endpointRepository.UpdateAsync(endpoint, ct);
+        DeliveryLookupCache.InvalidateApplication(endpoint.AppId);
 
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
@@ -265,6 +269,7 @@ public class DashboardEndpointController : ControllerBase
 
         endpoint.Status = EndpointStatus.Active;
         await _endpointRepository.UpdateAsync(endpoint, ct);
+        DeliveryLookupCache.InvalidateApplication(endpoint.AppId);
 
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
@@ -283,6 +288,7 @@ public class DashboardEndpointController : ControllerBase
         }
 
         await _endpointRepository.DeleteAsync(endpointId, ct);
+        DeliveryLookupCache.InvalidateApplication(endpoint.AppId);
         return NoContent();
     }
 
@@ -408,6 +414,7 @@ public class DashboardEndpointController : ControllerBase
         };
 
         await _eventTypeRepository.CreateAsync(eventType, ct);
+        DeliveryLookupCache.InvalidateApplication(eventType.AppId);
 
         return Created($"/api/v1/dashboard/event-types/{eventType.Id}", ApiEnvelope.Success(HttpContext, new
         {
@@ -456,6 +463,7 @@ public class DashboardEndpointController : ControllerBase
             eventType.Description = request.Description;
 
         await _eventTypeRepository.UpdateAsync(eventType, ct);
+        DeliveryLookupCache.InvalidateApplication(eventType.AppId);
 
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
@@ -478,6 +486,7 @@ public class DashboardEndpointController : ControllerBase
         }
 
         await _eventTypeRepository.ArchiveAsync(eventTypeId, ct);
+        DeliveryLookupCache.InvalidateApplication(eventType.AppId);
         return NoContent();
     }
 }
