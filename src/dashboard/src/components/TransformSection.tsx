@@ -176,6 +176,7 @@ export function TransformSection({
             <CodeMirror
               value={expression}
               onChange={handleExpressionChange}
+              theme="dark"
               extensions={expressionExtensions}
               basicSetup={{
                 lineNumbers: false,
@@ -218,6 +219,7 @@ export function TransformSection({
                 <CodeMirror
                   value={samplePayload}
                   onChange={handleSampleChange}
+                  theme="dark"
                   extensions={payloadExtensions}
                   basicSetup={{
                     lineNumbers: true,
@@ -266,6 +268,7 @@ export function TransformSection({
                     <CodeMirror
                       value={result.output}
                       editable={false}
+                      theme="dark"
                       extensions={payloadExtensions}
                       basicSetup={{
                         lineNumbers: true,
