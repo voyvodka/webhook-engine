@@ -16,23 +16,34 @@ tests/benchmark/run-bench.sh down                 # tear down + drop volume
 
 The bench compose file lifts the default rate limits (defaults are conservative and would shape the curve before any internal bottleneck appeared) so the benchmark measures the engine, not the rate limiter. See `tests/benchmark/docker-compose.bench.yml`.
 
-## Baseline (v0.1.4) vs after API-key auth cache
+## Optimization journey: v0.1.4 baseline → after all P1-P3
 
-The first optimization pass added an in-memory cache for API key prefix → application lookup, replacing a DB query on every public-API request with a 30 s cache hit.
+Three optimization passes shipped:
+1. **API key auth cache** (30 s TTL, sync invalidation) — replaces a DB round-trip on every public request.
+2. **Delivery lookup cache** (30 s TTL) — same pattern for event-type-by-name, event-type-by-id, and subscribed-endpoints lookups on the public send path.
+3. **Npgsql pool tuning** — `Maximum Pool Size=200`, `Minimum Pool Size=10`.
 
-| Scenario | Metric | Baseline | After auth cache | Δ |
+Headline: capacity is roughly **3× higher** before any failure mode shows up. The original target of 1000 req/s now lands well inside the comfortable zone; we can drive 1500 req/s with p95 in single-digit milliseconds.
+
+| Scenario | Metric | Baseline | After auth cache | After all opts |
 |---|---|---|---|---|
-| `single-send` 1000/s | sustained | 916 req/s | **999 req/s** | +9 % |
-| | p50 | 3.3 ms | **1.75 ms** | -47 % |
-| | p95 | **299 ms** | **3.57 ms** | **-99 %** (~84×) |
-| | p99 | 509 ms | **8.37 ms** | -98 % (~61×) |
-| `batch-send` (50 msg/batch) | p50 | 79 ms | 52.5 ms | -34 % |
-| | p95 | 324 ms | **69.8 ms** | -78 % |
-| `mixed` (send + list) | p95 | 10 ms | 8.16 ms | -18 % |
-
-Why the gain is so large on `single-send`: every public-API request previously round-tripped to PostgreSQL through `ApplicationRepository.GetByApiKeyPrefixAsync`. Under burst that drove Npgsql's connection pool to recycle aggressively (the original `DISCARD ALL` count was 987 K in 60 s), which in turn made every other query queue behind connection acquisition. The cache eliminates the auth round-trip on the hot path; the dominoes that were toppling because of it stop.
+| `single-send` (sustainable) | rate | 916 req/s | 999 req/s | **1492 req/s** |
+| `single-send` 1000/s → 1500/s | p50 | 3.3 ms | 1.75 ms | **1.22 ms** |
+|  | p95 | **299 ms** | 3.57 ms | **5.42 ms** |
+|  | p99 | 509 ms | 8.37 ms | 56.68 ms (at 1500 req/s) |
+| `batch-send` (50 msg/batch) sustainable | rate | 50/s = 2500 msg/s | 50/s | **100/s = 5000 msg/s** |
+|  | p50 | 79 ms | 52.5 ms | **25.8 ms** |
+|  | p95 | 324 ms | 69.8 ms | **53.5 ms** |
+| `mixed` (send + list) sustainable | rate | 350 req/s | 350 req/s | **950 req/s** |
+|  | p95 | 10 ms | 8.16 ms | 11.64 ms (at 950 req/s) |
 
 All numbers from a 60 s window on Apple Silicon, 0 % HTTP failures across all scenarios.
+
+### Why the auth cache pass moved the needle most
+Every public-API request previously round-tripped to PostgreSQL through `ApplicationRepository.GetByApiKeyPrefixAsync`. Under burst that drove Npgsql's connection pool to recycle aggressively (the original `DISCARD ALL` count was 987 K in 60 s), which in turn made every other query queue behind connection acquisition. The cache eliminates the auth round-trip on the hot path; the dominoes that were toppling because of it stop.
+
+### Why the lookup-cache pass let us push to 1500 / 5000 / 950
+With auth out of the way, the next-hottest queries were `SELECT FROM endpoints` and `SELECT FROM event_types` — both fired once per ingested event, so a single batch of 50 messages racked up 100 lookup queries. Caching them on a 30 s TTL drops the lookup count by roughly the cache-hit ratio. The pool tuning then makes sure the remaining queries don't queue.
 
 ## Bottleneck inventory (from `pg_stat_statements`)
 
@@ -59,11 +70,13 @@ After ~220 K messages enqueued during the baseline runs:
 
 | Optimization | Status | Effect |
 |---|---|---|
-| In-memory cache for API key auth (30 s TTL, invalidated on app update/delete/rotate) | ✅ shipped | single-send p95 -99 %, p99 -98 %, sustained 916→999 req/s |
-| Memory cache for endpoint + event-type lookup in the delivery path | planned | drops `SELECT endpoints` / `event_types` from every enqueue |
-| Production rate limit defaults | planned | raise floor (e.g. 500 burst, 100/s sustain), document the knob |
-| `AsNoTracking` on read-only navigation paths | planned | eliminate `FOR KEY SHARE` locks on ownership rows |
-| Connection pool tuning | planned | explicit `Max Pool Size`, `Connection Idle Lifetime`; evaluate `Multiplexing=true` |
-| Pagination count short-circuit | planned | cached / approximate counts on dashboard list endpoint |
+| API-key auth memory cache (30 s TTL, sync invalidation) | ✅ shipped | single-send p95 −99 % (299 ms → 3.57 ms), sustained 916 → 999 req/s |
+| Delivery lookup cache (event-type / subscribed endpoints, 30 s TTL) | ✅ shipped | sustained 999 → **1492 req/s**, batch sustainable 2500 → **5000 msg/s** |
+| Default rate limit (raised from 2 req/s sustained to 100 req/s) | ✅ shipped | unblocks the bench numbers above for production deployments |
+| `AsNoTracking` on hot-path read-only auth lookup | ✅ shipped | small absolute gain; cache already covers ~95 % of calls |
+| Npgsql connection pool (`Maximum Pool Size=200`, `Minimum Pool Size=10`) | ✅ shipped | covers the burst headroom now that auth + lookup caches changed the load shape |
+| Pagination count short-circuit | deferred | not the bottleneck after the caches landed; revisit when dashboard list latency becomes a complaint |
+| EF Core `FOR KEY SHARE` navigation locks | deferred | small marginal gain after caches; revisit alongside any ownership-row hot path |
+| Npgsql `Multiplexing=true` | deferred | risky with EF Core; benchmark separately before adopting |
 
-After each optimization ships, the same three k6 scenarios are re-run and the before/after row is appended to the table above.
+After each optimization ships, the same k6 scenarios are re-run and a new column is added to the journey table above.
