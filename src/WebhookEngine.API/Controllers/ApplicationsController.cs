@@ -14,6 +14,9 @@ namespace WebhookEngine.API.Controllers;
 /// NOTE: These endpoints are for dashboard (admin) use. API key auth is not required — dashboard cookie auth is used instead.
 /// </summary>
 [ApiController]
+[Produces("application/json")]
+[ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
+[ProducesResponseType<ApiErrorResponse>(StatusCodes.Status500InternalServerError)]
 [Route("api/v1/applications")]
 [Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme)]
 public class ApplicationsController : ControllerBase

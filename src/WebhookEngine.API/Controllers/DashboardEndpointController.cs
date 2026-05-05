@@ -20,6 +20,9 @@ namespace WebhookEngine.API.Controllers;
 /// Authenticated via dashboard session cookie (not API key).
 /// </summary>
 [ApiController]
+[Produces("application/json")]
+[ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
+[ProducesResponseType<ApiErrorResponse>(StatusCodes.Status500InternalServerError)]
 [Route("api/v1/dashboard")]
 [Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme)]
 public class DashboardEndpointController : ControllerBase
