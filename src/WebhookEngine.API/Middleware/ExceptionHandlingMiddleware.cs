@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text.Json;
-using WebhookEngine.API.Services;
+using WebhookEngine.Core.Utilities;
 
 namespace WebhookEngine.API.Middleware;
 

@@ -1,13 +1,14 @@
-namespace WebhookEngine.API.Services;
+namespace WebhookEngine.Core.Utilities;
 
 /// <summary>
 /// Helpers for safely emitting user-controlled values into log entries.
 ///
 /// <para>
 /// <b>Log forging</b> (CodeQL <c>cs/log-forging</c>): an attacker can put
-/// <c>\r\n</c> sequences into request paths, headers, or message bodies to
-/// inject fake log lines. <see cref="ForLog"/> strips control characters and
-/// caps length so the output is single-line and bounded.
+/// <c>\r\n</c> sequences into request paths, headers, message bodies, or
+/// dashboard-supplied configuration (e.g. JMESPath transform expressions)
+/// to inject fake log lines. <see cref="ForLog"/> strips control characters
+/// and caps length so the output is single-line and bounded.
 /// </para>
 /// <para>
 /// <b>PII exposure</b> (CodeQL <c>cs/exposure-of-sensitive-information</c>):
@@ -15,6 +16,10 @@ namespace WebhookEngine.API.Services;
 /// shouldn't appear verbatim in shared logs. <see cref="RedactEmail"/> keeps
 /// just enough of the local part for an operator to recognise the user.
 /// </para>
+///
+/// Lives in <c>Core</c> so both the API host and the Infrastructure layer
+/// (workers, services) can reuse it without taking a project reference back
+/// up the dependency graph.
 /// </summary>
 public static class LogSanitizer
 {
@@ -22,7 +27,7 @@ public static class LogSanitizer
 
     /// <summary>
     /// Strip CR/LF/tab characters and clamp length so a malicious request
-    /// path or header cannot break out of the current log line.
+    /// path, header, or expression cannot break out of the current log line.
     /// </summary>
     public static string ForLog(string? value, int maxLength = DefaultMaxLength)
     {
