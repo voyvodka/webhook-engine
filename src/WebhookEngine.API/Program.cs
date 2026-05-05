@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -34,6 +35,7 @@ builder.Host.UseSerilog((context, configuration) =>
 builder.Services.Configure<DeliveryOptions>(builder.Configuration.GetSection(DeliveryOptions.SectionName));
 builder.Services.Configure<RetryPolicyOptions>(builder.Configuration.GetSection(RetryPolicyOptions.SectionName));
 builder.Services.Configure<CircuitBreakerOptions>(builder.Configuration.GetSection(CircuitBreakerOptions.SectionName));
+builder.Services.Configure<SsrfGuardOptions>(builder.Configuration.GetSection(SsrfGuardOptions.SectionName));
 builder.Services.Configure<DashboardAuthOptions>(builder.Configuration.GetSection(DashboardAuthOptions.SectionName));
 builder.Services.Configure<RetentionOptions>(builder.Configuration.GetSection(RetentionOptions.SectionName));
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
@@ -49,9 +51,58 @@ builder.Services.AddHttpClient("webhook-delivery", client =>
 {
     client.DefaultRequestHeaders.Add("User-Agent", "WebhookEngine/1.0");
     client.Timeout = TimeSpan.FromSeconds(deliveryTimeoutSeconds);
-}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+}).ConfigurePrimaryHttpMessageHandler(sp =>
 {
-    AllowAutoRedirect = false
+    // Connect-time SSRF guard: even if validate-time DNS resolution returned
+    // a public IP, DNS rebinding can swap in a private IP at connect time.
+    // Re-classifying the resolved endpoint here defeats that.
+    var ssrfOptions = sp.GetRequiredService<IOptions<SsrfGuardOptions>>().Value;
+    var hostEnv = sp.GetRequiredService<IHostEnvironment>();
+    var allowLoopback = hostEnv.IsDevelopment() && ssrfOptions.AllowLoopbackInDevelopment;
+
+    var handler = new SocketsHttpHandler
+    {
+        AllowAutoRedirect = false
+    };
+
+    if (ssrfOptions.Enabled)
+    {
+        handler.ConnectCallback = async (ctx, ct) =>
+        {
+            var addresses = await Dns.GetHostAddressesAsync(ctx.DnsEndPoint.Host, ct);
+            foreach (var address in addresses)
+            {
+                var reason = PrivateIpDetector.Classify(address, allowLoopback);
+                if (reason is not null)
+                {
+                    throw new HttpRequestException(
+                        $"Refused to connect to {ctx.DnsEndPoint.Host}: {reason}.");
+                }
+            }
+
+            // Pin the connection to a vetted address — defeats DNS rebinding.
+            var safeAddress = addresses.FirstOrDefault()
+                ?? throw new HttpRequestException($"Cannot resolve {ctx.DnsEndPoint.Host}.");
+            var socket = new System.Net.Sockets.Socket(
+                System.Net.Sockets.SocketType.Stream,
+                System.Net.Sockets.ProtocolType.Tcp)
+            {
+                NoDelay = true
+            };
+            try
+            {
+                await socket.ConnectAsync(new System.Net.IPEndPoint(safeAddress, ctx.DnsEndPoint.Port), ct);
+                return new System.Net.Sockets.NetworkStream(socket, ownsSocket: true);
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        };
+    }
+
+    return handler;
 });
 
 // Repositories
