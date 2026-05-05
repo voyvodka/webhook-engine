@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthContext";
+import { Logo } from "../components/Logo";
 import {
   LayoutDashboard,
   Box,
@@ -7,7 +8,6 @@ import {
   Waypoints,
   Mail,
   LogOut,
-  Webhook,
   ChevronRight
 } from "lucide-react";
 
@@ -35,14 +35,10 @@ export function AppShell() {
         {/* Brand */}
         <div className="px-4 pt-5 pb-4 border-b border-border-subtle">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-accent/10 flex items-center justify-center">
-              <Webhook className="w-4 h-4 text-accent" />
-            </div>
-            <div>
-              <span className="text-sm font-semibold text-text-primary tracking-tight">
-                WebhookEngine
-              </span>
-            </div>
+            <Logo size={28} />
+            <span className="text-sm font-semibold text-text-primary tracking-tight">
+              Webhook<span className="text-accent">Engine</span>
+            </span>
           </div>
         </div>
 
