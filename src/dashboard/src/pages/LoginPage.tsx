@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthContext";
-import { Webhook, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
+import { Logo } from "../components/Logo";
+import { ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 
 interface LocationState {
   from?: string;
@@ -51,10 +52,10 @@ export function LoginPage() {
       <div className="relative w-full max-w-sm animate-fade-in-up">
         {/* Brand */}
         <div className="flex items-center gap-2.5 mb-8">
-          <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
-            <Webhook className="w-5 h-5 text-accent" />
-          </div>
-          <span className="text-lg font-semibold tracking-tight">WebhookEngine</span>
+          <Logo size={32} />
+          <span className="text-lg font-semibold tracking-tight">
+            Webhook<span className="text-accent">Engine</span>
+          </span>
         </div>
 
         {/* Card */}
