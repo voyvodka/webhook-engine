@@ -114,6 +114,19 @@ public class MessageRepository
             .ToListAsync(ct);
     }
 
+    public async Task<Message?> GetByEndpointAndIdempotencyKeyAsync(
+        Guid appId,
+        Guid endpointId,
+        string idempotencyKey,
+        CancellationToken ct = default)
+    {
+        return await _dbContext.Messages
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.AppId == appId
+                && m.EndpointId == endpointId
+                && m.IdempotencyKey == idempotencyKey, ct);
+    }
+
     public async Task<List<MessageAttempt>> ListAttemptsAsync(Guid messageId, int page, int pageSize, CancellationToken ct = default)
     {
         return await _dbContext.MessageAttempts

@@ -126,6 +126,15 @@ public class WebhookDbContext : DbContext
             entity.HasIndex(e => e.LockedAt).HasDatabaseName("idx_messages_stale_locks").HasFilter("status = 'Sending' AND locked_at IS NOT NULL");
             entity.HasIndex(e => new { e.AppId, e.IdempotencyKey }).HasDatabaseName("idx_messages_app_idempotency").HasFilter("idempotency_key IS NOT NULL");
 
+            // Race-fix uniqueness: at most one row per (app, endpoint, idempotency_key).
+            // Window-based reuse is preserved — RetentionCleanupWorker NULL-outs
+            // idempotency_key on rows past the per-app retention window so the same
+            // key can be re-used in a fresh window without violating this index.
+            entity.HasIndex(e => new { e.AppId, e.EndpointId, e.IdempotencyKey })
+                .HasDatabaseName("idx_messages_app_endpoint_idempotency")
+                .HasFilter("idempotency_key IS NOT NULL")
+                .IsUnique();
+
             entity.HasOne(e => e.Application).WithMany(a => a.Messages).HasForeignKey(e => e.AppId);
             entity.HasOne(e => e.Endpoint).WithMany(ep => ep.Messages).HasForeignKey(e => e.EndpointId);
             entity.HasOne(e => e.EventType).WithMany().HasForeignKey(e => e.EventTypeId);
