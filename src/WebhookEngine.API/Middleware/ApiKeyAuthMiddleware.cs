@@ -1,11 +1,18 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Caching.Memory;
+using WebhookEngine.Core.Entities;
 using WebhookEngine.Infrastructure.Repositories;
 
 namespace WebhookEngine.API.Middleware;
 
 public class ApiKeyAuthMiddleware
 {
+    public static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
+    private const string CacheKeyPrefix = "apikey:prefix:";
+
+    public static string CacheKeyFor(string apiKeyPrefix) => CacheKeyPrefix + apiKeyPrefix;
+
     private readonly RequestDelegate _next;
 
     public ApiKeyAuthMiddleware(RequestDelegate next)
@@ -57,9 +64,16 @@ public class ApiKeyAuthMiddleware
 
         var prefix = $"{parts[0]}_{parts[1]}_";
 
-        // Lookup by prefix, verify by hash
-        var appRepo = context.RequestServices.GetRequiredService<ApplicationRepository>();
-        var app = await appRepo.GetByApiKeyPrefixAsync(prefix);
+        var cache = context.RequestServices.GetRequiredService<IMemoryCache>();
+        if (!cache.TryGetValue(CacheKeyFor(prefix), out Application? app))
+        {
+            var appRepo = context.RequestServices.GetRequiredService<ApplicationRepository>();
+            app = await appRepo.GetByApiKeyPrefixAsync(prefix);
+            if (app is not null)
+            {
+                cache.Set(CacheKeyFor(prefix), app, CacheTtl);
+            }
+        }
 
         if (app is null)
         {
