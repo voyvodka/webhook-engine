@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using WebhookEngine.API.Auth;
-using WebhookEngine.API.Services;
 using WebhookEngine.Core.Entities;
 using WebhookEngine.Core.Options;
 using WebhookEngine.Infrastructure.Data;
@@ -43,6 +42,12 @@ public static class DashboardAdminSeeder
         dbContext.DashboardUsers.Add(user);
         await dbContext.SaveChangesAsync(ct);
 
-        logger.LogInformation("Dashboard admin user seeded for {Email}.", LogSanitizer.RedactEmail(adminEmail));
+        // Intentionally omits the admin email from the log line. CodeQL's
+        // cs/exposure-of-sensitive-information follows the value through any
+        // helper, including a redaction wrapper, so the safest fix is simply
+        // not to emit it. The deployment operator already knows the configured
+        // email from appsettings / environment variables; the log only needs
+        // to confirm that the seed ran.
+        logger.LogInformation("Dashboard admin user seeded.");
     }
 }
