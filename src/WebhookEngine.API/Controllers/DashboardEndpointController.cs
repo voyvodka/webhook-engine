@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -5,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
+using WebhookEngine.Core.Models;
 using WebhookEngine.Infrastructure.Data;
 using WebhookEngine.Infrastructure.Repositories;
 using Endpoint = WebhookEngine.Core.Entities.Endpoint;
@@ -24,17 +28,23 @@ public class DashboardEndpointController : ControllerBase
     private readonly EndpointRepository _endpointRepository;
     private readonly EventTypeRepository _eventTypeRepository;
     private readonly IPayloadTransformer _payloadTransformer;
+    private readonly IDeliveryService _deliveryService;
+    private readonly ISigningService _signingService;
 
     public DashboardEndpointController(
         WebhookDbContext dbContext,
         EndpointRepository endpointRepository,
         EventTypeRepository eventTypeRepository,
-        IPayloadTransformer payloadTransformer)
+        IPayloadTransformer payloadTransformer,
+        IDeliveryService deliveryService,
+        ISigningService signingService)
     {
         _dbContext = dbContext;
         _endpointRepository = endpointRepository;
         _eventTypeRepository = eventTypeRepository;
         _payloadTransformer = payloadTransformer;
+        _deliveryService = deliveryService;
+        _signingService = signingService;
     }
 
     // ──────────────────────────────────────────────────
@@ -78,6 +88,12 @@ public class DashboardEndpointController : ControllerBase
         if (!appExists)
         {
             return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
+        }
+
+        var dnsError = await CheckHostResolvableAsync(request.Url, ct);
+        if (dnsError is not null)
+        {
+            return UnprocessableEntity(ApiEnvelope.Error(HttpContext, "UNPROCESSABLE", dnsError));
         }
 
         var endpoint = new Endpoint
@@ -142,7 +158,14 @@ public class DashboardEndpointController : ControllerBase
         }
 
         if (request.Url is not null)
+        {
+            var dnsError = await CheckHostResolvableAsync(request.Url, ct);
+            if (dnsError is not null)
+            {
+                return UnprocessableEntity(ApiEnvelope.Error(HttpContext, "UNPROCESSABLE", dnsError));
+            }
             endpoint.Url = request.Url;
+        }
 
         if (request.Description is not null)
             endpoint.Description = request.Description;
@@ -256,6 +279,55 @@ public class DashboardEndpointController : ControllerBase
 
         await _endpointRepository.DeleteAsync(endpointId, ct);
         return NoContent();
+    }
+
+    [HttpPost("endpoints/{endpointId:guid}/test")]
+    public async Task<IActionResult> TestEndpoint(Guid endpointId, CancellationToken ct)
+    {
+        var endpoint = await _endpointRepository.GetByIdAsync(endpointId, ct);
+        if (endpoint is null)
+        {
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Endpoint not found."));
+        }
+
+        var signingSecret = endpoint.SecretOverride ?? endpoint.Application?.SigningSecret;
+        if (string.IsNullOrWhiteSpace(signingSecret))
+        {
+            return UnprocessableEntity(ApiEnvelope.Error(HttpContext, "UNPROCESSABLE", "Endpoint has no signing secret configured."));
+        }
+
+        var messageId = $"msg_test_{Guid.NewGuid():N}"[..24];
+        var body = JsonSerializer.Serialize(new
+        {
+            test = true,
+            message = "WebhookEngine test event",
+            sentAt = DateTime.UtcNow,
+            endpointId = endpoint.Id
+        });
+
+        var customHeaders = string.IsNullOrWhiteSpace(endpoint.CustomHeadersJson)
+            ? new Dictionary<string, string>()
+            : JsonSerializer.Deserialize<Dictionary<string, string>>(endpoint.CustomHeadersJson) ?? new Dictionary<string, string>();
+
+        var signed = _signingService.Sign(messageId, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), body, signingSecret);
+        var deliveryRequest = new DeliveryRequest
+        {
+            MessageId = messageId,
+            EndpointUrl = endpoint.Url,
+            Payload = body,
+            SignedHeaders = signed,
+            CustomHeaders = customHeaders
+        };
+
+        var result = await _deliveryService.DeliverAsync(deliveryRequest, ct);
+
+        return Ok(ApiEnvelope.Success(HttpContext, new
+        {
+            success = result.Success,
+            statusCode = result.StatusCode,
+            latencyMs = result.LatencyMs,
+            error = result.Error
+        }));
     }
 
     // ──────────────────────────────────────────────────
@@ -402,6 +474,28 @@ public class DashboardEndpointController : ControllerBase
 
         await _eventTypeRepository.ArchiveAsync(eventTypeId, ct);
         return NoContent();
+    }
+
+    private static async Task<string?> CheckHostResolvableAsync(string url, CancellationToken ct)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        try
+        {
+            await Dns.GetHostAddressesAsync(uri.Host, ct);
+            return null;
+        }
+        catch (SocketException)
+        {
+            return $"Cannot resolve host '{uri.Host}'. Check the URL or DNS configuration.";
+        }
+        catch (ArgumentException)
+        {
+            return $"Invalid host '{uri.Host}'.";
+        }
     }
 }
 
