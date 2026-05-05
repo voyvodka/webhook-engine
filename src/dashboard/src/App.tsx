@@ -4,6 +4,7 @@ import { AuthProvider } from "./auth/AuthContext";
 import { AppShell } from "./layout/AppShell";
 import { LoginPage } from "./pages/LoginPage";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
+import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 
 const DashboardPage = lazy(() =>
   import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
@@ -34,9 +35,10 @@ function PageFallback() {
 
 export function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+    <RouteErrorBoundary>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
           <Route path="/login" element={<LoginPage />} />
 
           <Route element={<ProtectedRoute />}>
@@ -92,9 +94,10 @@ export function App() {
             </Route>
           </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </RouteErrorBoundary>
   );
 }
