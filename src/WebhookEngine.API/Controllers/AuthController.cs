@@ -13,6 +13,9 @@ namespace WebhookEngine.API.Controllers;
 /// Dashboard cookie-based authentication. NOT API key auth.
 /// </summary>
 [ApiController]
+[Produces("application/json")]
+[ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
+[ProducesResponseType<ApiErrorResponse>(StatusCodes.Status500InternalServerError)]
 [Route("api/v1/auth")]
 public class AuthController : ControllerBase
 {
