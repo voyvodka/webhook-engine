@@ -8,10 +8,16 @@ namespace WebhookEngine.API.Startup;
 
 public static class DashboardAdminSeeder
 {
+    private static readonly string[] WeakDefaults =
+    {
+        "changeme", "password", "admin", "admin@example.com"
+    };
+
     public static async Task SeedAsync(
         WebhookDbContext dbContext,
         DashboardAuthOptions options,
         ILogger logger,
+        bool isDevelopment,
         CancellationToken ct = default)
     {
         var adminEmail = options.AdminEmail.Trim();
@@ -21,6 +27,21 @@ public static class DashboardAdminSeeder
         {
             logger.LogWarning("Dashboard admin seed skipped because email/password is empty.");
             return;
+        }
+
+        // Refuse to seed the shipped defaults (admin@example.com / changeme)
+        // outside Development so a forgotten env-var override doesn't end up
+        // creating a known-weak admin in production.
+        var emailIsDefault = adminEmail.Equals("admin@example.com", StringComparison.OrdinalIgnoreCase);
+        var passwordIsWeak = WeakDefaults.Any(d => string.Equals(adminPassword, d, StringComparison.OrdinalIgnoreCase))
+            || adminPassword.Length < 12;
+
+        if (!isDevelopment && (emailIsDefault || passwordIsWeak))
+        {
+            throw new InvalidOperationException(
+                "Refusing to seed dashboard admin with default or weak credentials in non-Development environment. " +
+                "Set WebhookEngine__DashboardAuth__AdminEmail and WebhookEngine__DashboardAuth__AdminPassword " +
+                "(min 12 characters) before starting the host.");
         }
 
         var exists = await dbContext.DashboardUsers
