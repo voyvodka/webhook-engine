@@ -71,6 +71,9 @@ export interface EndpointRow {
   circuitState: CircuitState;
   eventTypes: string[];
   eventTypeIds?: string[];
+  transformExpression?: string | null;
+  transformEnabled?: boolean;
+  transformValidatedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
