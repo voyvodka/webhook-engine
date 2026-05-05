@@ -92,6 +92,14 @@ WebhookEngine__Retention__DeadLetterRetentionDays=90
 # Dashboard auth
 WebhookEngine__DashboardAuth__AdminEmail=admin@example.com
 WebhookEngine__DashboardAuth__AdminPassword=changeme
+
+# Rate limit (per-application token bucket on public API endpoints)
+# Defaults: 500-burst bucket, 100 req/s sustained per app, 200 queued.
+# Tighten for shared multi-tenant deployments; loosen for high-throughput
+# senders.
+WebhookEngine__RateLimit__PermitLimit=500
+WebhookEngine__RateLimit__TokensPerPeriod=100
+WebhookEngine__RateLimit__QueueLimit=200
 ```
 
 ## Security Checklist
