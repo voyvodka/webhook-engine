@@ -139,9 +139,13 @@ builder.Services
         options.Cookie.Name = "webhookengine_dashboard";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
-            ? CookieSecurePolicy.SameAsRequest
-            : CookieSecurePolicy.Always;
+        // Always require HTTPS in real deployments. Development and the
+        // Testing env (used by API.Tests) speak plain HTTP, so they keep
+        // SameAsRequest so the cookie still flows.
+        options.Cookie.SecurePolicy =
+            builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing")
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
         options.SlidingExpiration = true;
         options.ExpireTimeSpan = TimeSpan.FromDays(7);
 
