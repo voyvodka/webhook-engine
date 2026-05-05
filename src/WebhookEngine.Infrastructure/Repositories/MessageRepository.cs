@@ -160,26 +160,39 @@ public class MessageRepository
                 .SetProperty(m => m.DeliveredAt, status == MessageStatus.Delivered ? DateTime.UtcNow : (DateTime?)null), ct);
     }
 
-    public async Task MarkDeliveredAsync(Guid messageId, int attemptCount, CancellationToken ct = default)
+    /// <summary>
+    /// Compare-and-set transition Sending → Delivered. Returns true when the
+    /// row matched (we owned the lock); false when the row had already been
+    /// stolen by stale-lock recovery or another worker — in that case the
+    /// caller must abandon and not record a duplicate attempt.
+    /// </summary>
+    public async Task<bool> MarkDeliveredAsync(Guid messageId, int attemptCount, string lockedBy, CancellationToken ct = default)
     {
-        await _dbContext.Messages
-            .Where(m => m.Id == messageId)
+        var rows = await _dbContext.Messages
+            .Where(m => m.Id == messageId
+                && m.Status == MessageStatus.Sending
+                && m.LockedBy == lockedBy)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(m => m.Status, MessageStatus.Delivered)
                 .SetProperty(m => m.AttemptCount, attemptCount)
                 .SetProperty(m => m.DeliveredAt, DateTime.UtcNow)
                 .SetProperty(m => m.LockedAt, (DateTime?)null)
                 .SetProperty(m => m.LockedBy, (string?)null), ct);
+        return rows == 1;
     }
 
-    public async Task MarkFailedForRetryAsync(
+    /// <inheritdoc cref="MarkDeliveredAsync"/>
+    public async Task<bool> MarkFailedForRetryAsync(
         Guid messageId,
         int attemptCount,
         DateTime nextScheduledAt,
+        string lockedBy,
         CancellationToken ct = default)
     {
-        await _dbContext.Messages
-            .Where(m => m.Id == messageId)
+        var rows = await _dbContext.Messages
+            .Where(m => m.Id == messageId
+                && m.Status == MessageStatus.Sending
+                && m.LockedBy == lockedBy)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(m => m.Status, MessageStatus.Failed)
                 .SetProperty(m => m.AttemptCount, attemptCount)
@@ -187,18 +200,23 @@ public class MessageRepository
                 .SetProperty(m => m.DeliveredAt, (DateTime?)null)
                 .SetProperty(m => m.LockedAt, (DateTime?)null)
                 .SetProperty(m => m.LockedBy, (string?)null), ct);
+        return rows == 1;
     }
 
-    public async Task MarkDeadLetterAsync(Guid messageId, int attemptCount, CancellationToken ct = default)
+    /// <inheritdoc cref="MarkDeliveredAsync"/>
+    public async Task<bool> MarkDeadLetterAsync(Guid messageId, int attemptCount, string lockedBy, CancellationToken ct = default)
     {
-        await _dbContext.Messages
-            .Where(m => m.Id == messageId)
+        var rows = await _dbContext.Messages
+            .Where(m => m.Id == messageId
+                && m.Status == MessageStatus.Sending
+                && m.LockedBy == lockedBy)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(m => m.Status, MessageStatus.DeadLetter)
                 .SetProperty(m => m.AttemptCount, attemptCount)
                 .SetProperty(m => m.DeliveredAt, (DateTime?)null)
                 .SetProperty(m => m.LockedAt, (DateTime?)null)
                 .SetProperty(m => m.LockedBy, (string?)null), ct);
+        return rows == 1;
     }
 
     public async Task ReschedulePendingAsync(Guid messageId, DateTime scheduledAt, CancellationToken ct = default)

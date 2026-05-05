@@ -118,8 +118,12 @@ public class DeliveryWorker : BackgroundService
 
                 if (currentAttemptForCircuit >= message.MaxRetries)
                 {
+                    if (!await messageRepo.MarkDeadLetterAsync(message.Id, currentAttemptForCircuit, _workerId, ct))
+                    {
+                        _logger.LogDebug("MarkDeadLetter (circuit-open) lost the row {MessageId} — abandoning", message.Id);
+                        return;
+                    }
                     _metrics?.RecordDeadLetter();
-                    await messageRepo.MarkDeadLetterAsync(message.Id, currentAttemptForCircuit, ct);
                     _logger.LogWarning(
                         "Message {MessageId} moved to dead letter — circuit open for endpoint {EndpointId}, max retries ({MaxRetries}) exhausted",
                         message.Id, message.EndpointId, message.MaxRetries);
@@ -135,7 +139,10 @@ public class DeliveryWorker : BackgroundService
                 var health = await healthTracker.GetHealthAsync(message.EndpointId, ct);
                 var nextTryAt = health?.CooldownUntil ?? DateTime.UtcNow.AddMinutes(1);
 
-                await messageRepo.MarkFailedForRetryAsync(message.Id, currentAttemptForCircuit, nextTryAt, ct);
+                if (!await messageRepo.MarkFailedForRetryAsync(message.Id, currentAttemptForCircuit, nextTryAt, _workerId, ct))
+                {
+                    _logger.LogDebug("MarkFailedForRetry (circuit-open) lost the row {MessageId} — abandoning", message.Id);
+                }
                 return;
             }
 
@@ -143,7 +150,7 @@ public class DeliveryWorker : BackgroundService
             if (endpoint is null)
             {
                 _logger.LogWarning("Endpoint {EndpointId} not found for message {MessageId}", message.EndpointId, message.Id);
-                await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, ct);
+                await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, ct);
                 return;
             }
 
@@ -171,7 +178,7 @@ public class DeliveryWorker : BackgroundService
             if (string.IsNullOrWhiteSpace(signingSecret))
             {
                 _logger.LogError("Signing secret missing for endpoint {EndpointId}, message {MessageId}", message.EndpointId, message.Id);
-                await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, ct);
+                await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, ct);
                 return;
             }
 
@@ -221,9 +228,15 @@ public class DeliveryWorker : BackgroundService
 
             if (result.Success)
             {
-                _metrics?.RecordDeliverySuccess(result.LatencyMs);
-                await messageRepo.MarkDeliveredAsync(message.Id, currentAttempt, ct);
+                if (!await messageRepo.MarkDeliveredAsync(message.Id, currentAttempt, _workerId, ct))
+                {
+                    _logger.LogWarning(
+                        "MarkDelivered lost the row {MessageId} (stale-lock recovered or another worker took over) — abandoning to avoid duplicate state",
+                        message.Id);
+                    return;
+                }
                 message.Status = MessageStatus.Delivered;
+                _metrics?.RecordDeliverySuccess(result.LatencyMs);
                 await healthTracker.RecordSuccessAsync(message.EndpointId, ct);
                 _logger.LogInformation("Message {MessageId} delivered to {EndpointId} in {LatencyMs}ms", message.Id, message.EndpointId, result.LatencyMs);
 
@@ -237,8 +250,12 @@ public class DeliveryWorker : BackgroundService
 
                 if (currentAttempt >= message.MaxRetries)
                 {
+                    if (!await messageRepo.MarkDeadLetterAsync(message.Id, currentAttempt, _workerId, ct))
+                    {
+                        _logger.LogWarning("MarkDeadLetter lost the row {MessageId} — abandoning", message.Id);
+                        return;
+                    }
                     _metrics?.RecordDeadLetter();
-                    await messageRepo.MarkDeadLetterAsync(message.Id, currentAttempt, ct);
                     message.Status = MessageStatus.DeadLetter;
                     _logger.LogWarning("Message {MessageId} moved to dead letter after {AttemptCount} attempts", message.Id, currentAttempt);
 
@@ -247,9 +264,13 @@ public class DeliveryWorker : BackgroundService
                 }
                 else
                 {
-                    _metrics?.RecordRetryScheduled();
                     var nextRetryAt = CalculateNextRetryAt(currentAttempt);
-                    await messageRepo.MarkFailedForRetryAsync(message.Id, currentAttempt, nextRetryAt, ct);
+                    if (!await messageRepo.MarkFailedForRetryAsync(message.Id, currentAttempt, nextRetryAt, _workerId, ct))
+                    {
+                        _logger.LogWarning("MarkFailedForRetry lost the row {MessageId} — abandoning", message.Id);
+                        return;
+                    }
+                    _metrics?.RecordRetryScheduled();
                     message.Status = MessageStatus.Failed;
                     _logger.LogWarning(
                         "Message {MessageId} delivery failed (attempt {AttemptCount}). Next retry at {NextRetryAt}. Error: {Error}",
