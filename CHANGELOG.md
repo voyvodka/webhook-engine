@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Security
+- **Docker base image refresh (Docker Scout cleanup):** all three Dockerfile stages (`oven/bun:1-alpine`, `mcr.microsoft.com/dotnet/sdk:10.0`, `mcr.microsoft.com/dotnet/aspnet:10.0-alpine`) now ship with SHA-256 digest pins so Dependabot can track and bump them, and the release workflow forces `pull: true` to bypass the GitHub Actions build cache when fetching upstream layers. The published image picks up the latest Alpine 3.23.4 patches: openssl/libcrypto3/libssl3 `3.5.5-r0` → `3.5.6-r0` (1 critical + 5 high CVEs cleared) and musl `1.2.5-r21` → `1.2.5-r23` (1 high CVE cleared). The remaining busybox advisory has no upstream patch yet and persists across the Alpine ecosystem.
+
 ### Added
 - **Brand icon on the NuGet package + Docker Hub description sync:** the `WebhookEngine.Sdk` NuGet package now ships with a 256×256 brand icon (the same diamond + three-dots mark used on the landing page and dashboard), so the package shows the project logo on nuget.org instead of the default placeholder. The release workflow also runs `peter-evans/dockerhub-description` after pushing the Docker image, syncing the GitHub README into the Docker Hub repository's "Overview" tab on every release. Image labels gained `org.opencontainers.image.documentation` and `org.opencontainers.image.vendor`.
 - **OpenAPI document + Scalar interactive reference:** the API host now generates an OpenAPI 3 document via `Microsoft.AspNetCore.OpenApi` (.NET 10 native) and serves an interactive [Scalar](https://scalar.com/) UI alongside it. Routes — `/openapi/v1.json` (spec) and `/scalar` (UI) — are mapped only in `Development` and `Staging` environments; `Production` deployments leave the surface unmapped. The document covers all 39 controller routes and is suitable for SDK auto-generation.
