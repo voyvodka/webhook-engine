@@ -96,6 +96,19 @@ Detailed rules live in `.claude/rules/` — consult them while writing code.
 - `chore/<short-slug>` — config / tooling tweaks
 - `dependabot/...` — created automatically; do not rename
 
+### Post-merge cleanup (remote + local)
+
+The repo has `delete_branch_on_merge=true` enabled, so merged head branches disappear from `origin` automatically. To stay in sync locally, the repo's `.git/config` carries `fetch.prune=true`, which means **every** `git fetch` / `git pull` removes stale `origin/...` tracking refs in one step. After a PR merges, run:
+
+```bash
+git checkout main && git pull --ff-only origin main
+git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads \
+  | awk '$2=="[gone]" && $1!="main" {print $1}' \
+  | xargs -r git branch -D
+```
+
+The `awk` line drops every local branch whose upstream has gone away (the merged feature branch). Runs as a no-op when there is nothing to clean.
+
 ### Required labels per PR
 Every PR carries **at least one type label** and **at least one area label** so the changelog can be grouped at release time. Apply via `gh pr edit <n> --add-label <label>` or the PR sidebar.
 
