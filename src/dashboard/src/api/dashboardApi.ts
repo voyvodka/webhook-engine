@@ -27,28 +27,49 @@ async function parseError(response: Response): Promise<string> {
   return `Request failed with status ${response.status}`;
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
+/**
+ * Fired by fetchJson/mutate when the server returns 401 on an authenticated
+ * dashboard call. AuthContext listens and pushes the user back to /login.
+ * Login / logout endpoints opt out via the `skipAuthRedirect` flag.
+ */
+const AUTH_EXPIRED_EVENT = "webhookengine:auth-expired";
+
+function maybeFireAuthExpired(url: string, status: number) {
+  if (status !== 401) return;
+  if (url.includes("/api/v1/auth/")) return; // login/logout naturally 401
+  window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
+}
+
+export const AuthEvents = {
+  AuthExpired: AUTH_EXPIRED_EVENT
+};
+
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     credentials: "include",
-    headers: { "Content-Type": "application/json" }
+    headers: { "Content-Type": "application/json" },
+    ...init
   });
 
   if (!response.ok) {
+    maybeFireAuthExpired(url, response.status);
     throw new Error(await parseError(response));
   }
 
   return (await response.json()) as T;
 }
 
-async function mutate<T>(url: string, method: string, body?: unknown): Promise<T> {
+async function mutate<T>(url: string, method: string, body?: unknown, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     method,
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {})
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    ...init
   });
 
   if (!response.ok) {
+    maybeFireAuthExpired(url, response.status);
     throw new Error(await parseError(response));
   }
 
