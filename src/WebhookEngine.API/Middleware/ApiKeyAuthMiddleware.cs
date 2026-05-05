@@ -71,7 +71,11 @@ public class ApiKeyAuthMiddleware
             app = await appRepo.GetByApiKeyPrefixAsync(prefix);
             if (app is not null)
             {
-                cache.Set(CacheKeyFor(prefix), app, CacheTtl);
+                cache.Set(CacheKeyFor(prefix), app, new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = CacheTtl,
+                    Size = 1
+                });
             }
         }
 

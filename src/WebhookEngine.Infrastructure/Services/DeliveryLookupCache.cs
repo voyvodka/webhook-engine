@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Primitives;
 using WebhookEngine.Core.Entities;
 using WebhookEngine.Infrastructure.Repositories;
 
@@ -7,14 +9,22 @@ namespace WebhookEngine.Infrastructure.Services;
 /// <summary>
 /// Short-TTL cache for the per-message lookups that the public send / batch
 /// endpoints make on every call: event-type-by-name, event-type-by-id, and
-/// the set of endpoints subscribed to a given event type. The 30 s TTL is a
-/// trade-off — operators that just added a new endpoint or a new event type
-/// see it pick up traffic within at most 30 s, and same-node mutation paths
-/// invalidate the cache synchronously via Invalidate.
+/// the set of endpoints subscribed to a given event type.
+///
+/// Invalidation: a per-application <see cref="CancellationTokenSource"/>
+/// is registered as a change-token on every entry. Calling
+/// <see cref="InvalidateApplication"/> cancels the token and the cache
+/// drops every entry for that app on next access. TTL stays as a
+/// safety net for multi-node deployments where another instance mutates.
 /// </summary>
 public sealed class DeliveryLookupCache
 {
     private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(30);
+
+    // The CancellationTokenSource per application is shared across all
+    // entries for that app. Replacing the entry on cancel resets the
+    // source so future entries get a live token.
+    private static readonly ConcurrentDictionary<Guid, CancellationTokenSource> AppTokens = new();
 
     private readonly IMemoryCache _cache;
     private readonly EventTypeRepository _eventTypeRepository;
@@ -41,7 +51,7 @@ public sealed class DeliveryLookupCache
         var fresh = await _eventTypeRepository.GetByIdAsync(appId, eventTypeId, ct);
         if (fresh is not null)
         {
-            _cache.Set(key, fresh, Ttl);
+            Set(appId, key, fresh);
         }
         return fresh;
     }
@@ -57,7 +67,7 @@ public sealed class DeliveryLookupCache
         var fresh = await _eventTypeRepository.GetByNameAsync(appId, name, ct);
         if (fresh is not null)
         {
-            _cache.Set(key, fresh, Ttl);
+            Set(appId, key, fresh);
         }
         return fresh;
     }
@@ -71,8 +81,38 @@ public sealed class DeliveryLookupCache
         }
 
         var fresh = await _endpointRepository.GetSubscribedEndpointsAsync(appId, eventTypeId, ct);
-        _cache.Set(key, fresh, Ttl);
+        Set(appId, key, fresh);
         return fresh;
     }
 
+    /// <summary>
+    /// Drops every cached lookup for the given application synchronously on
+    /// this node. Other nodes still rely on the 30 s TTL.
+    /// </summary>
+    public static void InvalidateApplication(Guid appId)
+    {
+        if (AppTokens.TryRemove(appId, out var source))
+        {
+            try
+            {
+                source.Cancel();
+            }
+            finally
+            {
+                source.Dispose();
+            }
+        }
+    }
+
+    private void Set(Guid appId, string key, object value)
+    {
+        var token = AppTokens.GetOrAdd(appId, _ => new CancellationTokenSource());
+        var entryOptions = new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = Ttl,
+            Size = 1
+        };
+        entryOptions.AddExpirationToken(new CancellationChangeToken(token.Token));
+        _cache.Set(key, value, entryOptions);
+    }
 }

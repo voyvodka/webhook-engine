@@ -4,6 +4,7 @@ using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Infrastructure.Data;
 using WebhookEngine.Infrastructure.Repositories;
+using WebhookEngine.Infrastructure.Services;
 using Endpoint = WebhookEngine.Core.Entities.Endpoint;
 
 namespace WebhookEngine.API.Controllers;
@@ -63,6 +64,7 @@ public class EndpointsController : ControllerBase
         }
 
         await _endpointRepo.CreateAsync(endpoint, ct);
+        DeliveryLookupCache.InvalidateApplication(appId);
         var createdEndpoint = await _endpointRepo.GetByIdAsync(appId, endpoint.Id, ct) ?? endpoint;
 
         return Created(
@@ -149,6 +151,7 @@ public class EndpointsController : ControllerBase
         }
 
         await _endpointRepo.UpdateAsync(endpoint, ct);
+        DeliveryLookupCache.InvalidateApplication(appId);
         var updatedEndpoint = await _endpointRepo.GetByIdAsync(appId, endpoint.Id, ct) ?? endpoint;
 
         return Ok(ApiEnvelope.Success(HttpContext, updatedEndpoint.ToDto()));
@@ -164,6 +167,7 @@ public class EndpointsController : ControllerBase
 
         endpoint.Status = EndpointStatus.Disabled;
         await _endpointRepo.UpdateAsync(endpoint, ct);
+        DeliveryLookupCache.InvalidateApplication(appId);
 
         return Ok(ApiEnvelope.Success(HttpContext, endpoint.ToDto()));
     }
@@ -178,6 +182,7 @@ public class EndpointsController : ControllerBase
 
         endpoint.Status = EndpointStatus.Active;
         await _endpointRepo.UpdateAsync(endpoint, ct);
+        DeliveryLookupCache.InvalidateApplication(appId);
 
         return Ok(ApiEnvelope.Success(HttpContext, endpoint.ToDto()));
     }
@@ -187,6 +192,7 @@ public class EndpointsController : ControllerBase
     {
         var appId = (Guid)HttpContext.Items["AppId"]!;
         await _endpointRepo.DeleteAsync(appId, endpointId, ct);
+        DeliveryLookupCache.InvalidateApplication(appId);
         return NoContent();
     }
 

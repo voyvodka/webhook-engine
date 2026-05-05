@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Entities;
 using WebhookEngine.Infrastructure.Repositories;
+using WebhookEngine.Infrastructure.Services;
 
 namespace WebhookEngine.API.Controllers;
 
@@ -44,6 +45,7 @@ public class EventTypesController : ControllerBase
         };
 
         await _eventTypeRepo.CreateAsync(eventType, ct);
+        DeliveryLookupCache.InvalidateApplication(appId);
 
         return Created(
             $"/api/v1/event-types/{eventType.Id}",
@@ -99,6 +101,7 @@ public class EventTypesController : ControllerBase
             eventType.SchemaJson = System.Text.Json.JsonSerializer.Serialize(request.Schema);
 
         await _eventTypeRepo.UpdateAsync(eventType, ct);
+        DeliveryLookupCache.InvalidateApplication(eventType.AppId);
 
         return Ok(ApiEnvelope.Success(HttpContext, eventType.ToDto()));
     }
@@ -112,6 +115,7 @@ public class EventTypesController : ControllerBase
             return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Event type not found."));
 
         await _eventTypeRepo.ArchiveAsync(appId, eventTypeId, ct);
+        DeliveryLookupCache.InvalidateApplication(appId);
         return NoContent();
     }
 }

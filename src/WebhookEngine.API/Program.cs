@@ -183,10 +183,10 @@ builder.Services.AddMvcCore(options => options.Filters.Add<FluentValidationFilte
 builder.Services.AddSignalR();
 
 // In-memory cache used by ApiKeyAuthMiddleware (api-key→application) and
-// DeliveryLookupCache (event-type / subscribed-endpoints lookups on the
-// public send path). Auth cache invalidates synchronously; the delivery
-// lookups rely on a 30 s TTL.
-builder.Services.AddMemoryCache();
+// DeliveryLookupCache (event-type / subscribed-endpoints on the public
+// send path). SizeLimit caps unbounded growth in multi-tenant deployments;
+// every Set passes Size=1 so the limit translates to "10k entries".
+builder.Services.AddMemoryCache(o => o.SizeLimit = 10_000);
 builder.Services.AddScoped<DeliveryLookupCache>();
 
 // OpenAPI
