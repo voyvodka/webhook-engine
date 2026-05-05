@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Entities;
 using WebhookEngine.Core.Enums;
@@ -299,12 +301,35 @@ public class MessagesController : ControllerBase
                 ScheduledAt = DateTime.UtcNow
             };
 
-            await _messageQueue.EnqueueAsync(message, ct);
-            messageIds.Add(message.Id);
+            try
+            {
+                await _messageQueue.EnqueueAsync(message, ct);
+                messageIds.Add(message.Id);
+            }
+            catch (DbUpdateException ex) when (IsIdempotencyConflict(ex))
+            {
+                // Concurrent request raced with us on the same (app, endpoint,
+                // idempotency_key). Stripe-style replay: fetch the winning row
+                // and return its id as if we'd enqueued it ourselves.
+                if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+                {
+                    var winner = await _messageRepo.GetByEndpointAndIdempotencyKeyAsync(
+                        appId, endpoint.Id, request.IdempotencyKey, ct);
+                    if (winner is not null)
+                        messageIds.Add(winner.Id);
+                }
+            }
         }
 
         return SendOperationResult.Ok(eventTypeResolution.EventTypeName!, messageIds, endpoints.Count);
     }
+
+    private static bool IsIdempotencyConflict(DbUpdateException ex)
+        => ex.InnerException is PostgresException
+        {
+            SqlState: "23505",
+            ConstraintName: "idx_messages_app_endpoint_idempotency"
+        };
 
     private async Task<EventTypeResolutionResult> ResolveEventTypeAsync(
         Guid appId,

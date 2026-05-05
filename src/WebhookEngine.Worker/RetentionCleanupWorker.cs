@@ -56,10 +56,15 @@ public class RetentionCleanupWorker : BackgroundService
                     deadLetterCutoff,
                     stoppingToken);
 
+                var nulledIdempotencyKeys = await NullifyExpiredIdempotencyKeysAsync(
+                    dbContext,
+                    stoppingToken);
+
                 _logger.LogInformation(
-                    "Retention cleanup completed. DeletedDelivered: {DeletedDelivered}, DeletedDeadLetter: {DeletedDeadLetter}",
+                    "Retention cleanup completed. DeletedDelivered: {DeletedDelivered}, DeletedDeadLetter: {DeletedDeadLetter}, NulledIdempotencyKeys: {NulledIdempotencyKeys}",
                     deletedDelivered,
-                    deletedDeadLetter);
+                    deletedDeadLetter,
+                    nulledIdempotencyKeys);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -100,6 +105,56 @@ public class RetentionCleanupWorker : BackgroundService
         }
 
         return totalDeleted;
+    }
+
+    // Window-expired rows lose their idempotency_key so the same key can be
+    // re-used in a fresh window without violating the unique partial index
+    // on (app_id, endpoint_id, idempotency_key) WHERE idempotency_key IS NOT NULL.
+    // Stripe-style: idempotency keys are valid only inside the configured
+    // per-app window (default 24h) and the row itself is preserved.
+    private static async Task<int> NullifyExpiredIdempotencyKeysAsync(
+        WebhookDbContext dbContext,
+        CancellationToken ct)
+    {
+        var apps = await dbContext.Applications
+            .AsNoTracking()
+            .Select(a => new { a.Id, a.IdempotencyWindowMinutes })
+            .ToListAsync(ct);
+
+        var totalNulled = 0;
+        var nowUtc = DateTime.UtcNow;
+
+        foreach (var app in apps)
+        {
+            if (ct.IsCancellationRequested)
+            {
+                break;
+            }
+
+            var cutoff = nowUtc.AddMinutes(-app.IdempotencyWindowMinutes);
+
+            while (!ct.IsCancellationRequested)
+            {
+                var batch = await dbContext.Messages
+                    .Where(m => m.AppId == app.Id
+                        && m.IdempotencyKey != null
+                        && m.CreatedAt < cutoff)
+                    .OrderBy(m => m.CreatedAt)
+                    .Take(BatchSize)
+                    .ExecuteUpdateAsync(
+                        s => s.SetProperty(m => m.IdempotencyKey, (string?)null),
+                        ct);
+
+                if (batch == 0)
+                {
+                    break;
+                }
+
+                totalNulled += batch;
+            }
+        }
+
+        return totalNulled;
     }
 
     private static TimeSpan GetDelayUntilNextRunUtc(DateTime nowUtc)
