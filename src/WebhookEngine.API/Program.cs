@@ -28,6 +28,13 @@ using WebhookEngine.Worker;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Give in-flight HTTP deliveries up to 45 s to finish on SIGTERM rather
+// than the default 30 s host shutdown grace. Combined with the
+// DeliveryOptions.TimeoutSeconds (default 30 s), this covers the worst-
+// case slow receiver without leaving stale locks for StaleLockRecovery
+// to pick up after every rolling deploy.
+builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(45));
+
 // Serilog
 builder.Host.UseSerilog((context, configuration) =>
     configuration.ReadFrom.Configuration(context.Configuration));
