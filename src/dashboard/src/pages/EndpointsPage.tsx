@@ -4,6 +4,7 @@ import { Modal } from "../components/Modal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Select } from "../components/Select";
 import { EventTypeSelect } from "../components/EventTypeSelect";
+import { TransformSection } from "../components/TransformSection";
 import {
   createDashboardEndpoint,
   deleteDashboardEndpoint,
@@ -66,6 +67,8 @@ export function EndpointsPage() {
   const [createUrl, setCreateUrl] = useState("");
   const [createDescription, setCreateDescription] = useState("");
   const [createFilterEventTypeIds, setCreateFilterEventTypeIds] = useState<string[]>([]);
+  const [createTransformExpression, setCreateTransformExpression] = useState("");
+  const [createTransformEnabled, setCreateTransformEnabled] = useState(false);
   const [creating, setCreating] = useState(false);
 
   // Edit modal
@@ -73,6 +76,8 @@ export function EndpointsPage() {
   const [editUrl, setEditUrl] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editFilterEventTypeIds, setEditFilterEventTypeIds] = useState<string[]>([]);
+  const [editTransformExpression, setEditTransformExpression] = useState("");
+  const [editTransformEnabled, setEditTransformEnabled] = useState(false);
   const [updating, setUpdating] = useState(false);
 
   // Confirm modal
@@ -138,18 +143,27 @@ export function EndpointsPage() {
   const handleFilterChange = (value: string) => { setStatusFilter(value); setPage(1); };
   const handleAppFilterChange = (value: string) => { setAppFilter(value); setPage(1); };
 
-  const resetCreateForm = () => { setCreateUrl(""); setCreateDescription(""); setCreateFilterEventTypeIds([]); };
+  const resetCreateForm = () => {
+    setCreateUrl("");
+    setCreateDescription("");
+    setCreateFilterEventTypeIds([]);
+    setCreateTransformExpression("");
+    setCreateTransformEnabled(false);
+  };
 
   const handleCreate = async () => {
     if (!createAppId || !createUrl.trim()) return;
     setCreating(true);
     setError("");
     try {
+      const trimmedExpr = createTransformExpression.trim();
       await createDashboardEndpoint({
         appId: createAppId,
         url: createUrl.trim(),
         description: createDescription.trim() || undefined,
-        filterEventTypes: createFilterEventTypeIds.length > 0 ? createFilterEventTypeIds : []
+        filterEventTypes: createFilterEventTypeIds.length > 0 ? createFilterEventTypeIds : [],
+        transformExpression: trimmedExpr || null,
+        transformEnabled: createTransformEnabled && trimmedExpr.length > 0
       });
       resetCreateForm();
       setShowCreate(false);
@@ -165,6 +179,8 @@ export function EndpointsPage() {
     setEditingEndpointId(endpoint.id);
     setEditUrl(endpoint.url);
     setEditDescription(endpoint.description ?? "");
+    setEditTransformExpression(endpoint.transformExpression ?? "");
+    setEditTransformEnabled(endpoint.transformEnabled ?? false);
     try {
       const knownEventTypes = await ensureEventTypesLoaded(endpoint.appId);
       const fallbackIds = knownEventTypes.filter((et) => endpoint.eventTypes.includes(et.name)).map((et) => et.id);
@@ -174,17 +190,27 @@ export function EndpointsPage() {
     }
   };
 
-  const cancelEdit = () => { setEditingEndpointId(null); setEditUrl(""); setEditDescription(""); setEditFilterEventTypeIds([]); };
+  const cancelEdit = () => {
+    setEditingEndpointId(null);
+    setEditUrl("");
+    setEditDescription("");
+    setEditFilterEventTypeIds([]);
+    setEditTransformExpression("");
+    setEditTransformEnabled(false);
+  };
 
   const handleUpdate = async () => {
     if (!editingEndpoint || !editUrl.trim()) return;
     setUpdating(true);
     setError("");
     try {
+      const trimmedExpr = editTransformExpression.trim();
       await updateDashboardEndpoint(editingEndpoint.id, {
         url: editUrl.trim(),
         description: editDescription.trim() || undefined,
-        filterEventTypes: editFilterEventTypeIds
+        filterEventTypes: editFilterEventTypeIds,
+        transformExpression: trimmedExpr.length > 0 ? trimmedExpr : "",
+        transformEnabled: editTransformEnabled && trimmedExpr.length > 0
       });
       cancelEdit();
       await fetchEndpoints();
@@ -409,6 +435,14 @@ export function EndpointsPage() {
               <p className="text-xs text-text-muted mt-1">No selection = receives all events for this app.</p>
             </div>
           )}
+          <TransformSection
+            enabled={createTransformEnabled}
+            expression={createTransformExpression}
+            onChange={(next) => {
+              setCreateTransformEnabled(next.enabled);
+              setCreateTransformExpression(next.expression);
+            }}
+          />
           <div className="flex items-center justify-end gap-2 pt-2">
             <button onClick={() => { setShowCreate(false); resetCreateForm(); }} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-border bg-surface-2 text-text-secondary hover:text-text-primary hover:bg-surface-3 transition-colors">
               Cancel
@@ -447,6 +481,14 @@ export function EndpointsPage() {
               <EventTypeSelect eventTypes={editEventTypes} selected={editFilterEventTypeIds} onChange={setEditFilterEventTypeIds} />
             </div>
           )}
+          <TransformSection
+            enabled={editTransformEnabled}
+            expression={editTransformExpression}
+            onChange={(next) => {
+              setEditTransformEnabled(next.enabled);
+              setEditTransformExpression(next.expression);
+            }}
+          />
           <div className="flex items-center justify-end gap-2 pt-2">
             <button onClick={cancelEdit} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-border bg-surface-2 text-text-secondary hover:text-text-primary hover:bg-surface-3 transition-colors">
               Cancel
