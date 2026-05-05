@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-05-05
+
 ### Fixed
 - **Multi-architecture Docker image:** the published image now ships for both `linux/amd64` and `linux/arm64`. Previous releases were amd64-only, which meant Apple Silicon Macs and arm64 Linux servers got `no matching manifest for linux/arm64/v8` when running `docker pull voyvodka/webhook-engine`. The release workflow gains a QEMU setup step and the build action now passes `platforms: linux/amd64,linux/arm64`.
 - **Removed phantom "unknown / unknown" tag entry on Docker Hub:** `docker/build-push-action`'s default provenance + SBOM attestations were landing on Docker Hub as a separate "unknown / unknown" platform row alongside the real architectures. `provenance: false` and `sbom: false` are now set explicitly so each tag lists only the platforms it actually contains.
