@@ -1,7 +1,11 @@
 # ============================================================
 # Stage 1: Dashboard build (React SPA)
 # ============================================================
-FROM oven/bun:1-alpine AS dashboard-build
+# Image digests pinned for reproducible builds + Dependabot-tracked security
+# updates. The mutable tag (oven/bun:1-alpine, dotnet/sdk:10.0,
+# dotnet/aspnet:10.0-alpine) is kept alongside so Dependabot can detect when
+# a newer digest is published and open an automatic bump PR.
+FROM oven/bun:1-alpine@sha256:4de475389889577f346c636f956b42a5c31501b654664e9ae5726f94d7bb5349 AS dashboard-build
 WORKDIR /dashboard
 
 COPY src/dashboard/package.json src/dashboard/bun.lock ./
@@ -13,7 +17,7 @@ RUN bun run build
 # ============================================================
 # Stage 2: .NET restore + publish
 # ============================================================
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS backend-build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:8a90a473da5205a16979de99d2fc20975e922c68304f5c79d564e666dc3982fc AS backend-build
 WORKDIR /src
 
 # Copy solution and project files for layer-cached restore
@@ -45,7 +49,7 @@ RUN dotnet publish src/WebhookEngine.API/WebhookEngine.API.csproj \
 # ============================================================
 # Stage 3: Runtime
 # ============================================================
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine@sha256:60eb031b554df75a4b9f358290a2fa15d8961a3bc79b47bb34a00e31f7b78c69 AS runtime
 
 # Labels
 LABEL org.opencontainers.image.title="WebhookEngine" \
