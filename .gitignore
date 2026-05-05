@@ -24,6 +24,7 @@ docs/*
 !docs/RELEASE.md
 !docs/ROADMAP.md
 !docs/PRD.md
+!docs/PERFORMANCE.md
 !docs/adr/
 docs/adr/*
 !docs/adr/*.md
@@ -526,3 +527,8 @@ src/WebhookEngine.API/wwwroot/favicon.svg
 .vscode/
 *.code-workspace
 .planning/
+
+# Benchmark artifacts
+tests/benchmark/results/
+tests/benchmark/.bench.env
+tests/benchmark/k6/*-*.json
