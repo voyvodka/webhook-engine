@@ -33,7 +33,12 @@ Self-hosted webhook delivery platform with reliable at-least-once delivery, expo
 
 ## Quick Start
 
+> [!IMPORTANT]
+> **The published image requires a PostgreSQL database** — it cannot be launched standalone via Docker Hub's "Run" button. The container's first action on startup is `Database.MigrateAsync()`; with no database reachable it exits within seconds. Use one of the two options below.
+
 ### Docker Compose (recommended)
+
+The bundled compose file starts PostgreSQL alongside the engine, with sensible defaults:
 
 ```bash
 git clone https://github.com/voyvodka/webhook-engine.git
@@ -42,6 +47,21 @@ docker compose -f docker/docker-compose.yml up -d
 ```
 
 The app starts on `http://localhost:5100`. Dashboard login: `admin@example.com` / `changeme`.
+
+### Manual `docker run` against an existing PostgreSQL
+
+If you already operate a PostgreSQL instance, run the image directly and point it at your database:
+
+```bash
+docker run -d --name webhook-engine \
+  -p 8080:8080 \
+  -e ConnectionStrings__WebhookDb="Host=your-postgres;Port=5432;Database=webhookengine;Username=postgres;Password=secret" \
+  -e Dashboard__AdminEmail="admin@example.com" \
+  -e Dashboard__AdminPassword="StrongPassword123!" \
+  voyvodka/webhook-engine:latest
+```
+
+The container listens on port `8080` internally; map it to whatever host port suits your environment. See [`docs/SELF-HOSTING.md`](docs/SELF-HOSTING.md) for the full configuration reference (rate limits, retention, retry policy, signing secret rotation, etc.).
 
 ### Local Development
 
