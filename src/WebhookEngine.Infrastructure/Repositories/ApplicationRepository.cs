@@ -20,7 +20,9 @@ public class ApplicationRepository
 
     public async Task<Application?> GetByApiKeyPrefixAsync(string prefix, CancellationToken ct = default)
     {
-        return await _dbContext.Applications.FirstOrDefaultAsync(a => a.ApiKeyPrefix == prefix, ct);
+        return await _dbContext.Applications
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.ApiKeyPrefix == prefix, ct);
     }
 
     public async Task<List<Application>> ListAsync(int page, int pageSize, CancellationToken ct = default)

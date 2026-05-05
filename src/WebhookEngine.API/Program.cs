@@ -131,10 +131,12 @@ builder.Services.AddMvcCore(options => options.Filters.Add<FluentValidationFilte
 // SignalR
 builder.Services.AddSignalR();
 
-// In-memory cache used by ApiKeyAuthMiddleware to avoid hitting the
-// applications table on every public-API request. Invalidated on
-// application update/delete/rotate.
+// In-memory cache used by ApiKeyAuthMiddleware (api-key→application) and
+// DeliveryLookupCache (event-type / subscribed-endpoints lookups on the
+// public send path). Auth cache invalidates synchronously; the delivery
+// lookups rely on a 30 s TTL.
 builder.Services.AddMemoryCache();
+builder.Services.AddScoped<DeliveryLookupCache>();
 
 // OpenAPI
 builder.Services.AddOpenApi(options =>

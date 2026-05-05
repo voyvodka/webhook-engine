@@ -34,7 +34,7 @@ services:
       # in-network http://receiver target is accepted (no TLS in the bench
       # stack on purpose — we want raw delivery throughput, not TLS overhead).
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__Default=Host=postgres;Port=5432;Database=webhookengine;Username=webhookengine;Password=webhookengine
+      - ConnectionStrings__Default=Host=postgres;Port=5432;Database=webhookengine;Username=webhookengine;Password=webhookengine;Maximum Pool Size=200;Minimum Pool Size=10
       - WebhookEngine__DashboardAuth__AdminEmail=admin@bench.local
       - WebhookEngine__DashboardAuth__AdminPassword=BenchPassword123!
       - WebhookEngine__Delivery__BatchSize=100

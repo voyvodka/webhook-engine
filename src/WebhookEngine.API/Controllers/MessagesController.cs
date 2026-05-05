@@ -5,6 +5,7 @@ using WebhookEngine.Core.Entities;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Infrastructure.Repositories;
+using WebhookEngine.Infrastructure.Services;
 
 namespace WebhookEngine.API.Controllers;
 
@@ -20,19 +21,22 @@ public class MessagesController : ControllerBase
     private readonly EventTypeRepository _eventTypeRepo;
     private readonly IMessageQueue _messageQueue;
     private readonly ApplicationRepository _appRepo;
+    private readonly DeliveryLookupCache _lookupCache;
 
     public MessagesController(
         MessageRepository messageRepo,
         EndpointRepository endpointRepo,
         EventTypeRepository eventTypeRepo,
         IMessageQueue messageQueue,
-        ApplicationRepository appRepo)
+        ApplicationRepository appRepo,
+        DeliveryLookupCache lookupCache)
     {
         _messageRepo = messageRepo;
         _endpointRepo = endpointRepo;
         _eventTypeRepo = eventTypeRepo;
         _messageQueue = messageQueue;
         _appRepo = appRepo;
+        _lookupCache = lookupCache;
     }
 
     [HttpPost]
@@ -272,7 +276,7 @@ public class MessagesController : ControllerBase
             }
         }
 
-        var endpoints = await _endpointRepo.GetSubscribedEndpointsAsync(appId, eventTypeResolution.EventTypeId!.Value, ct);
+        var endpoints = await _lookupCache.GetSubscribedEndpointsAsync(appId, eventTypeResolution.EventTypeId!.Value, ct);
 
         if (endpoints.Count == 0)
         {
@@ -310,7 +314,7 @@ public class MessagesController : ControllerBase
     {
         if (eventTypeId.HasValue)
         {
-            var eventType = await _eventTypeRepo.GetByIdAsync(appId, eventTypeId.Value, ct);
+            var eventType = await _lookupCache.GetEventTypeByIdAsync(appId, eventTypeId.Value, ct);
             if (eventType is null)
                 return EventTypeResolutionResult.Failure("UNPROCESSABLE", "Event type not found for this application.");
 
@@ -323,7 +327,7 @@ public class MessagesController : ControllerBase
             return EventTypeResolutionResult.Ok(eventType.Id, eventType.Name);
         }
 
-        var resolvedByName = await _eventTypeRepo.GetByNameAsync(appId, eventTypeName ?? string.Empty, ct);
+        var resolvedByName = await _lookupCache.GetEventTypeByNameAsync(appId, eventTypeName ?? string.Empty, ct);
         if (resolvedByName is null)
             return EventTypeResolutionResult.Failure("UNPROCESSABLE", "Event type not found for this application.");
 
