@@ -81,6 +81,11 @@ public class CreateEndpointRequestValidator : AbstractValidator<CreateEndpointRe
             .MaximumLength(4096)
             .When(x => x.TransformExpression is not null)
             .WithMessage("TransformExpression must not exceed 4096 characters.");
+
+        RuleFor(x => x.CustomHeaders)
+            .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
+            .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
+            .When(x => x.CustomHeaders is not null);
     }
 }
 
@@ -101,6 +106,11 @@ public class UpdateEndpointRequestValidator : AbstractValidator<UpdateEndpointRe
             .MaximumLength(4096)
             .When(x => x.TransformExpression is not null)
             .WithMessage("TransformExpression must not exceed 4096 characters.");
+
+        RuleFor(x => x.CustomHeaders)
+            .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
+            .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
+            .When(x => x.CustomHeaders is not null);
 
         RuleFor(x => x)
             .Must(x => x.Url is not null
@@ -135,6 +145,11 @@ public class DashboardCreateEndpointRequestValidator : AbstractValidator<Dashboa
             .MaximumLength(4096)
             .When(x => x.TransformExpression is not null)
             .WithMessage("TransformExpression must not exceed 4096 characters.");
+
+        RuleFor(x => x.CustomHeaders)
+            .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
+            .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
+            .When(x => x.CustomHeaders is not null);
     }
 }
 
@@ -155,6 +170,11 @@ public class DashboardUpdateEndpointRequestValidator : AbstractValidator<Dashboa
             .MaximumLength(4096)
             .When(x => x.TransformExpression is not null)
             .WithMessage("TransformExpression must not exceed 4096 characters.");
+
+        RuleFor(x => x.CustomHeaders)
+            .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
+            .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
+            .When(x => x.CustomHeaders is not null);
 
         RuleFor(x => x)
             .Must(x => x.Url is not null
