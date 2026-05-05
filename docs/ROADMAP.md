@@ -1,10 +1,10 @@
 # Roadmap
 # WebhookEngine — Strategic Roadmap
 
-**Last Updated:** 2026-05-04
+**Last Updated:** 2026-05-05
 **Status:** Active — Phase 2 (Traction & Feedback)
 
-> **Note:** Phase 1 is complete (launch posts and the engineering blog post remain deferred). Phase 2 core tasks (2.2, 2.3, 2.4) are done. Remaining Phase 2 items (payload transformation, TypeScript SDK, application layer cleanup) are planned.
+> **Note:** Phase 1 is complete (launch posts and the engineering blog post remain deferred). Phase 2 core tasks (2.2, 2.3, 2.4, **2.5 payload transformation across all three rollout phases**, 2.7 application layer cleanup) are done. Remaining Phase 2 items (TypeScript SDK gated on demand signal, comparison/best-practice blog posts) are planned.
 
 ---
 
@@ -90,9 +90,9 @@ Patch release focused on project discoverability and packaging hygiene. No new e
 | 2.2 | Event replay (re-deliver events in a time range) | P1 | Almost certain user request | done |
 | 2.3 | Batch message sending (multiple events in one API call) | P1 | API power users | done |
 | 2.4 | Rate limiting per endpoint | P1 | Large-scale users | done |
-| 2.5 | Webhook payload transformation (modify before delivery) | P2 | Integration use cases | planned |
+| 2.5 | Webhook payload transformation (JMESPath, ADR-003 — schema, delivery integration, dashboard editor) | P2 | Integration use cases | done |
 | 2.6 | TypeScript SDK (npm) | P1 | If demand signal exists | planned |
-| 2.7 | Application layer cleanup (implement CQRS or remove scaffold) | P1 | Tech debt | planned |
+| 2.7 | Application layer cleanup (implement CQRS or remove scaffold) | P1 | Tech debt | done |
 | 2.8 | Blog: "Webhook Delivery Best Practices" | P1 | SEO + authority | planned |
 | 2.9 | Blog: "WebhookEngine vs Svix vs Convoy" | P1 | SEO + positioning | planned |
 | 2.10 | Integration guide: ABP Framework + WebhookEngine | P2 | .NET ecosystem reach | planned |

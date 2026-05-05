@@ -12,6 +12,7 @@ Self-hosted webhook delivery platform with reliable at-least-once delivery, expo
 - **Circuit breaker** -- per-endpoint, auto-opens after 5 consecutive failures, 5-minute cooldown
 - **HMAC-SHA256 signing** -- Standard Webhooks spec (`webhook-id`, `webhook-timestamp`, `webhook-signature`)
 - **Idempotency** -- optional `idempotencyKey` prevents duplicate deliveries
+- **Payload transformation** -- per-endpoint JMESPath expression reshapes the body before signing; fail-open with timeout and output-size guards (ADR-003); live editor in the dashboard
 - **Real-time dashboard** -- React SPA with live delivery feed via SignalR
 - **Single process** -- API + background workers + dashboard served from one ASP.NET Core host
 - **Data retention** -- automatic cleanup (delivered: 30 days, dead-letter: 90 days)
