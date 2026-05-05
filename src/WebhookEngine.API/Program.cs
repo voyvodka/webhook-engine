@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenTelemetry.Metrics;
+using Scalar.AspNetCore;
 using Serilog;
 using WebhookEngine.API.Hubs;
 using WebhookEngine.API.Middleware;
@@ -130,6 +131,23 @@ builder.Services.AddMvcCore(options => options.Filters.Add<FluentValidationFilte
 // SignalR
 builder.Services.AddSignalR();
 
+// OpenAPI document generation (Microsoft.AspNetCore.OpenApi).
+// The actual document + Scalar UI are only mapped in Development / Staging — see
+// the middleware pipeline below. Production runs without API docs surface.
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer((document, _, _) =>
+    {
+        document.Info.Title = "WebhookEngine API";
+        document.Info.Version = "v1";
+        document.Info.Description =
+            "Self-hosted webhook delivery platform — REST API. " +
+            "All public endpoints (under /api/v1/*, excluding /api/v1/dashboard) " +
+            "authenticate via Bearer API key.";
+        return Task.CompletedTask;
+    });
+});
+
 // OpenTelemetry Metrics + Prometheus
 builder.Services.AddSingleton<WebhookMetrics>();
 builder.Services.AddOpenTelemetry()
@@ -211,6 +229,23 @@ app.UseStaticFiles(); // Serve React dashboard from wwwroot
 app.MapControllers();
 app.MapHub<DeliveryHub>("/hubs/deliveries");
 app.MapPrometheusScrapingEndpoint(); // GET /metrics
+
+// OpenAPI document + Scalar UI are exposed only outside production. Ops can
+// opt in to Staging exposure for SDK auto-generation; production deployments
+// keep the API surface unindexed by default.
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
+{
+    app.MapOpenApi("/openapi/{documentName}.json");
+    app.MapScalarApiReference("/scalar", options =>
+    {
+        options.WithTitle("WebhookEngine API")
+               .WithOpenApiRoutePattern("/openapi/{documentName}.json")
+               .WithTheme(ScalarTheme.BluePlanet)
+               .EnableDarkMode()
+               .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
+    });
+}
+
 app.MapFallbackToFile("index.html");
 
 app.Run();

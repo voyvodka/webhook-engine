@@ -5,6 +5,8 @@
 **Authentication:** `Authorization: Bearer {api_key}`
 **Content-Type:** `application/json`
 
+> **Interactive reference:** when running in `Development` or `Staging`, the API host serves an interactive [Scalar](https://scalar.com/) UI at `/scalar` and the raw OpenAPI 3 document at `/openapi/v1.json`. Both routes are unmapped in `Production` deployments.
+
 ---
 
 ## 1. Authentication
