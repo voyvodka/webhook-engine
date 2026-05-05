@@ -319,6 +319,21 @@ export async function deleteDashboardEndpoint(endpointId: string): Promise<void>
   await mutate<void>(`/api/v1/dashboard/endpoints/${endpointId}`, "DELETE");
 }
 
+export interface TestEndpointResult {
+  success: boolean;
+  statusCode: number;
+  latencyMs: number;
+  error: string | null;
+}
+
+export async function testDashboardEndpoint(endpointId: string): Promise<TestEndpointResult> {
+  const payload = await mutate<ApiEnvelope<TestEndpointResult>>(
+    `/api/v1/dashboard/endpoints/${endpointId}/test`,
+    "POST"
+  );
+  return payload.data;
+}
+
 // ── Messages ────────────────────────────────────
 
 export interface MessageListParams {
