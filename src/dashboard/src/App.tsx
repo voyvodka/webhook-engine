@@ -1,14 +1,36 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { AuthProvider } from "./auth/AuthContext";
 import { AppShell } from "./layout/AppShell";
-import { ApplicationsPage } from "./pages/ApplicationsPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { DeliveryLogPage } from "./pages/DeliveryLogPage";
-import { EndpointsPage } from "./pages/EndpointsPage";
-import { EventTypesPage } from "./pages/EventTypesPage";
 import { LoginPage } from "./pages/LoginPage";
-import { MessagesPage } from "./pages/MessagesPage";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
+
+const DashboardPage = lazy(() =>
+  import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
+);
+const ApplicationsPage = lazy(() =>
+  import("./pages/ApplicationsPage").then((m) => ({ default: m.ApplicationsPage }))
+);
+const EventTypesPage = lazy(() =>
+  import("./pages/EventTypesPage").then((m) => ({ default: m.EventTypesPage }))
+);
+const EndpointsPage = lazy(() =>
+  import("./pages/EndpointsPage").then((m) => ({ default: m.EndpointsPage }))
+);
+const MessagesPage = lazy(() =>
+  import("./pages/MessagesPage").then((m) => ({ default: m.MessagesPage }))
+);
+const DeliveryLogPage = lazy(() =>
+  import("./pages/DeliveryLogPage").then((m) => ({ default: m.DeliveryLogPage }))
+);
+
+function PageFallback() {
+  return (
+    <div className="h-64 flex items-center justify-center text-text-muted text-xs">
+      Loading…
+    </div>
+  );
+}
 
 export function App() {
   return (
@@ -19,12 +41,54 @@ export function App() {
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
-              <Route path="/" element={<DashboardPage />} />
-              <Route path="/applications" element={<ApplicationsPage />} />
-              <Route path="/event-types" element={<EventTypesPage />} />
-              <Route path="/endpoints" element={<EndpointsPage />} />
-              <Route path="/messages" element={<MessagesPage />} />
-              <Route path="/delivery-log/:messageId" element={<DeliveryLogPage />} />
+              <Route
+                path="/"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <DashboardPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/applications"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <ApplicationsPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/event-types"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <EventTypesPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/endpoints"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <EndpointsPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/messages"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <MessagesPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/delivery-log/:messageId"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <DeliveryLogPage />
+                  </Suspense>
+                }
+              />
             </Route>
           </Route>
 
