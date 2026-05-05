@@ -18,8 +18,10 @@ public class HttpDeliveryService : IDeliveryService
     {
         var client = _httpClientFactory.CreateClient("webhook-delivery");
 
-        var httpRequest = new HttpRequestMessage(HttpMethod.Post, request.EndpointUrl);
-        httpRequest.Content = new StringContent(request.Payload, Encoding.UTF8, "application/json");
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, request.EndpointUrl)
+        {
+            Content = new StringContent(request.Payload, Encoding.UTF8, "application/json")
+        };
 
         // Add signature headers
         httpRequest.Headers.Add("webhook-id", request.SignedHeaders.WebhookId);
@@ -36,7 +38,7 @@ public class HttpDeliveryService : IDeliveryService
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var response = await client.SendAsync(httpRequest, ct);
+            using var response = await client.SendAsync(httpRequest, ct);
             stopwatch.Stop();
 
             // Truncate response body to 10KB max to prevent storage explosion
