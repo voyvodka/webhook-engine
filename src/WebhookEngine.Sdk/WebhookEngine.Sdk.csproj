@@ -17,6 +17,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageTags>webhook;webhooks;delivery;sdk;aspnetcore;dotnet</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
 
     <!-- Build settings -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -25,6 +26,7 @@
 
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="icon.png" Pack="true" PackagePath="/" />
   </ItemGroup>
 
 </Project>

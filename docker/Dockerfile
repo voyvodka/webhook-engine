@@ -52,6 +52,8 @@ LABEL org.opencontainers.image.title="WebhookEngine" \
       org.opencontainers.image.description="Self-hosted webhook delivery platform" \
       org.opencontainers.image.url="https://github.com/voyvodka/webhook-engine" \
       org.opencontainers.image.source="https://github.com/voyvodka/webhook-engine" \
+      org.opencontainers.image.documentation="https://webhook.sametozkan.com.tr" \
+      org.opencontainers.image.vendor="WebhookEngine" \
       org.opencontainers.image.licenses="MIT"
 
 # Security: run as non-root user
