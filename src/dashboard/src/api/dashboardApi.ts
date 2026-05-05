@@ -193,6 +193,8 @@ export interface DashboardCreateEndpointRequest {
   customHeaders?: Record<string, string>;
   metadata?: Record<string, string>;
   secretOverride?: string;
+  transformExpression?: string | null;
+  transformEnabled?: boolean;
 }
 
 export interface DashboardUpdateEndpointRequest {
@@ -202,6 +204,30 @@ export interface DashboardUpdateEndpointRequest {
   customHeaders?: Record<string, string>;
   metadata?: Record<string, string>;
   secretOverride?: string;
+  transformExpression?: string | null;
+  transformEnabled?: boolean;
+}
+
+export interface ValidateTransformRequest {
+  expression: string;
+  samplePayload: string;
+}
+
+export interface ValidateTransformResponse {
+  success: boolean;
+  transformed: string | null;
+  error: string | null;
+}
+
+export async function validateTransform(
+  request: ValidateTransformRequest
+): Promise<ValidateTransformResponse> {
+  const payload = await mutate<ApiEnvelope<ValidateTransformResponse>>(
+    "/api/v1/dashboard/transform/validate",
+    "POST",
+    request
+  );
+  return payload.data;
 }
 
 export async function listEndpoints(

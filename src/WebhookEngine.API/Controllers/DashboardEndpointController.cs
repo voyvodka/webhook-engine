@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Enums;
+using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Infrastructure.Data;
 using WebhookEngine.Infrastructure.Repositories;
 using Endpoint = WebhookEngine.Core.Entities.Endpoint;
@@ -22,15 +23,18 @@ public class DashboardEndpointController : ControllerBase
     private readonly WebhookDbContext _dbContext;
     private readonly EndpointRepository _endpointRepository;
     private readonly EventTypeRepository _eventTypeRepository;
+    private readonly IPayloadTransformer _payloadTransformer;
 
     public DashboardEndpointController(
         WebhookDbContext dbContext,
         EndpointRepository endpointRepository,
-        EventTypeRepository eventTypeRepository)
+        EventTypeRepository eventTypeRepository,
+        IPayloadTransformer payloadTransformer)
     {
         _dbContext = dbContext;
         _endpointRepository = endpointRepository;
         _eventTypeRepository = eventTypeRepository;
+        _payloadTransformer = payloadTransformer;
     }
 
     // ──────────────────────────────────────────────────
@@ -255,6 +259,30 @@ public class DashboardEndpointController : ControllerBase
     }
 
     // ──────────────────────────────────────────────────
+    // Payload Transformation
+    // ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Validates a JMESPath expression against a sample payload. Used by the
+    /// dashboard expression editor to give live feedback before persisting the
+    /// expression on an endpoint. Reuses the same transformer (and its timeout
+    /// + size guards) that runs in the delivery pipeline, so what passes here
+    /// will behave identically at delivery time.
+    /// </summary>
+    [HttpPost("transform/validate")]
+    public IActionResult ValidateTransform([FromBody] ValidateTransformRequest request)
+    {
+        var result = _payloadTransformer.Transform(request.Expression, request.SamplePayload);
+
+        return Ok(ApiEnvelope.Success(HttpContext, new
+        {
+            success = result.IsSuccess,
+            transformed = result.TransformedPayload,
+            error = result.Error
+        }));
+    }
+
+    // ──────────────────────────────────────────────────
     // Event Types
     // ──────────────────────────────────────────────────
 
@@ -420,4 +448,10 @@ public class DashboardUpdateEventTypeRequest
 {
     public string? Name { get; set; }
     public string? Description { get; set; }
+}
+
+public class ValidateTransformRequest
+{
+    public string Expression { get; set; } = string.Empty;
+    public string SamplePayload { get; set; } = string.Empty;
 }
