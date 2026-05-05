@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using WebhookEngine.API.Services;
 
 namespace WebhookEngine.API.Middleware;
 
@@ -22,7 +23,11 @@ public class ExceptionHandlingMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled exception on {Method} {Path}", context.Request.Method, context.Request.Path);
+            _logger.LogError(
+                ex,
+                "Unhandled exception on {Method} {Path}",
+                LogSanitizer.ForLog(context.Request.Method),
+                LogSanitizer.ForLog(context.Request.Path));
             await HandleExceptionAsync(context, ex);
         }
     }
