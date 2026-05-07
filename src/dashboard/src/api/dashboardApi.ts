@@ -340,17 +340,34 @@ export async function deleteDashboardEndpoint(endpointId: string): Promise<void>
   await mutate<void>(`/api/v1/dashboard/endpoints/${endpointId}`, "DELETE");
 }
 
+export interface TestEndpointRequestPreview {
+  url: string;
+  headers: Record<string, string>;
+  body: string;
+}
+
 export interface TestEndpointResult {
   success: boolean;
   statusCode: number;
   latencyMs: number;
+  responseBody: string;
   error: string | null;
+  request: TestEndpointRequestPreview;
 }
 
-export async function testDashboardEndpoint(endpointId: string): Promise<TestEndpointResult> {
+export interface TestEndpointRequest {
+  eventType?: string;
+  payload?: unknown;
+}
+
+export async function testDashboardEndpoint(
+  endpointId: string,
+  request?: TestEndpointRequest
+): Promise<TestEndpointResult> {
   const payload = await mutate<ApiEnvelope<TestEndpointResult>>(
     `/api/v1/dashboard/endpoints/${endpointId}/test`,
-    "POST"
+    "POST",
+    request ?? {}
   );
   return payload.data;
 }

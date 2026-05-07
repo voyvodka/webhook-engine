@@ -1,10 +1,11 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { EndpointHealthBadge } from "../components/EndpointHealthBadge";
 import { Modal } from "../components/Modal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Select } from "../components/Select";
 import { EventTypeSelect } from "../components/EventTypeSelect";
 import { TransformSection } from "../components/TransformSection";
+import { EndpointTestModal } from "../components/EndpointTestModal";
 import {
   createDashboardEndpoint,
   deleteDashboardEndpoint,
@@ -12,10 +13,8 @@ import {
   listDashboardEventTypes,
   listEndpoints,
   setDashboardEndpointStatus,
-  testDashboardEndpoint,
   updateDashboardEndpoint
 } from "../api/dashboardApi";
-import type { TestEndpointResult } from "../api/dashboardApi";
 import type { ApplicationRow, EndpointRow, EventTypeSummary, Pagination } from "../types";
 import {
   Plus,
@@ -25,13 +24,11 @@ import {
   ToggleRight,
   Filter,
   AlertCircle,
-  CheckCircle2,
   X,
   ChevronLeft,
   ChevronRight,
   Save,
-  Send,
-  Loader2
+  Send
 } from "lucide-react";
 import { formatLocaleDate } from "../utils/dateTime";
 
@@ -88,9 +85,9 @@ export function EndpointsPage() {
   // Confirm modal
   const [confirmState, setConfirmState] = useState<ConfirmState>(closedConfirm);
 
-  // Inline test result per endpoint id
-  const [testingId, setTestingId] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Record<string, TestEndpointResult>>({});
+  // Test modal — opens when the row's "Send" button is pressed
+  const [testEndpointId, setTestEndpointId] = useState<string | null>(null);
+  const [testEndpointUrl, setTestEndpointUrl] = useState<string | null>(null);
 
   const editingEndpoint = useMemo(
     () => endpoints.find((e) => e.id === editingEndpointId) ?? null,
@@ -252,25 +249,15 @@ export function EndpointsPage() {
     });
   };
 
-  const handleTest = async (endpoint: EndpointRow) => {
-    setTestingId(endpoint.id);
-    try {
-      const result = await testDashboardEndpoint(endpoint.id);
-      setTestResults((prev) => ({ ...prev, [endpoint.id]: result }));
-    } catch (e) {
-      setTestResults((prev) => ({
-        ...prev,
-        [endpoint.id]: {
-          success: false,
-          statusCode: 0,
-          latencyMs: 0,
-          error: e instanceof Error ? e.message : "Test request failed"
-        }
-      }));
-    } finally {
-      setTestingId(null);
-    }
+  const handleTest = (endpoint: EndpointRow) => {
+    setTestEndpointId(endpoint.id);
+    setTestEndpointUrl(endpoint.url);
   };
+
+  const handleTestClose = useCallback(() => {
+    setTestEndpointId(null);
+    setTestEndpointUrl(null);
+  }, []);
 
   const requestDelete = (endpoint: EndpointRow) => {
     setConfirmState({
@@ -384,8 +371,7 @@ export function EndpointsPage() {
                 </thead>
                 <tbody className="text-sm">
                   {endpoints.map((ep) => (
-                  <Fragment key={ep.id}>
-                    <tr className="border-t border-border-subtle hover:bg-surface-2/50 transition-colors">
+                    <tr key={ep.id} className="border-t border-border-subtle hover:bg-surface-2/50 transition-colors">
                       <td className="px-4 py-2 font-mono text-xs text-text-secondary max-w-[260px] truncate" title={ep.url}>{ep.url}</td>
                       <td className="px-4 py-2 text-text-secondary">{ep.appName ?? "-"}</td>
                       <td className="px-4 py-2">
@@ -402,11 +388,11 @@ export function EndpointsPage() {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => handleTest(ep)}
-                            disabled={testingId === ep.id || ep.status.toLowerCase() === "disabled"}
+                            disabled={ep.status.toLowerCase() === "disabled"}
                             className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent-soft disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             title="Send test event"
                           >
-                            {testingId === ep.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                            <Send className="w-3.5 h-3.5" />
                           </button>
                           <button onClick={() => startEdit(ep)} className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent-soft transition-colors" title="Edit">
                             <Pencil className="w-3.5 h-3.5" />
@@ -420,28 +406,6 @@ export function EndpointsPage() {
                         </div>
                       </td>
                     </tr>
-                    {testResults[ep.id] && (
-                      <tr className="bg-surface-2/40">
-                        <td colSpan={7} className="px-4 py-2">
-                          <div className={`flex items-center gap-2 text-xs ${testResults[ep.id].success ? "text-success" : "text-danger"}`}>
-                            {testResults[ep.id].success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                            <span className="font-mono">
-                              {testResults[ep.id].success
-                                ? `Test event delivered → HTTP ${testResults[ep.id].statusCode} in ${testResults[ep.id].latencyMs}ms`
-                                : `Test failed → HTTP ${testResults[ep.id].statusCode || "—"} ${testResults[ep.id].error ?? ""}`}
-                            </span>
-                            <button
-                              onClick={() => setTestResults((prev) => { const next = { ...prev }; delete next[ep.id]; return next; })}
-                              className="ml-auto text-text-muted hover:text-text-primary"
-                              title="Dismiss"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -574,6 +538,14 @@ export function EndpointsPage() {
         description={confirmState.description}
         confirmLabel={confirmState.confirmLabel}
         variant={confirmState.variant}
+      />
+
+      {/* ── Test Modal ────────────────────────────── */}
+      <EndpointTestModal
+        open={testEndpointId !== null}
+        endpointId={testEndpointId}
+        endpointUrl={testEndpointUrl}
+        onClose={handleTestClose}
       />
     </div>
   );

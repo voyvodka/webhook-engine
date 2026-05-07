@@ -131,6 +131,7 @@ builder.Services.AddSingleton<IMessageStateMachine, MessageStateMachine>();
 builder.Services.AddSingleton<IDeliveryNotifier, SignalRDeliveryNotifier>();
 builder.Services.AddSingleton<IDevTrafficGenerator, DevTrafficGenerator>();
 builder.Services.AddSingleton<IPayloadTransformer, JmesPathPayloadTransformer>();
+builder.Services.AddScoped<IEndpointTester, EndpointTester>();
 
 // Background Workers
 builder.Services.AddHostedService<DeliveryWorker>();
