@@ -111,6 +111,49 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
     }
 
     [Fact]
+    public async Task Rate_Limited_Endpoint_Defers_Excess_Messages_To_Pending()
+    {
+        await _fixture.ResetAsync();
+
+        var deliveryService = Substitute.For<IDeliveryService>();
+        deliveryService
+            .DeliverAsync(Arg.Any<DeliveryRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult { Success = true, StatusCode = 200, LatencyMs = 10 });
+
+        await using var sp = BuildServiceProvider(deliveryService);
+
+        // Endpoint allows exactly one delivery per minute. Of the three messages
+        // we enqueue, the first should drain through the limiter and deliver;
+        // the remaining two should be reset to Pending with a future
+        // ScheduledAt rather than failing or moving to DeadLetter.
+        var seed = await SeedAsync(sp, rateLimitPerMinute: 1);
+        var messageIds = await EnqueueMessagesAsync(sp, seed, count: 3);
+
+        await RunWorkerOnceAsync(sp);
+
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<WebhookDbContext>();
+        var messages = await db.Messages.AsNoTracking()
+            .Where(m => messageIds.Contains(m.Id))
+            .ToListAsync();
+
+        var delivered = messages.Where(m => m.Status == MessageStatus.Delivered).ToList();
+        var deferred = messages.Where(m => m.Status == MessageStatus.Pending).ToList();
+
+        delivered.Should().HaveCount(1);
+        deferred.Should().HaveCount(2);
+
+        deferred.Should().OnlyContain(m => m.ScheduledAt > DateTime.UtcNow);
+        deferred.Should().OnlyContain(m => m.LockedAt == null && m.LockedBy == null);
+        deferred.Should().OnlyContain(m => m.AttemptCount == 0);
+
+        // The delivery side-effect happened exactly once — the limiter must
+        // turn the other two attempts into reschedules without ever calling
+        // the delivery service for them.
+        await deliveryService.Received(1).DeliverAsync(Arg.Any<DeliveryRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Repeated_Failures_Open_Endpoint_Circuit()
     {
         await _fixture.ResetAsync();
@@ -196,7 +239,7 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
         await worker.StopAsync(CancellationToken.None);
     }
 
-    private static async Task<SeedIds> SeedAsync(IServiceProvider sp)
+    private static async Task<SeedIds> SeedAsync(IServiceProvider sp, int? rateLimitPerMinute = null)
     {
         using var scope = sp.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<WebhookDbContext>();
@@ -210,12 +253,17 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
             SigningSecret = "whsec_e2e_secret_for_signing_messages_in_tests"
         };
 
+        var metadataJson = rateLimitPerMinute is int rl
+            ? $$"""{"rateLimitPerMinute":{{rl}}}"""
+            : "{}";
+
         var endpoint = new Endpoint
         {
             Id = Guid.NewGuid(),
             AppId = app.Id,
             Url = "https://example.invalid/webhook",
-            Status = EndpointStatus.Active
+            Status = EndpointStatus.Active,
+            MetadataJson = metadataJson
         };
 
         var eventType = new EventType
@@ -262,6 +310,36 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
 
         // Seed the message id back into the seed record for the caller to read.
         seed.LastMessageIdSetter(message.Id);
+    }
+
+    private static async Task<List<Guid>> EnqueueMessagesAsync(IServiceProvider sp, SeedIds seed, int count)
+    {
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<WebhookDbContext>();
+
+        var ids = new List<Guid>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var message = new Message
+            {
+                Id = Guid.NewGuid(),
+                AppId = seed.AppId,
+                EndpointId = seed.EndpointId,
+                EventTypeId = seed.EventTypeId,
+                EventId = $"evt_batch_{i}_{Guid.NewGuid():N}"[..32],
+                Payload = """{"hello":"world"}""",
+                Status = MessageStatus.Pending,
+                AttemptCount = 0,
+                MaxRetries = 7,
+                ScheduledAt = DateTime.UtcNow.AddSeconds(-1)
+            };
+
+            db.Messages.Add(message);
+            ids.Add(message.Id);
+        }
+
+        await db.SaveChangesAsync();
+        return ids;
     }
 
     private static async Task<Message> GetMessageAsync(IServiceProvider sp, Guid messageId)
