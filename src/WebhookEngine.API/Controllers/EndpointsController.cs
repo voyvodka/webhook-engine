@@ -1,7 +1,10 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Enums;
+using WebhookEngine.Core.Interfaces;
+using WebhookEngine.Core.Models;
 using WebhookEngine.Infrastructure.Data;
 using WebhookEngine.Infrastructure.Repositories;
 using WebhookEngine.Infrastructure.Services;
@@ -18,15 +21,21 @@ public class EndpointsController : ControllerBase
 {
     private readonly EndpointRepository _endpointRepo;
     private readonly EventTypeRepository _eventTypeRepo;
+    private readonly ApplicationRepository _appRepo;
+    private readonly IEndpointTester _endpointTester;
     private readonly WebhookDbContext _dbContext;
 
     public EndpointsController(
         EndpointRepository endpointRepo,
         EventTypeRepository eventTypeRepo,
+        ApplicationRepository appRepo,
+        IEndpointTester endpointTester,
         WebhookDbContext dbContext)
     {
         _endpointRepo = endpointRepo;
         _eventTypeRepo = eventTypeRepo;
+        _appRepo = appRepo;
+        _endpointTester = endpointTester;
         _dbContext = dbContext;
     }
 
@@ -196,6 +205,34 @@ public class EndpointsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{endpointId:guid}/test")]
+    public async Task<IActionResult> SendTest(Guid endpointId, [FromBody] TestEndpointRequestDto request, CancellationToken ct)
+    {
+        var appId = (Guid)HttpContext.Items["AppId"]!;
+
+        var endpoint = await _endpointRepo.GetByIdAsync(appId, endpointId, ct);
+        if (endpoint is null)
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Endpoint not found."));
+
+        var application = await _appRepo.GetByIdAsync(appId, ct);
+        if (application is null)
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
+
+        var context = new EndpointTestContext
+        {
+            Endpoint = endpoint,
+            Application = application,
+            Request = new EndpointTestRequest
+            {
+                EventTypeName = request.EventType ?? string.Empty,
+                Payload = request.Payload
+            }
+        };
+
+        var result = await _endpointTester.ExecuteAsync(context, ct);
+        return Ok(ApiEnvelope.Success(HttpContext, result));
+    }
+
     [HttpGet("{endpointId:guid}/stats")]
     public async Task<IActionResult> Stats(Guid endpointId, [FromQuery] string period = "24h", CancellationToken ct = default)
     {
@@ -271,4 +308,10 @@ public class UpdateEndpointRequest
     public string? SecretOverride { get; set; }
     public string? TransformExpression { get; set; }
     public bool? TransformEnabled { get; set; }
+}
+
+public class TestEndpointRequestDto
+{
+    public string? EventType { get; set; }
+    public JsonElement? Payload { get; set; }
 }

@@ -30,26 +30,26 @@ public class DashboardEndpointController : ControllerBase
     private readonly WebhookDbContext _dbContext;
     private readonly EndpointRepository _endpointRepository;
     private readonly EventTypeRepository _eventTypeRepository;
+    private readonly ApplicationRepository _applicationRepository;
     private readonly IPayloadTransformer _payloadTransformer;
-    private readonly IDeliveryService _deliveryService;
-    private readonly ISigningService _signingService;
+    private readonly IEndpointTester _endpointTester;
     private readonly EndpointUrlPolicy _urlPolicy;
 
     public DashboardEndpointController(
         WebhookDbContext dbContext,
         EndpointRepository endpointRepository,
         EventTypeRepository eventTypeRepository,
+        ApplicationRepository applicationRepository,
         IPayloadTransformer payloadTransformer,
-        IDeliveryService deliveryService,
-        ISigningService signingService,
+        IEndpointTester endpointTester,
         EndpointUrlPolicy urlPolicy)
     {
         _dbContext = dbContext;
         _endpointRepository = endpointRepository;
         _eventTypeRepository = eventTypeRepository;
+        _applicationRepository = applicationRepository;
         _payloadTransformer = payloadTransformer;
-        _deliveryService = deliveryService;
-        _signingService = signingService;
+        _endpointTester = endpointTester;
         _urlPolicy = urlPolicy;
     }
 
@@ -293,7 +293,10 @@ public class DashboardEndpointController : ControllerBase
     }
 
     [HttpPost("endpoints/{endpointId:guid}/test")]
-    public async Task<IActionResult> TestEndpoint(Guid endpointId, CancellationToken ct)
+    public async Task<IActionResult> TestEndpoint(
+        Guid endpointId,
+        [FromBody] DashboardTestEndpointRequest? request,
+        CancellationToken ct)
     {
         var endpoint = await _endpointRepository.GetByIdAsync(endpointId, ct);
         if (endpoint is null)
@@ -301,44 +304,32 @@ public class DashboardEndpointController : ControllerBase
             return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Endpoint not found."));
         }
 
-        var signingSecret = endpoint.SecretOverride ?? endpoint.Application?.SigningSecret;
+        // GetByIdAsync includes Application; defensive fallback in case the include is removed later.
+        var application = endpoint.Application ?? await _applicationRepository.GetByIdAsync(endpoint.AppId, ct);
+        if (application is null)
+        {
+            return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
+        }
+
+        var signingSecret = endpoint.SecretOverride ?? application.SigningSecret;
         if (string.IsNullOrWhiteSpace(signingSecret))
         {
             return UnprocessableEntity(ApiEnvelope.Error(HttpContext, "UNPROCESSABLE", "Endpoint has no signing secret configured."));
         }
 
-        var messageId = $"msg_test_{Guid.NewGuid():N}"[..24];
-        var body = JsonSerializer.Serialize(new
+        var context = new EndpointTestContext
         {
-            test = true,
-            message = "WebhookEngine test event",
-            sentAt = DateTime.UtcNow,
-            endpointId = endpoint.Id
-        });
-
-        var customHeaders = string.IsNullOrWhiteSpace(endpoint.CustomHeadersJson)
-            ? new Dictionary<string, string>()
-            : JsonSerializer.Deserialize<Dictionary<string, string>>(endpoint.CustomHeadersJson) ?? new Dictionary<string, string>();
-
-        var signed = _signingService.Sign(messageId, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), body, signingSecret);
-        var deliveryRequest = new DeliveryRequest
-        {
-            MessageId = messageId,
-            EndpointUrl = endpoint.Url,
-            Payload = body,
-            SignedHeaders = signed,
-            CustomHeaders = customHeaders
+            Endpoint = endpoint,
+            Application = application,
+            Request = new EndpointTestRequest
+            {
+                EventTypeName = request?.EventType ?? string.Empty,
+                Payload = request?.Payload
+            }
         };
 
-        var result = await _deliveryService.DeliverAsync(deliveryRequest, ct);
-
-        return Ok(ApiEnvelope.Success(HttpContext, new
-        {
-            success = result.Success,
-            statusCode = result.StatusCode,
-            latencyMs = result.LatencyMs,
-            error = result.Error
-        }));
+        var result = await _endpointTester.ExecuteAsync(context, ct);
+        return Ok(ApiEnvelope.Success(HttpContext, result));
     }
 
     // ──────────────────────────────────────────────────
@@ -533,4 +524,10 @@ public class ValidateTransformRequest
 {
     public string Expression { get; set; } = string.Empty;
     public string SamplePayload { get; set; } = string.Empty;
+}
+
+public class DashboardTestEndpointRequest
+{
+    public string? EventType { get; set; }
+    public JsonElement? Payload { get; set; }
 }

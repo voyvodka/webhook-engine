@@ -378,3 +378,35 @@ public class DevTrafficSeedRequestValidator : AbstractValidator<DevTrafficSeedRe
             .InclusiveBetween(1, 50);
     }
 }
+
+public class TestEndpointRequestDtoValidator : AbstractValidator<TestEndpointRequestDto>
+{
+    private const int MaxPayloadBytes = 256 * 1024;
+
+    public TestEndpointRequestDtoValidator()
+    {
+        RuleFor(x => x.EventType)
+            .MaximumLength(256)
+            .When(x => x.EventType is not null);
+
+        RuleFor(x => x.Payload)
+            .Must(payload => !payload.HasValue || payload.Value.GetRawText().Length <= MaxPayloadBytes)
+            .WithMessage($"Payload exceeds the {MaxPayloadBytes / 1024} KB probe cap.");
+    }
+}
+
+public class DashboardTestEndpointRequestValidator : AbstractValidator<DashboardTestEndpointRequest>
+{
+    private const int MaxPayloadBytes = 256 * 1024;
+
+    public DashboardTestEndpointRequestValidator()
+    {
+        RuleFor(x => x.EventType)
+            .MaximumLength(256)
+            .When(x => x.EventType is not null);
+
+        RuleFor(x => x.Payload)
+            .Must(payload => !payload.HasValue || payload.Value.GetRawText().Length <= MaxPayloadBytes)
+            .WithMessage($"Payload exceeds the {MaxPayloadBytes / 1024} KB probe cap.");
+    }
+}
