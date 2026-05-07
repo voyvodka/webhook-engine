@@ -1,0 +1,34 @@
+# CODEOWNERS — automatic review-request routing.
+#
+# Solo maintainer: every PR is auto-reviewed by @voyvodka. The path-scoped
+# entries below don't change ownership (still solo) but document which
+# surfaces carry the highest blast radius and should not be touched without
+# attention. They also pre-stage the file for future co-maintainers.
+#
+# Syntax: https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global fallback — every change requests review from the maintainer.
+*                                       @voyvodka
+
+# Workflow / release / dependency surface (CI, secrets, supply chain).
+/.github/                               @voyvodka
+/.github/workflows/                     @voyvodka
+/.github/dependabot.yml                 @voyvodka
+
+# Public SDK + samples — ships to NuGet, breaking changes are user-visible.
+/src/WebhookEngine.Sdk/                 @voyvodka
+/samples/                               @voyvodka
+
+# Container surface — base-image bumps and Dockerfile structure ship with releases.
+/docker/                                @voyvodka
+
+# Database migrations and schema — irreversible state changes.
+/src/WebhookEngine.Infrastructure/Migrations/   @voyvodka
+/src/WebhookEngine.Infrastructure/Data/         @voyvodka
+
+# Public docs + governance — user-facing contracts and policy.
+/docs/                                  @voyvodka
+/README.md                              @voyvodka
+/CHANGELOG.md                           @voyvodka
+/SECURITY.md                            @voyvodka
+/LICENSE                                @voyvodka
