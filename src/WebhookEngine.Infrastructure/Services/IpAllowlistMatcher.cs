@@ -71,11 +71,17 @@ public static class IpAllowlistMatcher
     /// <summary>
     /// True when every address in <paramref name="resolvedAddresses"/> is
     /// contained by at least one entry in <paramref name="allowed"/>. An
-    /// empty allowlist returns true (the gate is opt-in). An empty resolution
-    /// returns false (we will not deliver to nothing).
+    /// empty allowlist returns true (the gate is opt-in) regardless of the
+    /// resolved set — the empty-allowlist check fires first so the
+    /// "allowlist not configured" path can't accidentally fail because no
+    /// addresses came back from the resolver. An empty resolution against a
+    /// configured allowlist returns false (we will not deliver to nothing).
     /// </summary>
     public static bool AllAddressesAllowed(IReadOnlyList<IPNetwork> allowed, IReadOnlyList<IPAddress> resolvedAddresses)
     {
+        // Order is intentional: empty allowlist short-circuits FIRST so a
+        // future caller passing an empty resolved set with no allowlist
+        // configured cannot accidentally land on the deny branch below.
         if (allowed.Count == 0)
         {
             return true;

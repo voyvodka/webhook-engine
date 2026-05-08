@@ -150,14 +150,15 @@ public class EndpointHealthTracker : IEndpointHealthTracker
         var beforeCircuit = health.CircuitState;
 
         // Fetch the tracked endpoint up front so the before/after read both
-        // see the same instance EF is mutating; AsNoTracking would miss the
-        // change UpdateEndpointStatusAsync makes below.
+        // see the same instance EF is mutating, then thread it into
+        // UpdateEndpointStatus so the helper doesn't issue a second round-trip
+        // for the same row.
         var endpoint = await _dbContext.Endpoints
             .FirstOrDefaultAsync(e => e.Id == endpointId, ct);
         var beforeStatus = endpoint?.Status ?? EndpointStatus.Active;
 
         mutate(health);
-        await UpdateEndpointStatusAsync(endpointId, health, DateTime.UtcNow, ct);
+        ApplyEndpointStatus(endpoint, health, DateTime.UtcNow);
 
         var afterStatus = endpoint?.Status ?? beforeStatus;
         var afterSnapshot = new HealthSnapshot(
@@ -238,18 +239,18 @@ public class EndpointHealthTracker : IEndpointHealthTracker
         return health;
     }
 
-    private async Task UpdateEndpointStatusAsync(Guid endpointId, EndpointHealth health, DateTime now, CancellationToken ct)
+    /// <summary>
+    /// Applies the target status onto an already-fetched, EF-tracked endpoint
+    /// row. The caller owns the fetch — eliminating the second round-trip that
+    /// the previous <c>UpdateEndpointStatusAsync</c> overload incurred.
+    /// </summary>
+    private static void ApplyEndpointStatus(WebhookEngine.Core.Entities.Endpoint? endpoint, EndpointHealth health, DateTime now)
     {
-        var endpoint = await _dbContext.Endpoints.FirstOrDefaultAsync(e => e.Id == endpointId, ct);
-        if (endpoint is null)
-            return;
-
-        if (endpoint.Status == EndpointStatus.Disabled)
-            return;
+        if (endpoint is null) return;
+        if (endpoint.Status == EndpointStatus.Disabled) return;
 
         var targetStatus = ResolveEndpointStatus(health);
-        if (endpoint.Status == targetStatus)
-            return;
+        if (endpoint.Status == targetStatus) return;
 
         endpoint.Status = targetStatus;
         endpoint.UpdatedAt = now;
