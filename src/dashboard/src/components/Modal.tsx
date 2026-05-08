@@ -132,8 +132,10 @@ export function Modal({ open, onClose, title, description, children, width = "ma
           </button>
         </div>
 
-        {/* Body */}
-        <div className="px-5 py-4 max-h-[70vh] overflow-y-auto">
+        {/* Body — dvh handles mobile keyboard / address-bar resize without
+            cropping; overscroll-contain stops iOS from scrolling the page
+            underneath when the modal body itself reaches its end. */}
+        <div className="px-5 py-4 max-h-[85dvh] overflow-y-auto overscroll-contain">
           {children}
         </div>
       </div>

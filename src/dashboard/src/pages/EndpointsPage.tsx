@@ -7,6 +7,7 @@ import { Select } from "../components/Select";
 import { EventTypeSelect } from "../components/EventTypeSelect";
 import { useDeliveryFeed } from "../hooks/useDeliveryFeed";
 import {
+  ApiErrorException,
   createDashboardEndpoint,
   deleteDashboardEndpoint,
   listApplications,
@@ -28,7 +29,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Save,
-  Send
+  Send,
+  Wifi,
+  WifiOff
 } from "lucide-react";
 import { formatLocaleDate } from "../utils/dateTime";
 import { inputClasses } from "../utils/styles";
@@ -155,7 +158,7 @@ export function EndpointsPage() {
   // (DPR-1's reset to null) gets us a clean refresh. The "rows on other
   // pages pick up on next refresh" caveat from before now applies to ANY
   // open EndpointsPage instance — not just the one that received the event.
-  const { lastHealthChange } = useDeliveryFeed();
+  const { lastHealthChange, connected } = useDeliveryFeed();
   useEffect(() => {
     if (!lastHealthChange) return;
     void Promise.resolve().then(() => {
@@ -207,10 +210,14 @@ export function EndpointsPage() {
       transformExpression: trimmedExpr || null,
       transformEnabled: createTransformEnabled && trimmedExpr.length > 0
     });
-    // TODO(DPR-3): createMutation.error is an ApiErrorException with
-    // fieldErrors on 422 — wire url field error into the input once the
-    // form is upgraded in the next pass.
   };
+
+  // Pull the url-specific message off ApiErrorException.fieldErrors when the
+  // server's 422 surfaces a per-field validation hint. Falls back to undefined
+  // when the error is something else (network / generic 4xx).
+  const createUrlFieldError = createMutation.error instanceof ApiErrorException
+    ? createMutation.error.fieldErrors?.Url ?? createMutation.error.fieldErrors?.url
+    : undefined;
 
   const startEdit = async (endpoint: EndpointRow) => {
     setEditingEndpointId(endpoint.id);
@@ -320,8 +327,21 @@ export function EndpointsPage() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between animate-fade-in-up">
-        <div>
-          <h1 className="text-lg font-semibold">Endpoints</h1>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold">Endpoints</h1>
+            {/* Live-feed pill: tells the user whether health badges are
+                actually live-updating from the SignalR feed, since the
+                visible row state otherwise looks identical when it's stale. */}
+            <span
+              className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded ${connected ? "text-success bg-success-soft" : "text-text-muted bg-surface-2"}`}
+              title={connected ? "Live updates connected" : "Live updates offline — health badges may lag until reconnect"}
+              aria-label={connected ? "Live updates connected" : "Live updates offline"}
+            >
+              {connected ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
+              {connected ? "Live" : "Offline"}
+            </span>
+          </div>
           <p className="text-sm text-text-muted mt-0.5">Destination health and endpoint filters.</p>
         </div>
         <button
@@ -486,7 +506,16 @@ export function EndpointsPage() {
           </div>
           <label className="block">
             <span className="text-xs font-medium text-text-secondary mb-1.5 block">Endpoint URL</span>
-            <input placeholder="https://example.com/webhook" value={createUrl} onChange={(e) => setCreateUrl(e.target.value)} className={inputClasses} />
+            <input
+              placeholder="https://example.com/webhook"
+              value={createUrl}
+              onChange={(e) => setCreateUrl(e.target.value)}
+              aria-invalid={createUrlFieldError ? "true" : undefined}
+              className={`${inputClasses} ${createUrlFieldError ? "border-danger/60" : ""}`}
+            />
+            {createUrlFieldError && (
+              <span className="block text-[11px] text-danger mt-1">{createUrlFieldError}</span>
+            )}
           </label>
           <label className="block">
             <span className="text-xs font-medium text-text-secondary mb-1.5 block">Description (optional)</span>

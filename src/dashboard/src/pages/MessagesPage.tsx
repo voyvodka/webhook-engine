@@ -52,6 +52,9 @@ export function MessagesPage() {
   const [sendAppId, setSendAppId] = useState("");
   const [sendEventType, setSendEventType] = useState("");
   const [sendPayload, setSendPayload] = useState("{}");
+  // Ayrı state: payload-parse hatasını genel error banner'ı ile karıştırmak
+  // istemiyoruz — biri form-field-level, diğeri page-level / mutation-level.
+  const [payloadError, setPayloadError] = useState("");
   const [sendIdempotencyKey, setSendIdempotencyKey] = useState("");
   const [lastSendAt, setLastSendAt] = useState(0);
   const [sendResult, setSendResult] = useState("");
@@ -151,9 +154,17 @@ export function MessagesPage() {
     if (now - lastSendAt < 800) return;
 
     let parsedPayload: unknown;
-    try { parsedPayload = JSON.parse(sendPayload); } catch { setError("Payload must be valid JSON"); return; }
+    try {
+      parsedPayload = JSON.parse(sendPayload);
+    } catch {
+      // Field-level error stays anchored to the payload textarea instead of
+      // bouncing into the page-wide error banner where it loses context.
+      setPayloadError("Payload must be valid JSON");
+      return;
+    }
 
     setError("");
+    setPayloadError("");
     setSendResult("");
     sendMutation.mutate({
       appId: sendAppId,
@@ -206,7 +217,7 @@ export function MessagesPage() {
           <Filter className="w-3.5 h-3.5 text-text-muted" />
           <span className="text-xs font-medium text-text-secondary">Filters</span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
           <div>
             <span className="text-xs text-text-muted mb-1 block">Application</span>
             <Select
@@ -359,9 +370,13 @@ export function MessagesPage() {
               <textarea
                 rows={5}
                 value={sendPayload}
-                onChange={(e) => setSendPayload(e.target.value)}
-                className={`${inputClasses} font-mono text-xs resize-y`}
+                onChange={(e) => { setSendPayload(e.target.value); if (payloadError) setPayloadError(""); }}
+                aria-invalid={payloadError ? "true" : undefined}
+                className={`${inputClasses} font-mono text-xs resize-y ${payloadError ? "border-danger/60" : ""}`}
               />
+              {payloadError && (
+                <span className="block text-[11px] text-danger mt-1 font-mono">{payloadError}</span>
+              )}
             </label>
             {sendResult && <p className="text-xs text-success">{sendResult}</p>}
             <div className="flex items-center justify-end gap-2 pt-1">
