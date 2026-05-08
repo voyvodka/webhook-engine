@@ -17,6 +17,7 @@ public class WebhookDbContext : DbContext
     public DbSet<MessageAttempt> MessageAttempts => Set<MessageAttempt>();
     public DbSet<EndpointHealth> EndpointHealths => Set<EndpointHealth>();
     public DbSet<DashboardUser> DashboardUsers => Set<DashboardUser>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -202,6 +203,34 @@ public class WebhookDbContext : DbContext
             entity.Property(e => e.LastLoginAt).HasColumnName("last_login_at");
 
             entity.HasIndex(e => e.Email).IsUnique();
+        });
+
+        // Audit Logs (append-only)
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.ToTable("audit_logs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.AppId).HasColumnName("app_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.Action).HasColumnName("action").HasMaxLength(64).IsRequired();
+            entity.Property(e => e.ResourceType).HasColumnName("resource_type").HasMaxLength(32).IsRequired();
+            entity.Property(e => e.ResourceId).HasColumnName("resource_id");
+            entity.Property(e => e.BeforeJson).HasColumnName("before_json").HasColumnType("jsonb");
+            entity.Property(e => e.AfterJson).HasColumnName("after_json").HasColumnType("jsonb");
+            entity.Property(e => e.IpAddress).HasColumnName("ip_address").HasMaxLength(45);
+            entity.Property(e => e.UserAgent).HasColumnName("user_agent").HasMaxLength(255);
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
+
+            // Most-recent-first per app for the dashboard log page.
+            entity.HasIndex(e => new { e.AppId, e.CreatedAt })
+                .HasDatabaseName("idx_audit_logs_app_created_at")
+                .IsDescending(false, true);
+
+            // Resource-scoped lookups ("show me everything that ever
+            // happened to this endpoint id").
+            entity.HasIndex(e => new { e.ResourceType, e.ResourceId })
+                .HasDatabaseName("idx_audit_logs_resource");
         });
     }
 }

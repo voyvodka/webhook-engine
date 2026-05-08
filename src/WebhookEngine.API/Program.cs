@@ -128,6 +128,7 @@ builder.Services.AddSingleton<ISigningService, HmacSigningService>();
 builder.Services.AddScoped<IEndpointHealthTracker, EndpointHealthTracker>();
 builder.Services.AddSingleton<IEndpointRateLimiter, EndpointRateLimiter>();
 builder.Services.AddSingleton<IApplicationRateLimiter, ApplicationRateLimiter>();
+builder.Services.AddScoped<IAuditLogger, AuditLogger>();
 builder.Services.AddSingleton<IMessageStateMachine, MessageStateMachine>();
 builder.Services.AddSingleton<IDeliveryNotifier, SignalRDeliveryNotifier>();
 builder.Services.AddSingleton<IDevTrafficGenerator, DevTrafficGenerator>();
