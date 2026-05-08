@@ -197,7 +197,9 @@ export function ApplicationsPage() {
       setCreateResult({ apiKey: result.apiKey, signingSecret: result.signingSecret });
       setCreateName("");
       setShowCreate(false);
-      fetchApps();
+      // Await the refetch so any failure surfaces as a real error in this
+      // try-block rather than as an unhandled promise rejection.
+      await fetchApps();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create application");
     } finally {
@@ -215,7 +217,7 @@ export function ApplicationsPage() {
       onConfirm: async () => {
         try {
           await deleteApplication(id);
-          fetchApps();
+          await fetchApps();
         } catch (e) {
           setError(e instanceof Error ? e.message : "Failed to delete application");
         }

@@ -63,6 +63,10 @@ const closedConfirm: ConfirmState = {
 export function EndpointsPage() {
   const [endpoints, setEndpoints] = useState<EndpointRow[]>([]);
   const [applications, setApplications] = useState<ApplicationRow[]>([]);
+  // Tracks the applications-list fetch separately from the endpoints fetch so
+  // we don't flash "Create an application first" before the apps response
+  // lands on first render — which read as confusing on a fresh page load.
+  const [applicationsLoading, setApplicationsLoading] = useState(true);
   const [eventTypesByApp, setEventTypesByApp] = useState<Record<string, EventTypeSummary[]>>({});
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [page, setPage] = useState(1);
@@ -141,6 +145,7 @@ export function EndpointsPage() {
         setApplications(result.data);
         if (result.data.length > 0) setCreateAppId((c) => c || result.data[0].id);
       } catch { /* no-op */ }
+      finally { setApplicationsLoading(false); }
     };
     fetchApplications();
   }, []);
@@ -376,7 +381,11 @@ export function EndpointsPage() {
           <span className="text-xs text-text-muted">{pagination ? `${pagination.totalCount} total` : ""}</span>
         </div>
 
-        {applications.length === 0 ? (
+        {applicationsLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <span className="text-sm text-text-muted">Loading...</span>
+          </div>
+        ) : applications.length === 0 ? (
           <p className="text-sm text-text-muted px-4 py-8 text-center">Create an application first before adding endpoints.</p>
         ) : loading ? (
           <div className="flex items-center justify-center py-12">
