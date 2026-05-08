@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { PayloadViewer } from "../components/PayloadViewer";
 import { RetryButton } from "../components/RetryButton";
+import { StatusBadge } from "../components/StatusBadge";
 import { getMessage } from "../api/dashboardApi";
 import type { MessageDetail } from "../types";
 import { formatLocaleDateTime } from "../utils/dateTime";
@@ -14,21 +15,6 @@ import {
   CheckCircle2,
   XCircle
 } from "lucide-react";
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    Delivered: "text-success bg-success-soft",
-    Failed: "text-danger bg-danger-soft",
-    DeadLetter: "text-danger bg-danger-soft",
-    Pending: "text-warning bg-warning-soft",
-    Sending: "text-accent bg-accent-soft"
-  };
-  return (
-    <span className={`inline-block text-xs font-medium px-1.5 py-0.5 rounded ${styles[status] ?? "text-text-muted bg-surface-2"}`}>
-      {status === "DeadLetter" ? "Dead Letter" : status}
-    </span>
-  );
-}
 
 export function DeliveryLogPage() {
   const { messageId } = useParams<{ messageId?: string }>();
@@ -106,7 +92,7 @@ export function DeliveryLogPage() {
           </div>
           <div className="flex items-center gap-2 text-sm">
             <span className="font-mono text-xs text-text-secondary">{message.id.slice(0, 16)}</span>
-            <StatusBadge status={message.status} />
+            <StatusBadge kind={message.status} />
             <span className="text-text-muted">{message.eventType ?? "unknown"}</span>
             <span className="text-text-muted font-mono text-xs">{message.attemptCount}/{message.maxRetries}</span>
           </div>

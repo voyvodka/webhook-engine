@@ -3,10 +3,12 @@ import { Link } from "react-router";
 import { RetryButton } from "../components/RetryButton";
 import { Modal } from "../components/Modal";
 import { Select } from "../components/Select";
+import { StatusBadge } from "../components/StatusBadge";
 import { useDeliveryFeed } from "../hooks/useDeliveryFeed";
 import { listApplications, listEndpoints, listMessages, sendDashboardMessage } from "../api/dashboardApi";
-import type { ApplicationRow, MessageRow, MessageStatusType, Pagination } from "../types";
+import type { ApplicationRow, MessageRow, Pagination } from "../types";
 import { formatLocaleDateTime } from "../utils/dateTime";
+import { inputClasses } from "../utils/styles";
 import {
   Send,
   Filter,
@@ -18,27 +20,6 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
-
-function prettyStatus(status: MessageStatusType): string {
-  return status === "DeadLetter" ? "Dead Letter" : status;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    Delivered: "text-success bg-success-soft",
-    Failed: "text-danger bg-danger-soft",
-    DeadLetter: "text-danger bg-danger-soft",
-    Pending: "text-warning bg-warning-soft",
-    Sending: "text-accent bg-accent-soft"
-  };
-  return (
-    <span className={`inline-block text-xs font-medium px-1.5 py-0.5 rounded ${styles[status] ?? "text-text-muted bg-surface-2"}`}>
-      {prettyStatus(status as MessageStatusType)}
-    </span>
-  );
-}
-
-const inputClasses = "w-full px-3 py-2 text-sm bg-surface-2 border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50 transition-colors";
 
 const statusOptions = [
   { value: "", label: "All" },
@@ -319,7 +300,7 @@ export function MessagesPage() {
                       <td className="px-4 py-2 font-mono text-xs text-text-muted max-w-[180px] truncate" title={msg.endpointUrl ?? msg.endpointId}>
                         {msg.endpointUrl ?? msg.endpointId.slice(0, 12)}
                       </td>
-                      <td className="px-4 py-2"><StatusBadge status={msg.status} /></td>
+                      <td className="px-4 py-2"><StatusBadge kind={msg.status} /></td>
                       <td className="px-4 py-2 text-xs text-text-muted font-mono">{msg.attemptCount}/{msg.maxRetries}</td>
                       <td className="px-4 py-2 text-xs text-text-muted">{formatLocaleDateTime(msg.createdAt)}</td>
                       <td className="px-4 py-2">

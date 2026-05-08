@@ -10,6 +10,7 @@ import {
   type DevTrafficStatus
 } from "../api/dashboardApi";
 import { DeliveryTimeline } from "../components/DeliveryTimeline";
+import { StatusBadge } from "../components/StatusBadge";
 import { useDeliveryFeed } from "../hooks/useDeliveryFeed";
 import type { DashboardOverview, TimelineBucket } from "../types";
 import { formatLocaleTime } from "../utils/dateTime";
@@ -400,7 +401,7 @@ export function DashboardPage() {
                   <tr key={`${event.messageId}-${i}`} className="border-t border-border-subtle">
                     <td className="py-1.5 font-mono text-xs text-text-secondary">{event.messageId.slice(0, 12)}</td>
                     <td className="py-1.5">
-                      <StatusBadge status={event.status} />
+                      <StatusBadge kind={event.status} />
                     </td>
                     <td className="py-1.5 text-text-secondary">{event.attemptCount}</td>
                     <td className="py-1.5 font-mono text-xs text-text-secondary">
@@ -415,21 +416,5 @@ export function DashboardPage() {
         )}
       </div>
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    Delivered: "text-success bg-success-soft",
-    Failed: "text-danger bg-danger-soft",
-    DeadLetter: "text-danger bg-danger-soft",
-    Pending: "text-warning bg-warning-soft",
-    Sending: "text-accent bg-accent-soft"
-  };
-
-  return (
-    <span className={`inline-block text-xs font-medium px-1.5 py-0.5 rounded ${styles[status] ?? "text-text-muted bg-surface-2"}`}>
-      {status === "DeadLetter" ? "Dead Letter" : status}
-    </span>
   );
 }
