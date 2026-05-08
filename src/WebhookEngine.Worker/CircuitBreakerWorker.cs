@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using WebhookEngine.Core.Enums;
+using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Core.Options;
 using WebhookEngine.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -104,6 +105,29 @@ public class CircuitBreakerWorker : BackgroundService
                             await transaction.CommitAsync(stoppingToken);
 
                         _logger.LogInformation("Endpoint {EndpointId} circuit transitioned to HalfOpen", freshHealth.EndpointId);
+
+                        // Push the transition out so dashboard badges flip from
+                        // Failed/Open back to Degraded/HalfOpen without a poll.
+                        // Notification is best-effort and lives outside the
+                        // transaction so a hub failure can't undo the commit.
+                        var notifier = scope.ServiceProvider.GetService<IDeliveryNotifier>();
+                        if (notifier is not null)
+                        {
+                            try
+                            {
+                                await notifier.NotifyEndpointHealthChangedAsync(
+                                    freshHealth.EndpointId,
+                                    endpoint?.Status ?? EndpointStatus.Degraded,
+                                    freshHealth.CircuitState,
+                                    freshHealth.ConsecutiveFailures,
+                                    freshHealth.CooldownUntil,
+                                    stoppingToken);
+                            }
+                            catch (Exception notifyEx)
+                            {
+                                _logger.LogWarning(notifyEx, "Failed to push endpoint-health notification for {EndpointId}", freshHealth.EndpointId);
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {

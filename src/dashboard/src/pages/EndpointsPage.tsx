@@ -6,6 +6,7 @@ import { Select } from "../components/Select";
 import { EventTypeSelect } from "../components/EventTypeSelect";
 import { TransformSection } from "../components/TransformSection";
 import { EndpointTestModal } from "../components/EndpointTestModal";
+import { useDeliveryFeed } from "../hooks/useDeliveryFeed";
 import {
   createDashboardEndpoint,
   deleteDashboardEndpoint,
@@ -136,6 +137,25 @@ export function EndpointsPage() {
     };
     fetchApplications();
   }, []);
+
+  // Live-patch the row when the engine pushes a circuit transition. The hub
+  // event already carries the new visible status; we map it onto whichever
+  // row in the current page matches the endpointId. Rows on other pages
+  // pick up the change on the next manual refresh. The microtask defer
+  // matches the codebase's existing pattern for set-state-in-effect.
+  const { lastHealthChange } = useDeliveryFeed();
+  useEffect(() => {
+    if (!lastHealthChange) return;
+    void Promise.resolve().then(() => {
+      setEndpoints((prev) => {
+        const idx = prev.findIndex((e) => e.id === lastHealthChange.endpointId);
+        if (idx < 0) return prev;
+        const next = prev.slice();
+        next[idx] = { ...next[idx], status: lastHealthChange.status };
+        return next;
+      });
+    });
+  }, [lastHealthChange]);
 
   useEffect(() => {
     if (!showCreate || !createAppId) return;
