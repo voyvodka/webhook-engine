@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
+import { useQuery } from "@tanstack/react-query";
 import { PayloadViewer } from "../components/PayloadViewer";
 import { RetryButton } from "../components/RetryButton";
 import { StatusBadge } from "../components/StatusBadge";
 import { getMessage } from "../api/dashboardApi";
-import type { MessageDetail } from "../types";
 import { formatLocaleDateTime } from "../utils/dateTime";
 import {
   ArrowLeft,
@@ -18,32 +17,25 @@ import {
 
 export function DeliveryLogPage() {
   const { messageId } = useParams<{ messageId?: string }>();
-  const [message, setMessage] = useState<MessageDetail | null>(null);
-  const [loading, setLoading] = useState<boolean>(!!messageId);
-  const [fetchError, setFetchError] = useState("");
 
+  // First page in the F12 migration. The previous useEffect + useState +
+  // cancelled-flag rig becomes one useQuery call: TanStack handles cancellation
+  // on unmount + dedup on remount + the staleTime configured in App.tsx.
+  const messageQuery = useQuery({
+    queryKey: ["message", messageId],
+    queryFn: () => getMessage(messageId!),
+    enabled: !!messageId
+  });
+
+  const message = messageQuery.data ?? null;
+  const loading = !!messageId && messageQuery.isLoading;
   const error = !messageId
     ? "No message ID provided. Navigate here from the Messages page."
-    : fetchError;
-
-  useEffect(() => {
-    if (!messageId) return;
-
-    let cancelled = false;
-    async function load() {
-      try {
-        const data = await getMessage(messageId!);
-        if (!cancelled) setMessage(data);
-      } catch (e) {
-        if (!cancelled) setFetchError(e instanceof Error ? e.message : "Failed to load message");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    void load();
-    return () => { cancelled = true; };
-  }, [messageId]);
+    : messageQuery.error instanceof Error
+      ? messageQuery.error.message
+      : messageQuery.error
+        ? "Failed to load message"
+        : "";
 
   if (loading) {
     return (

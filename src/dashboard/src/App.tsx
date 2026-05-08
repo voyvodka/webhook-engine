@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./auth/AuthContext";
 import { AppShell } from "./layout/AppShell";
 import { LoginPage } from "./pages/LoginPage";
@@ -33,11 +34,31 @@ function PageFallback() {
   );
 }
 
+// Single QueryClient for the whole dashboard. Defaults are tuned for an
+// authenticated long-lived dashboard, not a public site:
+// - staleTime 30 s: the SignalR feed is the live channel; HTTP fetches just
+//   refresh the static aggregates, so a 30-second stale window keeps the
+//   network cost down without hiding meaningful changes.
+// - retry 1: dashboard requests are idempotent reads; one transient retry is
+//   useful, but stacking five buys nothing the SignalR layer doesn't already.
+// - refetchOnWindowFocus false: a long-running dashboard otherwise fires a
+//   storm of refetches every time the user alt-tabs back.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: 1,
+      refetchOnWindowFocus: false
+    }
+  }
+});
+
 export function App() {
   return (
     <RouteErrorBoundary>
-      <AuthProvider>
-        <BrowserRouter>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <BrowserRouter>
           <Routes>
           <Route path="/login" element={<LoginPage />} />
 
@@ -97,7 +118,8 @@ export function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
-      </AuthProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </RouteErrorBoundary>
   );
 }
