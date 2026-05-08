@@ -17,14 +17,64 @@ interface ApiEnvelope<T> {
   meta?: { requestId?: string; pagination?: Pagination };
 }
 
-async function parseError(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as { error?: { message?: string } };
-    if (payload.error?.message) return payload.error.message;
-  } catch {
-    // no-op
+/**
+ * Field-aware shape of an error returned from the API.
+ * `message` is always set; `fieldErrors` is populated only when the server
+ * surfaces per-field validation hints (FluentValidation 422 path).
+ */
+export interface ApiError {
+  message: string;
+  fieldErrors?: Record<string, string>;
+}
+
+/**
+ * Carries the {@link ApiError} alongside the `Error` interface so existing
+ * `catch (e) { e instanceof Error ? e.message : … }` sites keep working
+ * verbatim while form components opt in by checking `instanceof
+ * ApiErrorException` and reading `fieldErrors`. Form-level wiring lands in
+ * the dashboard-improvement follow-up; this PR only exposes the surface.
+ */
+export class ApiErrorException extends Error {
+  readonly fieldErrors?: Record<string, string>;
+
+  constructor(error: ApiError) {
+    super(error.message);
+    this.name = "ApiErrorException";
+    this.fieldErrors = error.fieldErrors;
   }
-  return `Request failed with status ${response.status}`;
+}
+
+async function parseError(response: Response): Promise<ApiError> {
+  try {
+    const payload = (await response.json()) as {
+      error?: {
+        message?: string;
+        fieldErrors?: Array<{ field?: string; message?: string }> | Record<string, string>;
+      };
+    };
+
+    const message = payload.error?.message ?? `Request failed with status ${response.status}`;
+    const rawFieldErrors = payload.error?.fieldErrors;
+    let fieldErrors: Record<string, string> | undefined;
+
+    if (Array.isArray(rawFieldErrors)) {
+      // [{ field, message }] — collapse to first message per field.
+      fieldErrors = {};
+      for (const entry of rawFieldErrors) {
+        if (entry?.field && entry.message && !(entry.field in fieldErrors)) {
+          fieldErrors[entry.field] = entry.message;
+        }
+      }
+      if (Object.keys(fieldErrors).length === 0) fieldErrors = undefined;
+    } else if (rawFieldErrors && typeof rawFieldErrors === "object") {
+      // Already a { field: message } map.
+      fieldErrors = rawFieldErrors as Record<string, string>;
+    }
+
+    return { message, fieldErrors };
+  } catch {
+    return { message: `Request failed with status ${response.status}` };
+  }
 }
 
 /**
@@ -53,7 +103,9 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     maybeFireAuthExpired(url, response.status);
-    throw new Error(await parseError(response));
+    // Throw ApiErrorException so call sites that opt in can `instanceof`-check
+    // and read `fieldErrors`; sites that just `e.message` keep working unchanged.
+    throw new ApiErrorException(await parseError(response));
   }
 
   return (await response.json()) as T;
@@ -70,7 +122,9 @@ async function mutate<T>(url: string, method: string, body?: unknown, init?: Req
 
   if (!response.ok) {
     maybeFireAuthExpired(url, response.status);
-    throw new Error(await parseError(response));
+    // Throw ApiErrorException so call sites that opt in can `instanceof`-check
+    // and read `fieldErrors`; sites that just `e.message` keep working unchanged.
+    throw new ApiErrorException(await parseError(response));
   }
 
   if (response.status === 204) return undefined as T;

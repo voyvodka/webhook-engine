@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import { json } from "@codemirror/lang-json";
-import { EditorView } from "@codemirror/view";
-import { tags as t } from "@lezer/highlight";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Loader2, Send } from "lucide-react";
 import { Modal } from "./Modal";
 import { testDashboardEndpoint } from "../api/dashboardApi";
 import type { TestEndpointResult } from "../api/dashboardApi";
+import { jsonEditorExtensions } from "../utils/editorTheme";
+import { inputClasses } from "../utils/styles";
 
 interface EndpointTestModalProps {
   open: boolean;
@@ -22,46 +20,6 @@ const DEFAULT_PAYLOAD = `{
     "message": "Hello from WebhookEngine"
   }
 }`;
-
-const editorTheme = EditorView.theme(
-  {
-    "&": {
-      backgroundColor: "transparent",
-      color: "#fafafa",
-      fontSize: "12px",
-      fontFamily:
-        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace"
-    },
-    ".cm-content": { padding: "8px 0", caretColor: "#22d3ee" },
-    ".cm-gutters": {
-      backgroundColor: "transparent",
-      color: "#71717a",
-      borderRight: "1px solid #1e1e22"
-    },
-    ".cm-activeLine": { backgroundColor: "transparent" },
-    ".cm-activeLineGutter": { backgroundColor: "transparent" },
-    ".cm-cursor": { borderLeftColor: "#22d3ee" },
-    "&.cm-focused": { outline: "none" },
-    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
-      { backgroundColor: "rgba(34, 211, 238, 0.18)" }
-  },
-  { dark: true }
-);
-
-const editorHighlight = HighlightStyle.define([
-  { tag: t.string, color: "#86efac" },
-  { tag: t.number, color: "#fbbf24" },
-  { tag: t.bool, color: "#f472b6" },
-  { tag: t.null, color: "#71717a" },
-  { tag: t.propertyName, color: "#22d3ee" },
-  { tag: t.keyword, color: "#c4b5fd" },
-  { tag: t.punctuation, color: "#a1a1aa" }
-]);
-
-const editorExtensions = [editorTheme, syntaxHighlighting(editorHighlight), json(), EditorView.lineWrapping];
-
-const inputClasses =
-  "w-full px-3 py-2 text-sm bg-surface-2 border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50 transition-colors";
 
 export function EndpointTestModal({ open, endpointId, endpointUrl, onClose }: EndpointTestModalProps) {
   const [eventType, setEventType] = useState("");
@@ -160,7 +118,8 @@ export function EndpointTestModal({ open, endpointId, endpointUrl, onClose }: En
             <CodeMirror
               value={payloadText}
               height="200px"
-              extensions={editorExtensions}
+              theme="dark"
+              extensions={jsonEditorExtensions}
               onChange={setPayloadText}
               basicSetup={{
                 lineNumbers: false,

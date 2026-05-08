@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { EndpointHealthBadge } from "../components/EndpointHealthBadge";
 import { Modal } from "../components/Modal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Select } from "../components/Select";
 import { EventTypeSelect } from "../components/EventTypeSelect";
-import { TransformSection } from "../components/TransformSection";
-import { EndpointTestModal } from "../components/EndpointTestModal";
 import { useDeliveryFeed } from "../hooks/useDeliveryFeed";
 import {
   createDashboardEndpoint,
@@ -32,6 +30,17 @@ import {
   Send
 } from "lucide-react";
 import { formatLocaleDate } from "../utils/dateTime";
+import { inputClasses } from "../utils/styles";
+
+// Lazy-load heavy CodeMirror components so the editor chunk only downloads
+// when the user actually opens the create/edit or test modals — not on every
+// Endpoints page visit. DPR-2 bundle consolidation pass.
+const TransformSection = lazy(() =>
+  import("../components/TransformSection").then((m) => ({ default: m.TransformSection }))
+);
+const EndpointTestModal = lazy(() =>
+  import("../components/EndpointTestModal").then((m) => ({ default: m.EndpointTestModal }))
+);
 
 function toTitleCase(value: string): string {
   if (!value) return value;
@@ -50,8 +59,6 @@ interface ConfirmState {
 const closedConfirm: ConfirmState = {
   open: false, title: "", description: "", confirmLabel: "Confirm", variant: "default", onConfirm: () => {}
 };
-
-const inputClasses = "w-full px-3 py-2 text-sm bg-surface-2 border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50 transition-colors";
 
 export function EndpointsPage() {
   const [endpoints, setEndpoints] = useState<EndpointRow[]>([]);
@@ -191,6 +198,9 @@ export function EndpointsPage() {
         transformExpression: trimmedExpr || null,
         transformEnabled: createTransformEnabled && trimmedExpr.length > 0
       });
+      // TODO(DPR-3): createDashboardEndpoint now throws ApiErrorException with
+      // fieldErrors when the server returns 422 — wire url field error into the
+      // input once the form is upgraded in the next pass.
       resetCreateForm();
       setShowCreate(false);
       await fetchEndpoints();
@@ -479,14 +489,16 @@ export function EndpointsPage() {
               <p className="text-xs text-text-muted mt-1">No selection = receives all events for this app.</p>
             </div>
           )}
-          <TransformSection
-            enabled={createTransformEnabled}
-            expression={createTransformExpression}
-            onChange={(next) => {
-              setCreateTransformEnabled(next.enabled);
-              setCreateTransformExpression(next.expression);
-            }}
-          />
+          <Suspense fallback={<div className="p-4 text-xs text-text-muted">Loading editor...</div>}>
+            <TransformSection
+              enabled={createTransformEnabled}
+              expression={createTransformExpression}
+              onChange={(next) => {
+                setCreateTransformEnabled(next.enabled);
+                setCreateTransformExpression(next.expression);
+              }}
+            />
+          </Suspense>
           <div className="flex items-center justify-end gap-2 pt-2">
             <button onClick={() => { setShowCreate(false); resetCreateForm(); }} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-border bg-surface-2 text-text-secondary hover:text-text-primary hover:bg-surface-3 transition-colors">
               Cancel
@@ -525,14 +537,16 @@ export function EndpointsPage() {
               <EventTypeSelect eventTypes={editEventTypes} selected={editFilterEventTypeIds} onChange={setEditFilterEventTypeIds} />
             </div>
           )}
-          <TransformSection
-            enabled={editTransformEnabled}
-            expression={editTransformExpression}
-            onChange={(next) => {
-              setEditTransformEnabled(next.enabled);
-              setEditTransformExpression(next.expression);
-            }}
-          />
+          <Suspense fallback={<div className="p-4 text-xs text-text-muted">Loading editor...</div>}>
+            <TransformSection
+              enabled={editTransformEnabled}
+              expression={editTransformExpression}
+              onChange={(next) => {
+                setEditTransformEnabled(next.enabled);
+                setEditTransformExpression(next.expression);
+              }}
+            />
+          </Suspense>
           <div className="flex items-center justify-end gap-2 pt-2">
             <button onClick={cancelEdit} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-border bg-surface-2 text-text-secondary hover:text-text-primary hover:bg-surface-3 transition-colors">
               Cancel
@@ -561,12 +575,14 @@ export function EndpointsPage() {
       />
 
       {/* ── Test Modal ────────────────────────────── */}
-      <EndpointTestModal
-        open={testEndpointId !== null}
-        endpointId={testEndpointId}
-        endpointUrl={testEndpointUrl}
-        onClose={handleTestClose}
-      />
+      <Suspense fallback={null}>
+        <EndpointTestModal
+          open={testEndpointId !== null}
+          endpointId={testEndpointId}
+          endpointUrl={testEndpointUrl}
+          onClose={handleTestClose}
+        />
+      </Suspense>
     </div>
   );
 }
