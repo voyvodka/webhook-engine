@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EndpointHealthBadge } from "../components/EndpointHealthBadge";
 import { Modal } from "../components/Modal";
 import { ConfirmModal } from "../components/ConfirmModal";
@@ -14,7 +15,7 @@ import {
   setDashboardEndpointStatus,
   updateDashboardEndpoint
 } from "../api/dashboardApi";
-import type { ApplicationRow, EndpointRow, EventTypeSummary, Pagination } from "../types";
+import type { EndpointRow, EventTypeSummary } from "../types";
 import {
   Plus,
   Pencil,
@@ -61,19 +62,41 @@ const closedConfirm: ConfirmState = {
 };
 
 export function EndpointsPage() {
-  const [endpoints, setEndpoints] = useState<EndpointRow[]>([]);
-  const [applications, setApplications] = useState<ApplicationRow[]>([]);
-  // Tracks the applications-list fetch separately from the endpoints fetch so
-  // we don't flash "Create an application first" before the apps response
-  // lands on first render — which read as confusing on a fresh page load.
-  const [applicationsLoading, setApplicationsLoading] = useState(true);
-  const [eventTypesByApp, setEventTypesByApp] = useState<Record<string, EventTypeSummary[]>>({});
-  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
   const [appFilter, setAppFilter] = useState("");
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const endpointsQuery = useQuery({
+    queryKey: ["endpoints", { page, appFilter, statusFilter }],
+    queryFn: () => listEndpoints({
+      appId: appFilter || undefined,
+      status: statusFilter || undefined,
+      page,
+      pageSize: 20
+    })
+  });
+  const endpoints = useMemo(() => endpointsQuery.data?.data ?? [], [endpointsQuery.data]);
+  const pagination = endpointsQuery.data?.pagination ?? null;
+  const loading = endpointsQuery.isLoading;
+
+  const applicationsQuery = useQuery({
+    queryKey: ["applications-all"],
+    queryFn: () => listApplications(1, 200)
+  });
+  const applications = useMemo(() => applicationsQuery.data?.data ?? [], [applicationsQuery.data]);
+  const applicationsLoading = applicationsQuery.isLoading;
+
+  // Per-app event-type cache — populated lazily as the user opens the create
+  // modal or starts editing a row. We hold a local map so the create / edit
+  // forms have synchronous access to the list once it's fetched.
+  const [eventTypesByApp, setEventTypesByApp] = useState<Record<string, EventTypeSummary[]>>({});
+
+  const fetchError = endpointsQuery.error instanceof Error ? endpointsQuery.error.message : "";
+  const displayError = error || fetchError;
+
+  const invalidateEndpoints = () => queryClient.invalidateQueries({ queryKey: ["endpoints"] });
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
@@ -83,7 +106,6 @@ export function EndpointsPage() {
   const [createFilterEventTypeIds, setCreateFilterEventTypeIds] = useState<string[]>([]);
   const [createTransformExpression, setCreateTransformExpression] = useState("");
   const [createTransformEnabled, setCreateTransformEnabled] = useState(false);
-  const [creating, setCreating] = useState(false);
 
   // Edit modal
   const [editingEndpointId, setEditingEndpointId] = useState<string | null>(null);
@@ -92,7 +114,6 @@ export function EndpointsPage() {
   const [editFilterEventTypeIds, setEditFilterEventTypeIds] = useState<string[]>([]);
   const [editTransformExpression, setEditTransformExpression] = useState("");
   const [editTransformEnabled, setEditTransformEnabled] = useState(false);
-  const [updating, setUpdating] = useState(false);
 
   // Confirm modal
   const [confirmState, setConfirmState] = useState<ConfirmState>(closedConfirm);
@@ -118,55 +139,29 @@ export function EndpointsPage() {
     return eventTypes;
   }, [eventTypesByApp]);
 
-  const fetchEndpoints = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const result = await listEndpoints({ appId: appFilter || undefined, status: statusFilter || undefined, page, pageSize: 20 });
-      setEndpoints(result.data);
-      setPagination(result.pagination);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load endpoints");
-    } finally {
-      setLoading(false);
-    }
-  }, [appFilter, page, statusFilter]);
-
+  // Default to the first application as the create-modal target once the
+  // applications list lands. Microtask defer matches the codebase's existing
+  // workaround for react-hooks/set-state-in-effect.
   useEffect(() => {
-    Promise.resolve()
-      .then(() => fetchEndpoints())
-      .catch(() => { /* surfaced via fetchEndpoints' setError */ });
-  }, [fetchEndpoints]);
+    if (applications.length === 0) return;
+    void Promise.resolve().then(() => {
+      setCreateAppId((c) => c || applications[0].id);
+    });
+  }, [applications]);
 
-  useEffect(() => {
-    const fetchApplications = async () => {
-      try {
-        const result = await listApplications(1, 200);
-        setApplications(result.data);
-        if (result.data.length > 0) setCreateAppId((c) => c || result.data[0].id);
-      } catch { /* no-op */ }
-      finally { setApplicationsLoading(false); }
-    };
-    fetchApplications();
-  }, []);
-
-  // Live-patch the row when the engine pushes a circuit transition. The hub
-  // event already carries the new visible status; we map it onto whichever
-  // row in the current page matches the endpointId. Rows on other pages
-  // pick up the change on the next manual refresh. The microtask defer
-  // matches the codebase's existing pattern for set-state-in-effect.
+  // Replace the F7 lastHealthChange direct setState patch with a query
+  // invalidation: the next refetch is the source of truth, dedup is automatic
+  // across multiple pages opening the same query, and stale-on-reconnect
+  // (DPR-1's reset to null) gets us a clean refresh. The "rows on other
+  // pages pick up on next refresh" caveat from before now applies to ANY
+  // open EndpointsPage instance — not just the one that received the event.
   const { lastHealthChange } = useDeliveryFeed();
   useEffect(() => {
     if (!lastHealthChange) return;
     void Promise.resolve().then(() => {
-      setEndpoints((prev) => {
-        const idx = prev.findIndex((e) => e.id === lastHealthChange.endpointId);
-        if (idx < 0) return prev;
-        const next = prev.slice();
-        next[idx] = { ...next[idx], status: lastHealthChange.status };
-        return next;
-      });
+      queryClient.invalidateQueries({ queryKey: ["endpoints"] });
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastHealthChange]);
 
   useEffect(() => {
@@ -189,31 +184,32 @@ export function EndpointsPage() {
     setCreateTransformEnabled(false);
   };
 
-  const handleCreate = async () => {
-    if (!createAppId || !createUrl.trim()) return;
-    setCreating(true);
-    setError("");
-    try {
-      const trimmedExpr = createTransformExpression.trim();
-      await createDashboardEndpoint({
-        appId: createAppId,
-        url: createUrl.trim(),
-        description: createDescription.trim() || undefined,
-        filterEventTypes: createFilterEventTypeIds.length > 0 ? createFilterEventTypeIds : [],
-        transformExpression: trimmedExpr || null,
-        transformEnabled: createTransformEnabled && trimmedExpr.length > 0
-      });
-      // TODO(DPR-3): createDashboardEndpoint now throws ApiErrorException with
-      // fieldErrors when the server returns 422 — wire url field error into the
-      // input once the form is upgraded in the next pass.
+  const createMutation = useMutation({
+    mutationFn: (vars: Parameters<typeof createDashboardEndpoint>[0]) => createDashboardEndpoint(vars),
+    onSuccess: () => {
       resetCreateForm();
       setShowCreate(false);
-      await fetchEndpoints();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create endpoint");
-    } finally {
-      setCreating(false);
-    }
+      invalidateEndpoints();
+    },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Failed to create endpoint")
+  });
+  const creating = createMutation.isPending;
+
+  const handleCreate = () => {
+    if (!createAppId || !createUrl.trim()) return;
+    setError("");
+    const trimmedExpr = createTransformExpression.trim();
+    createMutation.mutate({
+      appId: createAppId,
+      url: createUrl.trim(),
+      description: createDescription.trim() || undefined,
+      filterEventTypes: createFilterEventTypeIds.length > 0 ? createFilterEventTypeIds : [],
+      transformExpression: trimmedExpr || null,
+      transformEnabled: createTransformEnabled && trimmedExpr.length > 0
+    });
+    // TODO(DPR-3): createMutation.error is an ApiErrorException with
+    // fieldErrors on 422 — wire url field error into the input once the
+    // form is upgraded in the next pass.
   };
 
   const startEdit = async (endpoint: EndpointRow) => {
@@ -240,31 +236,38 @@ export function EndpointsPage() {
     setEditTransformEnabled(false);
   };
 
-  const handleUpdate = async () => {
+  const updateMutation = useMutation({
+    mutationFn: (vars: { id: string; payload: Parameters<typeof updateDashboardEndpoint>[1] }) =>
+      updateDashboardEndpoint(vars.id, vars.payload),
+    onSuccess: () => { cancelEdit(); invalidateEndpoints(); },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Failed to update endpoint")
+  });
+  const updating = updateMutation.isPending;
+
+  const handleUpdate = () => {
     if (!editingEndpoint || !editUrl.trim()) return;
-    setUpdating(true);
     setError("");
-    try {
-      const trimmedExpr = editTransformExpression.trim();
-      await updateDashboardEndpoint(editingEndpoint.id, {
+    const trimmedExpr = editTransformExpression.trim();
+    updateMutation.mutate({
+      id: editingEndpoint.id,
+      payload: {
         url: editUrl.trim(),
         description: editDescription.trim() || undefined,
         filterEventTypes: editFilterEventTypeIds,
         transformExpression: trimmedExpr.length > 0 ? trimmedExpr : "",
         transformEnabled: editTransformEnabled && trimmedExpr.length > 0
-      });
-      cancelEdit();
-      await fetchEndpoints();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update endpoint");
-    } finally {
-      setUpdating(false);
-    }
+      }
+    });
   };
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: (vars: { id: string; enable: boolean }) => setDashboardEndpointStatus(vars.id, vars.enable),
+    onSuccess: () => invalidateEndpoints(),
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Failed to toggle endpoint status")
+  });
 
   const requestToggleStatus = (endpoint: EndpointRow) => {
     const isDisabled = endpoint.status.toLowerCase() === "disabled";
-    const action = isDisabled ? "enable" : "disable";
     setConfirmState({
       open: true,
       title: `${isDisabled ? "Enable" : "Disable"} Endpoint`,
@@ -273,13 +276,9 @@ export function EndpointsPage() {
         : "This endpoint will stop receiving webhook deliveries until re-enabled.",
       confirmLabel: isDisabled ? "Enable" : "Disable",
       variant: isDisabled ? "default" : "danger",
-      onConfirm: async () => {
-        try {
-          await setDashboardEndpointStatus(endpoint.id, isDisabled);
-          await fetchEndpoints();
-        } catch (e) {
-          setError(e instanceof Error ? e.message : `Failed to ${action} endpoint`);
-        }
+      onConfirm: () => {
+        setError("");
+        toggleStatusMutation.mutate({ id: endpoint.id, enable: isDisabled });
       }
     });
   };
@@ -301,16 +300,18 @@ export function EndpointsPage() {
       description: `Delete this endpoint? All pending messages for this destination will be cancelled. This action cannot be undone.`,
       confirmLabel: "Delete",
       variant: "danger",
-      onConfirm: async () => {
-        try {
-          await deleteDashboardEndpoint(endpoint.id);
-          await fetchEndpoints();
-        } catch (e) {
-          setError(e instanceof Error ? e.message : "Failed to delete endpoint");
-        }
+      onConfirm: () => {
+        setError("");
+        deleteMutation.mutate(endpoint.id);
       }
     });
   };
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteDashboardEndpoint(id),
+    onSuccess: () => invalidateEndpoints(),
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Failed to delete endpoint")
+  });
 
   const createEventTypes = createAppId ? eventTypesByApp[createAppId] ?? [] : [];
   const editEventTypes = editingEndpoint ? eventTypesByApp[editingEndpoint.appId] ?? [] : [];
@@ -334,10 +335,10 @@ export function EndpointsPage() {
       </div>
 
       {/* Error */}
-      {error && (
+      {displayError && (
         <div className="flex items-center gap-2 text-danger text-xs bg-danger-soft border border-danger/20 rounded-lg px-3 py-2 animate-fade-in-up">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          {error}
+          {displayError}
           <button onClick={() => setError("")} className="ml-auto text-danger/60 hover:text-danger"><X className="w-3 h-3" /></button>
         </div>
       )}

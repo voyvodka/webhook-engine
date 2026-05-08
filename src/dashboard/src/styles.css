@@ -60,6 +60,15 @@
     color: var(--color-text-primary);
   }
 
+  /* Global affordance: every clickable button gets a pointer cursor.
+     Disabled / aria-disabled buttons keep the default arrow so users see
+     the affordance is gone. <a href> elements already get a pointer from
+     the user-agent stylesheet. */
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not(:disabled):not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
   /* Scrollbar — thin dark */
   ::-webkit-scrollbar {
     width: 6px;
