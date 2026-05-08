@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
+import { useMemo, useState } from "react";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   listApplications,
   createApplication,
@@ -9,7 +10,7 @@ import {
 } from "../api/dashboardApi";
 import { Modal } from "../components/Modal";
 import { ConfirmModal } from "../components/ConfirmModal";
-import type { ApplicationRow, EndpointRow, Pagination } from "../types";
+import type { EndpointRow } from "../types";
 import { formatLocaleDate } from "../utils/dateTime";
 import {
   Plus,
@@ -100,20 +101,73 @@ function summarizeEndpoints(total: number, endpoints: EndpointRow[]): Applicatio
   return { total, disabled, healthy, degraded, failed };
 }
 
+// Walks every endpoint page for a given app and returns the summary tuple.
+// Pulled out of the component so useQueries can keep its queryFn pure.
+async function loadAppEndpointStats(appId: string): Promise<ApplicationEndpointStats> {
+  const endpoints: EndpointRow[] = [];
+  let currentPage = 1;
+  let totalPages = 1;
+  let totalCount = 0;
+
+  do {
+    const result = await listEndpoints({ appId, page: currentPage, pageSize: 200 });
+    endpoints.push(...result.data);
+    if (currentPage === 1) {
+      totalPages = result.pagination.totalPages;
+      totalCount = result.pagination.totalCount;
+    }
+    currentPage++;
+  } while (currentPage <= totalPages);
+
+  return summarizeEndpoints(totalCount, endpoints);
+}
+
 export function ApplicationsPage() {
-  const [apps, setApps] = useState<ApplicationRow[]>([]);
-  const [appStats, setAppStats] = useState<Record<string, ApplicationEndpointStats>>({});
-  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [loadingStats, setLoadingStats] = useState(false);
+  // Mutation errors land here; query errors collapse into displayError below.
   const [error, setError] = useState("");
+
+  const applicationsQuery = useQuery({
+    queryKey: ["applications", page],
+    queryFn: () => listApplications(page, 20)
+  });
+
+  const apps = useMemo(() => applicationsQuery.data?.data ?? [], [applicationsQuery.data]);
+  const pagination = applicationsQuery.data?.pagination ?? null;
+  const loading = applicationsQuery.isLoading;
+
+  // Fan-out per-app endpoint stats. useQueries dedup-caches each app's
+  // result independently so refreshing the apps list doesn't re-walk every
+  // endpoint page when most apps haven't changed.
+  const appStatsQueries = useQueries({
+    queries: apps.map((app) => ({
+      queryKey: ["app-stats", app.id],
+      queryFn: () => loadAppEndpointStats(app.id)
+    }))
+  });
+
+  const appStats = useMemo(() => {
+    const map: Record<string, ApplicationEndpointStats> = {};
+    appStatsQueries.forEach((q, idx) => {
+      const app = apps[idx];
+      if (app && q.data) map[app.id] = q.data;
+    });
+    return map;
+  }, [appStatsQueries, apps]);
+
+  const loadingStats = appStatsQueries.some((q) => q.isLoading);
+
+  const fetchError =
+    applicationsQuery.error instanceof Error ? applicationsQuery.error.message : "";
+  const displayError = error || fetchError;
+
+  const invalidateApplications = () => queryClient.invalidateQueries({ queryKey: ["applications"] });
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createResult, setCreateResult] = useState<{ apiKey: string; signingSecret: string } | null>(null);
-  const [creating, setCreating] = useState(false);
 
   // Secret reveal
   const [revealedKey, setRevealedKey] = useState<{ id: string; apiKey: string } | null>(null);
@@ -122,89 +176,41 @@ export function ApplicationsPage() {
   // Confirm modal
   const [confirm, setConfirm] = useState<ConfirmState>(closedConfirm);
 
-  const fetchAppStats = useCallback(async (rows: ApplicationRow[]) => {
-    if (rows.length === 0) {
-      setAppStats({});
-      return;
-    }
-
-    setLoadingStats(true);
-    try {
-      const entries = await Promise.all(rows.map(async (app) => {
-        const endpoints: EndpointRow[] = [];
-        let currentPage = 1;
-        let totalPages = 1;
-        let totalCount = 0;
-
-        do {
-          const result = await listEndpoints({ appId: app.id, page: currentPage, pageSize: 200 });
-          endpoints.push(...result.data);
-
-          if (currentPage === 1) {
-            totalPages = result.pagination.totalPages;
-            totalCount = result.pagination.totalCount;
-          }
-
-          currentPage++;
-        } while (currentPage <= totalPages);
-
-        return [app.id, summarizeEndpoints(totalCount, endpoints)] as const;
-      }));
-
-      setAppStats(Object.fromEntries(entries));
-    } catch {
-      setAppStats({});
-    } finally {
-      setLoadingStats(false);
-    }
-  }, []);
-
-  const fetchApps = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const result = await listApplications(page, 20);
-      setApps(result.data);
-      setPagination(result.pagination);
-      await fetchAppStats(result.data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load applications");
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchAppStats, page]);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.resolve()
-      .then(() => fetchApps())
-      .catch(() => { /* surfaced via fetchApps' setError */ })
-      .finally(() => {
-        if (cancelled) {
-          /* component unmounted before fetch settled */
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchApps]);
-
-  const handleCreate = async () => {
-    if (!createName.trim()) return;
-    setCreating(true);
-    try {
-      const result = await createApplication(createName.trim());
+  const createMutation = useMutation({
+    mutationFn: (name: string) => createApplication(name),
+    onSuccess: (result) => {
       setCreateResult({ apiKey: result.apiKey, signingSecret: result.signingSecret });
       setCreateName("");
       setShowCreate(false);
-      // Await the refetch so any failure surfaces as a real error in this
-      // try-block rather than as an unhandled promise rejection.
-      await fetchApps();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create application");
-    } finally {
-      setCreating(false);
-    }
+      invalidateApplications();
+    },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Failed to create application")
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteApplication(id),
+    onSuccess: () => invalidateApplications(),
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Failed to delete application")
+  });
+
+  const rotateKeyMutation = useMutation({
+    mutationFn: (id: string) => rotateApiKey(id),
+    onSuccess: (result, id) => setRevealedKey({ id, apiKey: result.apiKey }),
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Failed to rotate key")
+  });
+
+  const rotateSecretMutation = useMutation({
+    mutationFn: (id: string) => rotateSigningSecret(id),
+    onSuccess: (result, id) => setRevealedSecret({ id, signingSecret: result.signingSecret }),
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Failed to rotate secret")
+  });
+
+  const creating = createMutation.isPending;
+
+  const handleCreate = () => {
+    if (!createName.trim()) return;
+    setError("");
+    createMutation.mutate(createName.trim());
   };
 
   const requestDelete = (id: string, name: string) => {
@@ -214,13 +220,9 @@ export function ApplicationsPage() {
       description: `Delete "${name}"? This will also delete all its endpoints and messages. This action cannot be undone.`,
       confirmLabel: "Delete",
       variant: "danger",
-      onConfirm: async () => {
-        try {
-          await deleteApplication(id);
-          await fetchApps();
-        } catch (e) {
-          setError(e instanceof Error ? e.message : "Failed to delete application");
-        }
+      onConfirm: () => {
+        setError("");
+        deleteMutation.mutate(id);
       }
     });
   };
@@ -232,13 +234,9 @@ export function ApplicationsPage() {
       description: "The current API key will stop working immediately. Make sure your integrations are ready for the new key.",
       confirmLabel: "Rotate Key",
       variant: "default",
-      onConfirm: async () => {
-        try {
-          const result = await rotateApiKey(id);
-          setRevealedKey({ id, apiKey: result.apiKey });
-        } catch (e) {
-          setError(e instanceof Error ? e.message : "Failed to rotate key");
-        }
+      onConfirm: () => {
+        setError("");
+        rotateKeyMutation.mutate(id);
       }
     });
   };
@@ -250,13 +248,9 @@ export function ApplicationsPage() {
       description: "Webhook consumers will need the new secret to verify signatures. Update all consumers before rotating.",
       confirmLabel: "Rotate Secret",
       variant: "default",
-      onConfirm: async () => {
-        try {
-          const result = await rotateSigningSecret(id);
-          setRevealedSecret({ id, signingSecret: result.signingSecret });
-        } catch (e) {
-          setError(e instanceof Error ? e.message : "Failed to rotate secret");
-        }
+      onConfirm: () => {
+        setError("");
+        rotateSecretMutation.mutate(id);
       }
     });
   };
@@ -279,10 +273,10 @@ export function ApplicationsPage() {
       </div>
 
       {/* Error */}
-      {error && (
+      {displayError && (
         <div className="flex items-center gap-2 text-danger text-xs bg-danger-soft border border-danger/20 rounded-lg px-3 py-2 animate-fade-in-up">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          {error}
+          {displayError}
           <button onClick={() => setError("")} className="ml-auto text-danger/60 hover:text-danger"><X className="w-3 h-3" /></button>
         </div>
       )}
