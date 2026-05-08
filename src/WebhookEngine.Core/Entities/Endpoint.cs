@@ -13,6 +13,15 @@ public class Endpoint
     public string? SecretOverride { get; set; }
     public string MetadataJson { get; set; } = "{}";
 
+    /// <summary>
+    /// Optional JSON array of CIDR strings. When non-empty, delivery is
+    /// allowed only when every resolved IP for the hostname lands inside
+    /// one of the listed ranges. Layered on top of the deployment-wide
+    /// SSRF guard for explicit per-endpoint hardening (e.g. enterprise
+    /// customers pinning their static egress range).
+    /// </summary>
+    public string? AllowedIpsJson { get; set; }
+
     // Payload transformation (ADR-003) — declarative JMESPath reshape applied
     // before delivery. Stored only in Phase 1; pipeline integration arrives in
     // Phase 2 (HttpDeliveryService) and the dashboard editor in Phase 3.

@@ -104,6 +104,9 @@ public class DashboardEndpointController : ControllerBase
             SecretOverride = string.IsNullOrWhiteSpace(request.SecretOverride) ? null : request.SecretOverride,
             CustomHeadersJson = System.Text.Json.JsonSerializer.Serialize(request.CustomHeaders ?? new Dictionary<string, string>()),
             MetadataJson = System.Text.Json.JsonSerializer.Serialize(request.Metadata ?? new Dictionary<string, string>()),
+            AllowedIpsJson = request.AllowedIps is { Count: > 0 }
+                ? System.Text.Json.JsonSerializer.Serialize(request.AllowedIps)
+                : null,
             TransformExpression = string.IsNullOrWhiteSpace(request.TransformExpression) ? null : request.TransformExpression,
             TransformEnabled = request.TransformEnabled ?? false
         };
@@ -175,6 +178,13 @@ public class DashboardEndpointController : ControllerBase
 
         if (request.Metadata is not null)
             endpoint.MetadataJson = System.Text.Json.JsonSerializer.Serialize(request.Metadata);
+
+        if (request.AllowedIps is not null)
+        {
+            endpoint.AllowedIpsJson = request.AllowedIps.Count == 0
+                ? null
+                : System.Text.Json.JsonSerializer.Serialize(request.AllowedIps);
+        }
 
         if (request.TransformExpression is not null)
         {
@@ -490,6 +500,7 @@ public class DashboardCreateEndpointRequest
     public Dictionary<string, string>? CustomHeaders { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
     public string? SecretOverride { get; set; }
+    public List<string>? AllowedIps { get; set; }
     public string? TransformExpression { get; set; }
     public bool? TransformEnabled { get; set; }
 }
@@ -502,6 +513,8 @@ public class DashboardUpdateEndpointRequest
     public Dictionary<string, string>? CustomHeaders { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
     public string? SecretOverride { get; set; }
+    // Pass an empty list to clear the allowlist.
+    public List<string>? AllowedIps { get; set; }
     public string? TransformExpression { get; set; }
     public bool? TransformEnabled { get; set; }
 }

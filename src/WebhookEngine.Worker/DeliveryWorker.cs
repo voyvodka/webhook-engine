@@ -2,6 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
@@ -10,6 +12,7 @@ using WebhookEngine.Core.Models;
 using WebhookEngine.Core.Options;
 using WebhookEngine.Core.Utilities;
 using WebhookEngine.Infrastructure.Repositories;
+using WebhookEngine.Infrastructure.Services;
 
 namespace WebhookEngine.Worker;
 
@@ -196,6 +199,43 @@ public class DeliveryWorker : BackgroundService
                         message.Id,
                         nextAttemptAt);
 
+                    return;
+                }
+            }
+
+            // Per-endpoint IP allowlist: the SSRF guard already blocked private
+            // ranges deployment-wide; this gate adds a positive-list check for
+            // customers who pin static egress (enterprise / fintech). An empty
+            // list means "unrestricted" and the matcher returns true.
+            var allowedNetworks = IpAllowlistMatcher.Parse(endpoint.AllowedIpsJson);
+            if (allowedNetworks.Count > 0)
+            {
+                if (!Uri.TryCreate(endpoint.Url, UriKind.Absolute, out var endpointUri))
+                {
+                    _logger.LogError("Endpoint URL is not parseable for {EndpointId}, message {MessageId}", message.EndpointId, message.Id);
+                    await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, ct);
+                    return;
+                }
+
+                IPAddress[] resolved;
+                try
+                {
+                    resolved = await Dns.GetHostAddressesAsync(endpointUri.Host, ct);
+                }
+                catch (Exception ex) when (ex is SocketException or ArgumentException)
+                {
+                    _logger.LogWarning(ex, "Allowlist DNS lookup failed for endpoint {EndpointId}, message {MessageId}; treating as denied.", message.EndpointId, message.Id);
+                    await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, ct);
+                    return;
+                }
+
+                if (!IpAllowlistMatcher.AllAddressesAllowed(allowedNetworks, resolved))
+                {
+                    _logger.LogWarning(
+                        "Endpoint {EndpointId} resolved to an IP outside its allowlist; message {MessageId} dead-lettered.",
+                        endpoint.Id,
+                        message.Id);
+                    await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, ct);
                     return;
                 }
             }

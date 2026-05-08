@@ -77,6 +77,8 @@ export interface EndpointRow {
   circuitState: CircuitState;
   eventTypes: string[];
   eventTypeIds?: string[];
+  // Empty array = no allowlist; delivery falls back to the deployment SSRF guard only.
+  allowedIps?: string[];
   transformExpression?: string | null;
   transformEnabled?: boolean;
   transformValidatedAt?: string | null;

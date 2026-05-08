@@ -51,6 +51,9 @@ public class EndpointsController : ControllerBase
             Description = request.Description,
             CustomHeadersJson = System.Text.Json.JsonSerializer.Serialize(request.CustomHeaders ?? new Dictionary<string, string>()),
             MetadataJson = System.Text.Json.JsonSerializer.Serialize(request.Metadata ?? new Dictionary<string, string>()),
+            AllowedIpsJson = request.AllowedIps is { Count: > 0 }
+                ? System.Text.Json.JsonSerializer.Serialize(request.AllowedIps)
+                : null,
             TransformExpression = string.IsNullOrWhiteSpace(request.TransformExpression) ? null : request.TransformExpression,
             TransformEnabled = request.TransformEnabled ?? false
         };
@@ -129,6 +132,15 @@ public class EndpointsController : ControllerBase
 
         if (request.SecretOverride is not null)
             endpoint.SecretOverride = string.IsNullOrWhiteSpace(request.SecretOverride) ? null : request.SecretOverride;
+
+        if (request.AllowedIps is not null)
+        {
+            // Empty list = clear the allowlist (delivery falls back to the
+            // deployment-wide SSRF guard only). Non-empty list overwrites.
+            endpoint.AllowedIpsJson = request.AllowedIps.Count == 0
+                ? null
+                : System.Text.Json.JsonSerializer.Serialize(request.AllowedIps);
+        }
 
         if (request.TransformExpression is not null)
         {
@@ -294,6 +306,9 @@ public class CreateEndpointRequest
     public List<Guid>? FilterEventTypes { get; set; }
     public Dictionary<string, string>? CustomHeaders { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
+    // Optional CIDR list. Empty/null = no allowlist (delivery falls back to
+    // the deployment-wide SSRF guard only).
+    public List<string>? AllowedIps { get; set; }
     public string? TransformExpression { get; set; }
     public bool? TransformEnabled { get; set; }
 }
@@ -306,6 +321,8 @@ public class UpdateEndpointRequest
     public Dictionary<string, string>? CustomHeaders { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
     public string? SecretOverride { get; set; }
+    // Pass an empty list to clear the allowlist.
+    public List<string>? AllowedIps { get; set; }
     public string? TransformExpression { get; set; }
     public bool? TransformEnabled { get; set; }
 }
