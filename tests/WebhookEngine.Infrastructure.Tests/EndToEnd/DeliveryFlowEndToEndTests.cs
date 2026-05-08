@@ -202,7 +202,7 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
     }
 
     [Fact]
-    public async Task Allowlist_Mismatch_Sends_Message_To_DeadLetter_Without_Calling_Delivery()
+    public async Task Allowlist_Lookup_Failure_Reschedules_For_Retry_Within_Budget()
     {
         await _fixture.ResetAsync();
 
@@ -213,11 +213,11 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
 
         await using var sp = BuildServiceProvider(deliveryService);
 
-        // The endpoint hostname (example.invalid) cannot resolve at all under
-        // RFC 6761, so AllAddressesAllowed returns false on an empty resolved
-        // set with a non-empty allowlist. Either way (resolution failure or
-        // resolved IP outside the list), the worker takes the DeadLetter path
-        // before signing, so DeliverAsync is never called.
+        // example.invalid (RFC 6761) deterministically throws on Dns.GetHostAddressesAsync.
+        // A thrown resolver call is "we don't know yet," not "denied" — the worker
+        // must reschedule the message for retry, NOT dead-letter it on the first
+        // failure. A transient CoreDNS / resolv.conf hiccup would otherwise
+        // permanently kill every in-flight message for a healthy endpoint.
         var seed = await SeedAsync(sp, allowedIps: ["203.0.113.0/24"]);
         var messageIds = await EnqueueMessagesAsync(sp, seed, count: 1);
 
@@ -227,7 +227,36 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
         var db = scope.ServiceProvider.GetRequiredService<WebhookDbContext>();
         var message = await db.Messages.AsNoTracking().SingleAsync(m => m.Id == messageIds[0]);
 
+        message.Status.Should().Be(MessageStatus.Failed, "DNS resolver failure under retry budget is transient");
+        message.AttemptCount.Should().Be(1, "the failed lookup itself counts as one attempt");
+        message.ScheduledAt.Should().BeAfter(DateTime.UtcNow, "next retry is scheduled for the future");
+        await deliveryService.DidNotReceiveWithAnyArgs().DeliverAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task Allowlist_Lookup_Failure_DeadLetters_When_Retry_Budget_Is_Exhausted()
+    {
+        await _fixture.ResetAsync();
+
+        var deliveryService = Substitute.For<IDeliveryService>();
+        deliveryService
+            .DeliverAsync(Arg.Any<DeliveryRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult { Success = true, StatusCode = 200, LatencyMs = 10 });
+
+        await using var sp = BuildServiceProvider(deliveryService);
+
+        // Enqueue at the last allowed attempt so the next failure pushes the
+        // counter across MaxRetries and dead-letters the row. Same DNS-failure
+        // shape as the previous test, just with the attempt accounting set up
+        // so we can assert the dead-letter branch.
+        var seed = await SeedAsync(sp, allowedIps: ["203.0.113.0/24"]);
+        await EnqueueMessageAsync(sp, seed, attemptCount: 6, maxRetries: 7);
+
+        await RunWorkerOnceAsync(sp);
+
+        var message = await GetMessageAsync(sp, seed.MessageId);
         message.Status.Should().Be(MessageStatus.DeadLetter);
+        message.AttemptCount.Should().Be(7);
         await deliveryService.DidNotReceiveWithAnyArgs().DeliverAsync(default!, default);
     }
 

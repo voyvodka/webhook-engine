@@ -224,8 +224,44 @@ public class DeliveryWorker : BackgroundService
                 }
                 catch (Exception ex) when (ex is SocketException or ArgumentException)
                 {
-                    _logger.LogWarning(ex, "Allowlist DNS lookup failed for endpoint {EndpointId}, message {MessageId}; treating as denied.", message.EndpointId, message.Id);
-                    await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, ct);
+                    // A thrown resolver call is "we don't know yet," not "denied" — a
+                    // transient CoreDNS / resolv.conf hiccup must not permanently
+                    // dead-letter every in-flight message for a healthy endpoint.
+                    // Treat it like any other transient delivery failure: bump the
+                    // attempt counter, re-schedule with the standard backoff, and
+                    // only escalate to dead-letter once we've exhausted the retry
+                    // budget on this very message.
+                    var attemptAfterDnsFailure = message.AttemptCount + 1;
+
+                    if (attemptAfterDnsFailure >= message.MaxRetries)
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "Allowlist DNS lookup failed for endpoint {EndpointId}, message {MessageId}; retry budget exhausted at attempt {AttemptCount}, dead-lettering.",
+                            message.EndpointId,
+                            message.Id,
+                            attemptAfterDnsFailure);
+
+                        if (await messageRepo.MarkDeadLetterAsync(message.Id, attemptAfterDnsFailure, _workerId, ct))
+                        {
+                            _metrics?.RecordDeadLetter();
+                        }
+                        return;
+                    }
+
+                    var nextRetryAt = CalculateNextRetryAt(attemptAfterDnsFailure);
+                    _logger.LogInformation(
+                        ex,
+                        "Allowlist DNS lookup failed for endpoint {EndpointId}, message {MessageId}; rescheduling for retry at {NextRetryAt} (attempt {AttemptCount}).",
+                        message.EndpointId,
+                        message.Id,
+                        nextRetryAt,
+                        attemptAfterDnsFailure);
+
+                    if (await messageRepo.MarkFailedForRetryAsync(message.Id, attemptAfterDnsFailure, nextRetryAt, _workerId, ct))
+                    {
+                        _metrics?.RecordRetryScheduled();
+                    }
                     return;
                 }
 
