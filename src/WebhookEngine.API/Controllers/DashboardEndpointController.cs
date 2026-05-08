@@ -33,7 +33,6 @@ public class DashboardEndpointController : ControllerBase
     private readonly ApplicationRepository _applicationRepository;
     private readonly IPayloadTransformer _payloadTransformer;
     private readonly IEndpointTester _endpointTester;
-    private readonly EndpointUrlPolicy _urlPolicy;
 
     public DashboardEndpointController(
         WebhookDbContext dbContext,
@@ -41,8 +40,7 @@ public class DashboardEndpointController : ControllerBase
         EventTypeRepository eventTypeRepository,
         ApplicationRepository applicationRepository,
         IPayloadTransformer payloadTransformer,
-        IEndpointTester endpointTester,
-        EndpointUrlPolicy urlPolicy)
+        IEndpointTester endpointTester)
     {
         _dbContext = dbContext;
         _endpointRepository = endpointRepository;
@@ -50,7 +48,6 @@ public class DashboardEndpointController : ControllerBase
         _applicationRepository = applicationRepository;
         _payloadTransformer = payloadTransformer;
         _endpointTester = endpointTester;
-        _urlPolicy = urlPolicy;
     }
 
     // ──────────────────────────────────────────────────
@@ -96,11 +93,8 @@ public class DashboardEndpointController : ControllerBase
             return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
         }
 
-        var dnsError = await _urlPolicy.CheckHostSafeAsync(request.Url, ct);
-        if (dnsError is not null)
-        {
-            return UnprocessableEntity(ApiEnvelope.Error(HttpContext, "UNPROCESSABLE", dnsError));
-        }
+        // DNS resolve + SSRF classification now run inside the request validator's
+        // DependentRules chain — see DashboardCreateEndpointRequestValidator.
 
         var endpoint = new Endpoint
         {
@@ -166,11 +160,7 @@ public class DashboardEndpointController : ControllerBase
 
         if (request.Url is not null)
         {
-            var dnsError = await _urlPolicy.CheckHostSafeAsync(request.Url, ct);
-            if (dnsError is not null)
-            {
-                return UnprocessableEntity(ApiEnvelope.Error(HttpContext, "UNPROCESSABLE", dnsError));
-            }
+            // DNS resolve + SSRF classification run in DashboardUpdateEndpointRequestValidator.
             endpoint.Url = request.Url;
         }
 
