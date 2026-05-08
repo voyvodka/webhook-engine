@@ -110,6 +110,7 @@ public class ApplicationsController : ControllerBase
             idempotencyWindowMinutes = application.IdempotencyWindowMinutes,
             retentionDeliveredDays = application.RetentionDeliveredDays,
             retentionDeadLetterDays = application.RetentionDeadLetterDays,
+            rateLimitPerSecond = application.RateLimitPerSecond,
             createdAt = application.CreatedAt,
             updatedAt = application.UpdatedAt
         }));
@@ -135,6 +136,10 @@ public class ApplicationsController : ControllerBase
         {
             application.RetentionDeadLetterDays = deadLetter == 0 ? null : deadLetter;
         }
+        if (request.RateLimitPerSecond is int rateLimit)
+        {
+            application.RateLimitPerSecond = rateLimit == 0 ? null : rateLimit;
+        }
 
         await _appRepo.UpdateAsync(application, ct);
         InvalidateAuthCache(application.ApiKeyPrefix);
@@ -148,6 +153,7 @@ public class ApplicationsController : ControllerBase
             idempotencyWindowMinutes = application.IdempotencyWindowMinutes,
             retentionDeliveredDays = application.RetentionDeliveredDays,
             retentionDeadLetterDays = application.RetentionDeadLetterDays,
+            rateLimitPerSecond = application.RateLimitPerSecond,
             createdAt = application.CreatedAt,
             updatedAt = application.UpdatedAt
         }));
@@ -226,4 +232,8 @@ public class UpdateApplicationRequest
     // Send a positive integer to override per-app. Send null to leave unchanged.
     public int? RetentionDeliveredDays { get; set; }
     public int? RetentionDeadLetterDays { get; set; }
+
+    // Send 0 to clear the per-app rate limit (unlimited at the app gate).
+    // Send a positive integer to set messages-per-second cap. null = unchanged.
+    public int? RateLimitPerSecond { get; set; }
 }

@@ -172,6 +172,9 @@ export interface ApplicationUpdate {
   // 0 clears the per-app override (falls back to global RetentionOptions).
   retentionDeliveredDays?: number;
   retentionDeadLetterDays?: number;
+  // 0 clears the per-app rate limit (no application-level cap). 1..100000 sets
+  // the messages-per-second budget across all endpoints.
+  rateLimitPerSecond?: number;
 }
 
 export async function updateApplication(

@@ -43,6 +43,8 @@ public class WebhookDbContext : DbContext
                 .HasColumnName("retention_delivered_days");
             entity.Property(e => e.RetentionDeadLetterDays)
                 .HasColumnName("retention_dead_letter_days");
+            entity.Property(e => e.RateLimitPerSecond)
+                .HasColumnName("rate_limit_per_second");
 
             entity.HasIndex(e => e.ApiKeyPrefix).IsUnique();
         });

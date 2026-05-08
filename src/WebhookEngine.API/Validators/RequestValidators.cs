@@ -36,12 +36,21 @@ public class UpdateApplicationRequestValidator : AbstractValidator<UpdateApplica
             .InclusiveBetween(0, 365)
             .When(x => x.RetentionDeadLetterDays.HasValue);
 
+        // 0 = clear (no app-level cap). 1..100000 sets the per-second budget.
+        // 100k/s is well above the largest deployments we expect to host on
+        // a single Postgres queue and serves as a sanity guard against a
+        // typo'd limit translating to "unlimited" by integer overflow.
+        RuleFor(x => x.RateLimitPerSecond)
+            .InclusiveBetween(0, 100_000)
+            .When(x => x.RateLimitPerSecond.HasValue);
+
         RuleFor(x => x)
             .Must(x => x.Name is not null
                 || x.IsActive.HasValue
                 || x.IdempotencyWindowMinutes.HasValue
                 || x.RetentionDeliveredDays.HasValue
-                || x.RetentionDeadLetterDays.HasValue)
+                || x.RetentionDeadLetterDays.HasValue
+                || x.RateLimitPerSecond.HasValue)
             .WithMessage("At least one field must be provided.");
     }
 }

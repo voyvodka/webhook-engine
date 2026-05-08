@@ -16,6 +16,13 @@ public class Application
     public int? RetentionDeliveredDays { get; set; }
     public int? RetentionDeadLetterDays { get; set; }
 
+    /// <summary>
+    /// Optional per-application rate limit, in messages-per-second across all
+    /// endpoints. Null = no application-level cap (the per-endpoint limit, if
+    /// set, still applies). Useful for tier-gating ("free=10/s, pro=1000/s").
+    /// </summary>
+    public int? RateLimitPerSecond { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

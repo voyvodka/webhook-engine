@@ -50,6 +50,8 @@ export interface ApplicationRow {
   // null/undefined = falling back to global RetentionOptions.
   retentionDeliveredDays?: number | null;
   retentionDeadLetterDays?: number | null;
+  // null/undefined = no application-level rate limit (only per-endpoint cap, if any).
+  rateLimitPerSecond?: number | null;
   createdAt: string;
   updatedAt: string;
 }

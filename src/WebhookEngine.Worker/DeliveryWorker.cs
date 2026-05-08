@@ -21,6 +21,7 @@ public class DeliveryWorker : BackgroundService
     private readonly RetryPolicyOptions _retryPolicy;
     private readonly TransformationOptions _transformationOptions;
     private readonly IEndpointRateLimiter _endpointRateLimiter;
+    private readonly IApplicationRateLimiter _applicationRateLimiter;
     private readonly IPayloadTransformer _payloadTransformer;
     private readonly WebhookMetrics? _metrics;
     private readonly string _workerId = $"worker_{Environment.MachineName}_{Guid.NewGuid().ToString("N")[..8]}";
@@ -32,6 +33,7 @@ public class DeliveryWorker : BackgroundService
         IOptions<RetryPolicyOptions> retryPolicy,
         IOptions<TransformationOptions> transformationOptions,
         IEndpointRateLimiter endpointRateLimiter,
+        IApplicationRateLimiter applicationRateLimiter,
         IPayloadTransformer payloadTransformer,
         WebhookMetrics? metrics = null)
     {
@@ -41,6 +43,7 @@ public class DeliveryWorker : BackgroundService
         _retryPolicy = retryPolicy.Value;
         _transformationOptions = transformationOptions.Value;
         _endpointRateLimiter = endpointRateLimiter;
+        _applicationRateLimiter = applicationRateLimiter;
         _payloadTransformer = payloadTransformer;
         _metrics = metrics;
     }
@@ -152,6 +155,29 @@ public class DeliveryWorker : BackgroundService
                 _logger.LogWarning("Endpoint {EndpointId} not found for message {MessageId}", message.EndpointId, message.Id);
                 await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, ct);
                 return;
+            }
+
+            // Application-level cap runs BEFORE the endpoint-level cap so a
+            // hot endpoint cannot drain the app's per-second budget for its
+            // sibling endpoints, and so we never burn an endpoint slot on a
+            // message we'll reject at the app gate anyway.
+            var appLimitPerSecond = endpoint.Application?.RateLimitPerSecond ?? 0;
+            if (appLimitPerSecond > 0)
+            {
+                if (!_applicationRateLimiter.TryAcquire(endpoint.AppId, appLimitPerSecond, out var appRetryAtUtc))
+                {
+                    var nextAttemptAt = appRetryAtUtc > DateTime.UtcNow ? appRetryAtUtc : DateTime.UtcNow.AddSeconds(1);
+                    await messageRepo.ReschedulePendingAsync(message.Id, nextAttemptAt, ct);
+
+                    _logger.LogInformation(
+                        "App rate limit reached for application {AppId} (limit: {LimitPerSecond}/s). Message {MessageId} rescheduled to {NextAttemptAt}.",
+                        endpoint.AppId,
+                        appLimitPerSecond,
+                        message.Id,
+                        nextAttemptAt);
+
+                    return;
+                }
             }
 
             var rateLimitPerMinute = RateLimitResolver.ResolveRateLimitPerMinute(endpoint.MetadataJson);

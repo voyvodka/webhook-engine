@@ -154,6 +154,54 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
     }
 
     [Fact]
+    public async Task App_Rate_Limited_Application_Defers_Excess_Messages_To_Pending()
+    {
+        await _fixture.ResetAsync();
+
+        var deliveryService = Substitute.For<IDeliveryService>();
+        deliveryService
+            .DeliverAsync(Arg.Any<DeliveryRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult { Success = true, StatusCode = 200, LatencyMs = 10 });
+
+        await using var sp = BuildServiceProvider(deliveryService);
+
+        // App's per-second cap is 1; we enqueue three messages back-to-back.
+        // The first one drains through the limiter; the next two should be
+        // rescheduled (Pending + future ScheduledAt) without ever calling the
+        // delivery service. This proves the app-level gate runs *before* the
+        // endpoint-level gate (and before signing). The worker spins for only
+        // 500 ms so we don't accidentally cross into the next 1-second window
+        // and burn a second token before the assertion.
+        var seed = await SeedAsync(sp, appRateLimitPerSecond: 1);
+        var messageIds = await EnqueueMessagesAsync(sp, seed, count: 3);
+
+        var worker = sp.GetRequiredService<DeliveryWorker>();
+        using var cts = new CancellationTokenSource();
+        await worker.StartAsync(cts.Token);
+        await Task.Delay(500);
+        await cts.CancelAsync();
+        await worker.StopAsync(CancellationToken.None);
+
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<WebhookDbContext>();
+        var messages = await db.Messages.AsNoTracking()
+            .Where(m => messageIds.Contains(m.Id))
+            .ToListAsync();
+
+        var delivered = messages.Where(m => m.Status == MessageStatus.Delivered).ToList();
+        var deferred = messages.Where(m => m.Status == MessageStatus.Pending).ToList();
+
+        delivered.Should().HaveCount(1);
+        deferred.Should().HaveCount(2);
+
+        deferred.Should().OnlyContain(m => m.ScheduledAt > DateTime.UtcNow);
+        deferred.Should().OnlyContain(m => m.LockedAt == null && m.LockedBy == null);
+        deferred.Should().OnlyContain(m => m.AttemptCount == 0);
+
+        await deliveryService.Received(1).DeliverAsync(Arg.Any<DeliveryRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Repeated_Failures_Open_Endpoint_Circuit()
     {
         await _fixture.ResetAsync();
@@ -203,6 +251,7 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
         services.AddSingleton<ISigningService, HmacSigningService>();
         services.AddScoped<IEndpointHealthTracker, EndpointHealthTracker>();
         services.AddSingleton<IEndpointRateLimiter, EndpointRateLimiter>();
+        services.AddSingleton<IApplicationRateLimiter, ApplicationRateLimiter>();
         services.AddSingleton<IMessageStateMachine, MessageStateMachine>();
 
         services.AddSingleton<IDeliveryService>(deliveryServiceMock);
@@ -239,7 +288,7 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
         await worker.StopAsync(CancellationToken.None);
     }
 
-    private static async Task<SeedIds> SeedAsync(IServiceProvider sp, int? rateLimitPerMinute = null)
+    private static async Task<SeedIds> SeedAsync(IServiceProvider sp, int? rateLimitPerMinute = null, int? appRateLimitPerSecond = null)
     {
         using var scope = sp.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<WebhookDbContext>();
@@ -250,7 +299,8 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
             Name = "E2E App",
             ApiKeyPrefix = "whe_e2e_",
             ApiKeyHash = "hash",
-            SigningSecret = "whsec_e2e_secret_for_signing_messages_in_tests"
+            SigningSecret = "whsec_e2e_secret_for_signing_messages_in_tests",
+            RateLimitPerSecond = appRateLimitPerSecond
         };
 
         var metadataJson = rateLimitPerMinute is int rl
