@@ -5,6 +5,8 @@ services:
       - POSTGRES_DB=webhookengine
       - POSTGRES_USER=webhookengine
       - POSTGRES_PASSWORD=webhookengine
+    # Default 64 MB /dev/shm exhausts under parallel COUNT(*) past ~250K rows.
+    shm_size: 1gb
     command: >
       postgres
       -c shared_buffers=256MB
@@ -46,6 +48,9 @@ services:
       - WebhookEngine__RateLimit__PermitLimit=20000
       - WebhookEngine__RateLimit__TokensPerPeriod=20000
       - WebhookEngine__RateLimit__QueueLimit=5000
+      # Bench receiver is on the docker bridge (RFC1918) — turn off the
+      # production SSRF guard inside this isolated compose only.
+      - WebhookEngine__SsrfGuard__Enabled=false
     depends_on:
       postgres:
         condition: service_healthy
