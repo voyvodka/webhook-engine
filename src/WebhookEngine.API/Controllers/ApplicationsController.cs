@@ -26,12 +26,14 @@ namespace WebhookEngine.API.Controllers;
 public class ApplicationsController : ControllerBase
 {
     private readonly ApplicationRepository _appRepo;
+    private readonly MessageRepository _messageRepo;
     private readonly IMemoryCache _cache;
     private readonly IAuditLogger _auditLogger;
 
-    public ApplicationsController(ApplicationRepository appRepo, IMemoryCache cache, IAuditLogger auditLogger)
+    public ApplicationsController(ApplicationRepository appRepo, MessageRepository messageRepo, IMemoryCache cache, IAuditLogger auditLogger)
     {
         _appRepo = appRepo;
+        _messageRepo = messageRepo;
         _cache = cache;
         _auditLogger = auditLogger;
     }
@@ -210,6 +212,13 @@ public class ApplicationsController : ControllerBase
         if (application is null)
             return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
 
+        // Capture the message count BEFORE the cascade fires so the audit row
+        // documents how much delivery history just disappeared. The DELETE
+        // itself relies on the FK CASCADE added in CascadeMessageDeleteOnAppAndEndpoint
+        // — without that migration this call would fail at the database with
+        // a 500 the moment any messages exist.
+        var messageCount = await _messageRepo.CountAsync(applicationId, status: null, endpointId: null, eventTypeId: null, after: null, before: null, ct);
+
         await _appRepo.DeleteAsync(applicationId, ct);
         InvalidateAuthCache(application.ApiKeyPrefix);
 
@@ -219,7 +228,7 @@ public class ApplicationsController : ControllerBase
             resourceType: "application",
             resourceId: applicationId,
             appId: applicationId,
-            before: new { name = application.Name, isActive = application.IsActive },
+            before: new { name = application.Name, isActive = application.IsActive, messageCount },
             ct: ct);
 
         return NoContent();
