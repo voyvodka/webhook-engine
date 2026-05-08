@@ -47,10 +47,24 @@ export function DeliveryLogPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4 animate-fade-in-up">
+      <div className="space-y-4 animate-fade-in-up" aria-busy="true">
         <div>
           <h1 className="text-lg font-semibold">Delivery Log</h1>
-          <p className="text-sm text-text-muted mt-0.5">Loading...</p>
+          <p className="text-sm text-text-muted mt-0.5">Loading delivery details…</p>
+        </div>
+        {/* Skeleton card mirroring the rendered shape so the layout doesn't
+            shift on completion — header strip + two attempt blocks. */}
+        <div className="rounded-xl border border-border bg-surface-1 p-4 space-y-3">
+          <div className="h-5 w-1/3 bg-surface-2 rounded animate-pulse" />
+          <div className="h-3 w-2/3 bg-surface-2 rounded animate-pulse" />
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <div className="h-12 bg-surface-2 rounded animate-pulse" />
+            <div className="h-12 bg-surface-2 rounded animate-pulse" />
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-surface-1 p-4 space-y-2">
+          <div className="h-4 w-1/4 bg-surface-2 rounded animate-pulse" />
+          <div className="h-20 bg-surface-2 rounded animate-pulse" />
         </div>
       </div>
     );

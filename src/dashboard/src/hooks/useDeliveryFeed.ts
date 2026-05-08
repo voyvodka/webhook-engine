@@ -95,9 +95,13 @@ export function useDeliveryFeed(maxEvents = 50) {
     };
 
     const handleReconnected = () => {
-      if (isMounted) {
-        setConnected(true);
-      }
+      if (!isMounted) return;
+      setConnected(true);
+      // Drop any cached health change so the consumer sees a clean slate.
+      // Otherwise an EndpointsPage that resubscribes after a reconnect would
+      // re-apply a stale snapshot from before the disconnect, masking the
+      // server's authoritative state from the next overview/list refetch.
+      setLastHealthChange(null);
     };
 
     connection.on("DeliverySuccess", handleSuccess);
