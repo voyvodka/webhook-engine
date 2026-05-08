@@ -202,6 +202,36 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
     }
 
     [Fact]
+    public async Task Allowlist_Mismatch_Sends_Message_To_DeadLetter_Without_Calling_Delivery()
+    {
+        await _fixture.ResetAsync();
+
+        var deliveryService = Substitute.For<IDeliveryService>();
+        deliveryService
+            .DeliverAsync(Arg.Any<DeliveryRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult { Success = true, StatusCode = 200, LatencyMs = 10 });
+
+        await using var sp = BuildServiceProvider(deliveryService);
+
+        // The endpoint hostname (example.invalid) cannot resolve at all under
+        // RFC 6761, so AllAddressesAllowed returns false on an empty resolved
+        // set with a non-empty allowlist. Either way (resolution failure or
+        // resolved IP outside the list), the worker takes the DeadLetter path
+        // before signing, so DeliverAsync is never called.
+        var seed = await SeedAsync(sp, allowedIps: ["203.0.113.0/24"]);
+        var messageIds = await EnqueueMessagesAsync(sp, seed, count: 1);
+
+        await RunWorkerOnceAsync(sp);
+
+        using var scope = sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<WebhookDbContext>();
+        var message = await db.Messages.AsNoTracking().SingleAsync(m => m.Id == messageIds[0]);
+
+        message.Status.Should().Be(MessageStatus.DeadLetter);
+        await deliveryService.DidNotReceiveWithAnyArgs().DeliverAsync(default!, default);
+    }
+
+    [Fact]
     public async Task Repeated_Failures_Open_Endpoint_Circuit()
     {
         await _fixture.ResetAsync();
@@ -288,7 +318,11 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
         await worker.StopAsync(CancellationToken.None);
     }
 
-    private static async Task<SeedIds> SeedAsync(IServiceProvider sp, int? rateLimitPerMinute = null, int? appRateLimitPerSecond = null)
+    private static async Task<SeedIds> SeedAsync(
+        IServiceProvider sp,
+        int? rateLimitPerMinute = null,
+        int? appRateLimitPerSecond = null,
+        IReadOnlyList<string>? allowedIps = null)
     {
         using var scope = sp.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<WebhookDbContext>();
@@ -313,7 +347,10 @@ public class DeliveryFlowEndToEndTests : IClassFixture<PostgresFixture>
             AppId = app.Id,
             Url = "https://example.invalid/webhook",
             Status = EndpointStatus.Active,
-            MetadataJson = metadataJson
+            MetadataJson = metadataJson,
+            AllowedIpsJson = allowedIps is { Count: > 0 }
+                ? System.Text.Json.JsonSerializer.Serialize(allowedIps)
+                : null
         };
 
         var eventType = new EventType

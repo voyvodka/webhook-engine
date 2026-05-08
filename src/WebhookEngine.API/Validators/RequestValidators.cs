@@ -1,6 +1,7 @@
 using FluentValidation;
 using WebhookEngine.API.Controllers;
 using WebhookEngine.API.Services;
+using WebhookEngine.Infrastructure.Services;
 
 namespace WebhookEngine.API.Validators;
 
@@ -133,6 +134,11 @@ public class CreateEndpointRequestValidator : AbstractValidator<CreateEndpointRe
             .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
             .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
             .When(x => x.CustomHeaders is not null);
+
+        RuleFor(x => x.AllowedIps)
+            .Must(list => list!.All(cidr => IpAllowlistMatcher.TryParseCidr(cidr, out _)))
+            .WithMessage("AllowedIps must contain valid CIDR notations (e.g. \"203.0.113.0/24\").")
+            .When(x => x.AllowedIps is { Count: > 0 });
     }
 }
 
@@ -166,6 +172,11 @@ public class UpdateEndpointRequestValidator : AbstractValidator<UpdateEndpointRe
             .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
             .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
             .When(x => x.CustomHeaders is not null);
+
+        RuleFor(x => x.AllowedIps)
+            .Must(list => list!.All(cidr => IpAllowlistMatcher.TryParseCidr(cidr, out _)))
+            .WithMessage("AllowedIps must contain valid CIDR notations (e.g. \"203.0.113.0/24\").")
+            .When(x => x.AllowedIps is { Count: > 0 });
 
         RuleFor(x => x)
             .Must(x => x.Url is not null
@@ -213,6 +224,11 @@ public class DashboardCreateEndpointRequestValidator : AbstractValidator<Dashboa
             .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
             .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
             .When(x => x.CustomHeaders is not null);
+
+        RuleFor(x => x.AllowedIps)
+            .Must(list => list!.All(cidr => IpAllowlistMatcher.TryParseCidr(cidr, out _)))
+            .WithMessage("AllowedIps must contain valid CIDR notations (e.g. \"203.0.113.0/24\").")
+            .When(x => x.AllowedIps is { Count: > 0 });
     }
 }
 
@@ -246,6 +262,11 @@ public class DashboardUpdateEndpointRequestValidator : AbstractValidator<Dashboa
             .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
             .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
             .When(x => x.CustomHeaders is not null);
+
+        RuleFor(x => x.AllowedIps)
+            .Must(list => list!.All(cidr => IpAllowlistMatcher.TryParseCidr(cidr, out _)))
+            .WithMessage("AllowedIps must contain valid CIDR notations (e.g. \"203.0.113.0/24\").")
+            .When(x => x.AllowedIps is { Count: > 0 });
 
         RuleFor(x => x)
             .Must(x => x.Url is not null

@@ -226,6 +226,8 @@ export interface DashboardCreateEndpointRequest {
   customHeaders?: Record<string, string>;
   metadata?: Record<string, string>;
   secretOverride?: string;
+  // CIDR list. Empty/undefined = no allowlist.
+  allowedIps?: string[];
   transformExpression?: string | null;
   transformEnabled?: boolean;
 }
@@ -237,6 +239,8 @@ export interface DashboardUpdateEndpointRequest {
   customHeaders?: Record<string, string>;
   metadata?: Record<string, string>;
   secretOverride?: string;
+  // Pass an empty list to clear the allowlist.
+  allowedIps?: string[];
   transformExpression?: string | null;
   transformEnabled?: boolean;
 }

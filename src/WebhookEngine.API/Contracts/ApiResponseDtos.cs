@@ -27,6 +27,8 @@ public sealed class EndpointResponseDto
     public JsonElement CustomHeadersJson { get; init; }
     public string? SecretOverride { get; init; }
     public JsonElement MetadataJson { get; init; }
+    // Empty list = no allowlist; delivery falls back to the deployment SSRF guard only.
+    public List<string> AllowedIps { get; init; } = [];
     public string? TransformExpression { get; init; }
     public bool TransformEnabled { get; init; }
     public DateTime? TransformValidatedAt { get; init; }
@@ -95,6 +97,7 @@ public static class ApiResponseMapper
             CustomHeadersJson = JsonValueParser.ParseOrEmptyObject(endpoint.CustomHeadersJson),
             SecretOverride = endpoint.SecretOverride,
             MetadataJson = JsonValueParser.ParseOrEmptyObject(endpoint.MetadataJson),
+            AllowedIps = ParseAllowedIps(endpoint.AllowedIpsJson),
             TransformExpression = endpoint.TransformExpression,
             TransformEnabled = endpoint.TransformEnabled,
             TransformValidatedAt = endpoint.TransformValidatedAt,
@@ -102,6 +105,19 @@ public static class ApiResponseMapper
             CreatedAt = endpoint.CreatedAt,
             UpdatedAt = endpoint.UpdatedAt
         };
+    }
+
+    private static List<string> ParseAllowedIps(string? allowedIpsJson)
+    {
+        if (string.IsNullOrWhiteSpace(allowedIpsJson)) return [];
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<string>>(allowedIpsJson) ?? [];
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return [];
+        }
     }
 
     public static EndpointResponseDto ToDto(this EndpointListItem endpoint)
