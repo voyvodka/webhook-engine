@@ -12,6 +12,8 @@ public sealed class EventTypeResponseDto
     public string? Description { get; init; }
     public JsonElement? Schema { get; init; }
     public bool IsArchived { get; init; }
+    // null = inherit from Application.IdempotencyWindowMinutes.
+    public int? IdempotencyWindowMinutes { get; init; }
     public DateTime CreatedAt { get; init; }
 }
 
@@ -76,6 +78,7 @@ public static class ApiResponseMapper
             Description = eventType.Description,
             Schema = JsonValueParser.ParseOrNull(eventType.SchemaJson),
             IsArchived = eventType.IsArchived,
+            IdempotencyWindowMinutes = eventType.IdempotencyWindowMinutes,
             CreatedAt = eventType.CreatedAt
         };
     }

@@ -88,6 +88,8 @@ export interface EventTypeSummary {
   name: string;
   description: string | null;
   isArchived: boolean;
+  // null = inherit from Application.idempotencyWindowMinutes.
+  idempotencyWindowMinutes?: number | null;
   createdAt: string;
 }
 

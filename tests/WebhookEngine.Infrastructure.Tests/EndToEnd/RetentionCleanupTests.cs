@@ -75,6 +75,37 @@ public class RetentionCleanupTests : IClassFixture<PostgresFixture>
     }
 
     [Fact]
+    public async Task Per_EventType_IdempotencyWindow_Override_Nullifies_Earlier_Than_Per_App()
+    {
+        await _fixture.ResetAsync();
+
+        // App-wide window is 1440 minutes (24h). Event type "noisy.event"
+        // tightens it to 60 minutes. A 90-minute-old idempotency-keyed message
+        // for "noisy.event" should lose its key, but a 90-minute-old message
+        // on a sibling event type without an override should keep it.
+        var appId = await SeedApplicationWithIdempotencyWindowAsync(1440);
+        var noisyEventTypeId = await SeedEventTypeAsync(appId, "noisy.event", idempotencyWindowMinutes: 60);
+        var normalEventTypeId = await SeedEventTypeAsync(appId, "normal.event", idempotencyWindowMinutes: null);
+
+        var nowUtc = DateTime.UtcNow;
+        var ninetyMinutesAgo = nowUtc.AddMinutes(-90);
+
+        var noisyMessageId = await SeedKeyedMessageAsync(appId, noisyEventTypeId, "key-1", ninetyMinutesAgo);
+        var normalMessageId = await SeedKeyedMessageAsync(appId, normalEventTypeId, "key-2", ninetyMinutesAgo);
+
+        var result = await RunCleanupAsync(nowUtc);
+
+        result.NulledIdempotencyKeys.Should().Be(1);
+
+        await using var db = NewDb();
+        var noisyMessage = await db.Messages.AsNoTracking().SingleAsync(m => m.Id == noisyMessageId);
+        var normalMessage = await db.Messages.AsNoTracking().SingleAsync(m => m.Id == normalMessageId);
+
+        noisyMessage.IdempotencyKey.Should().BeNull("the per-event-type override expired first");
+        normalMessage.IdempotencyKey.Should().Be("key-2", "no override; per-app window still covers it");
+    }
+
+    [Fact]
     public async Task Per_App_Override_Of_Zero_Days_Is_Treated_As_Fallback_Not_Reap_Everything()
     {
         // Sanity guard: if an override of 0 ever leaks through (the API
@@ -116,6 +147,80 @@ public class RetentionCleanupTests : IClassFixture<PostgresFixture>
             options: options);
 
         return await worker.RunCleanupAsync(db, nowUtc, CancellationToken.None);
+    }
+
+    private async Task<Guid> SeedApplicationWithIdempotencyWindowAsync(int idempotencyWindowMinutes)
+    {
+        var appId = Guid.NewGuid();
+
+        await using var db = NewDb();
+        db.Applications.Add(new ApplicationEntity
+        {
+            Id = appId,
+            Name = $"Idempotency App {appId.ToString("N")[..6]}",
+            ApiKeyPrefix = $"whe_{appId.ToString("N")[..6]}_",
+            ApiKeyHash = "hash",
+            SigningSecret = "whsec_idempotency_secret",
+            IdempotencyWindowMinutes = idempotencyWindowMinutes
+        });
+        await db.SaveChangesAsync();
+
+        return appId;
+    }
+
+    private async Task<Guid> SeedEventTypeAsync(Guid appId, string name, int? idempotencyWindowMinutes)
+    {
+        var eventTypeId = Guid.NewGuid();
+
+        await using var db = NewDb();
+        db.EventTypes.Add(new EventType
+        {
+            Id = eventTypeId,
+            AppId = appId,
+            Name = name,
+            IdempotencyWindowMinutes = idempotencyWindowMinutes
+        });
+        await db.SaveChangesAsync();
+
+        return eventTypeId;
+    }
+
+    private async Task<Guid> SeedKeyedMessageAsync(Guid appId, Guid eventTypeId, string idempotencyKey, DateTime createdAtUtc)
+    {
+        var messageId = Guid.NewGuid();
+
+        await using var db = NewDb();
+
+        // Key-bearing messages need a real endpoint row to satisfy the FK.
+        var existingEndpoint = await db.Endpoints.AsNoTracking().FirstOrDefaultAsync(e => e.AppId == appId);
+        var endpointId = existingEndpoint?.Id ?? Guid.NewGuid();
+        if (existingEndpoint is null)
+        {
+            db.Endpoints.Add(new Endpoint
+            {
+                Id = endpointId,
+                AppId = appId,
+                Url = "https://example.invalid/webhook",
+                Status = EndpointStatus.Active
+            });
+        }
+
+        db.Messages.Add(new Message
+        {
+            Id = messageId,
+            AppId = appId,
+            EndpointId = endpointId,
+            EventTypeId = eventTypeId,
+            EventId = $"evt_{Guid.NewGuid():N}"[..32],
+            IdempotencyKey = idempotencyKey,
+            Payload = "{}",
+            Status = MessageStatus.Delivered,
+            CreatedAt = createdAtUtc,
+            DeliveredAt = createdAtUtc
+        });
+        await db.SaveChangesAsync();
+
+        return messageId;
     }
 
     private async Task<Guid> SeedApplicationAsync(int? retentionDeliveredDays = null, int? retentionDeadLetterDays = null)

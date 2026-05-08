@@ -57,6 +57,11 @@ public class CreateEventTypeRequestValidator : AbstractValidator<CreateEventType
         RuleFor(x => x.Description)
             .MaximumLength(500)
             .When(x => x.Description is not null);
+
+        // Per-event-type override; matches the per-app upper bound of 7 days.
+        RuleFor(x => x.IdempotencyWindowMinutes)
+            .InclusiveBetween(1, 10080)
+            .When(x => x.IdempotencyWindowMinutes.HasValue);
     }
 }
 
@@ -72,8 +77,16 @@ public class UpdateEventTypeRequestValidator : AbstractValidator<UpdateEventType
             .MaximumLength(500)
             .When(x => x.Description is not null);
 
+        // 0 clears the override (per-app fallback); 1..10080 sets it.
+        RuleFor(x => x.IdempotencyWindowMinutes)
+            .InclusiveBetween(0, 10080)
+            .When(x => x.IdempotencyWindowMinutes.HasValue);
+
         RuleFor(x => x)
-            .Must(x => x.Name is not null || x.Description is not null || x.Schema is not null)
+            .Must(x => x.Name is not null
+                || x.Description is not null
+                || x.Schema is not null
+                || x.IdempotencyWindowMinutes.HasValue)
             .WithMessage("At least one field must be provided.");
     }
 }
@@ -252,6 +265,10 @@ public class DashboardCreateEventTypeRequestValidator : AbstractValidator<Dashbo
         RuleFor(x => x.Description)
             .MaximumLength(500)
             .When(x => x.Description is not null);
+
+        RuleFor(x => x.IdempotencyWindowMinutes)
+            .InclusiveBetween(1, 10080)
+            .When(x => x.IdempotencyWindowMinutes.HasValue);
     }
 }
 
@@ -267,8 +284,15 @@ public class DashboardUpdateEventTypeRequestValidator : AbstractValidator<Dashbo
             .MaximumLength(500)
             .When(x => x.Description is not null);
 
+        // 0 clears the override; 1..10080 sets it.
+        RuleFor(x => x.IdempotencyWindowMinutes)
+            .InclusiveBetween(0, 10080)
+            .When(x => x.IdempotencyWindowMinutes.HasValue);
+
         RuleFor(x => x)
-            .Must(x => x.Name is not null || x.Description is not null)
+            .Must(x => x.Name is not null
+                || x.Description is not null
+                || x.IdempotencyWindowMinutes.HasValue)
             .WithMessage("At least one field must be provided.");
     }
 }

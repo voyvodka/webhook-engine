@@ -58,6 +58,8 @@ public class WebhookDbContext : DbContext
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.SchemaJson).HasColumnName("schema_json").HasColumnType("jsonb");
             entity.Property(e => e.IsArchived).HasColumnName("is_archived").HasDefaultValue(false);
+            entity.Property(e => e.IdempotencyWindowMinutes)
+                .HasColumnName("idempotency_window_minutes");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
 
             entity.HasIndex(e => e.AppId).HasDatabaseName("idx_event_types_app_id");
