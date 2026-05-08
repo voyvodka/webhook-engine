@@ -134,6 +134,7 @@ public class DashboardMessagesController : ControllerBase
 
         Guid eventTypeId;
         string eventTypeName;
+        int? eventTypeIdempotencyWindowMinutes;
 
         if (request.EventTypeId.HasValue)
         {
@@ -157,6 +158,7 @@ public class DashboardMessagesController : ControllerBase
 
             eventTypeId = eventType.Id;
             eventTypeName = eventType.Name;
+            eventTypeIdempotencyWindowMinutes = eventType.IdempotencyWindowMinutes;
         }
         else
         {
@@ -175,11 +177,13 @@ public class DashboardMessagesController : ControllerBase
 
             eventTypeId = eventType.Id;
             eventTypeName = eventType.Name;
+            eventTypeIdempotencyWindowMinutes = eventType.IdempotencyWindowMinutes;
         }
 
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
-            var windowMinutes = app.IdempotencyWindowMinutes;
+            // Per-event-type override beats the per-app window when set.
+            var windowMinutes = eventTypeIdempotencyWindowMinutes ?? app.IdempotencyWindowMinutes;
             var existingMessages = await _messageRepository.ListByIdempotencyKeyAsync(
                 request.AppId,
                 request.IdempotencyKey,

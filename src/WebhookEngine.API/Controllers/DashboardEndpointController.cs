@@ -391,7 +391,8 @@ public class DashboardEndpointController : ControllerBase
         {
             AppId = request.AppId,
             Name = request.Name,
-            Description = request.Description
+            Description = request.Description,
+            IdempotencyWindowMinutes = request.IdempotencyWindowMinutes
         };
 
         await _eventTypeRepository.CreateAsync(eventType, ct);
@@ -404,6 +405,7 @@ public class DashboardEndpointController : ControllerBase
             name = eventType.Name,
             description = eventType.Description,
             isArchived = eventType.IsArchived,
+            idempotencyWindowMinutes = eventType.IdempotencyWindowMinutes,
             createdAt = eventType.CreatedAt
         }));
     }
@@ -443,6 +445,12 @@ public class DashboardEndpointController : ControllerBase
         if (request.Description is not null)
             eventType.Description = request.Description;
 
+        // 0 = clear (fall back to per-app window). Positive = set override.
+        if (request.IdempotencyWindowMinutes is int windowMinutes)
+        {
+            eventType.IdempotencyWindowMinutes = windowMinutes == 0 ? null : windowMinutes;
+        }
+
         await _eventTypeRepository.UpdateAsync(eventType, ct);
         DeliveryLookupCache.InvalidateApplication(eventType.AppId);
 
@@ -453,6 +461,7 @@ public class DashboardEndpointController : ControllerBase
             name = eventType.Name,
             description = eventType.Description,
             isArchived = eventType.IsArchived,
+            idempotencyWindowMinutes = eventType.IdempotencyWindowMinutes,
             createdAt = eventType.CreatedAt
         }));
     }
@@ -502,12 +511,15 @@ public class DashboardCreateEventTypeRequest
     public Guid AppId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public int? IdempotencyWindowMinutes { get; set; }
 }
 
 public class DashboardUpdateEventTypeRequest
 {
     public string? Name { get; set; }
     public string? Description { get; set; }
+    // 0 clears the override (falls back to per-app window). Positive = set override. null = leave unchanged.
+    public int? IdempotencyWindowMinutes { get; set; }
 }
 
 public class ValidateTransformRequest

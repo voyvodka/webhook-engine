@@ -261,8 +261,13 @@ public class MessagesController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
+            // Per-event-type override > per-app window > hard fallback. The
+            // event-type override exists so a noisy `user.activity` stream can
+            // tighten the window without dragging payment events with it.
             var app = await _appRepo.GetByIdAsync(appId, ct);
-            var windowMinutes = app?.IdempotencyWindowMinutes ?? 1440;
+            var windowMinutes = eventTypeResolution.IdempotencyWindowMinutes
+                ?? app?.IdempotencyWindowMinutes
+                ?? 1440;
             var existingMessages = await _messageRepo.ListByIdempotencyKeyAsync(
                 appId,
                 request.IdempotencyKey,
@@ -349,28 +354,29 @@ public class MessagesController : ControllerBase
                 return EventTypeResolutionResult.Failure("UNPROCESSABLE", "eventType and eventTypeId refer to different event types.");
             }
 
-            return EventTypeResolutionResult.Ok(eventType.Id, eventType.Name);
+            return EventTypeResolutionResult.Ok(eventType.Id, eventType.Name, eventType.IdempotencyWindowMinutes);
         }
 
         var resolvedByName = await _lookupCache.GetEventTypeByNameAsync(appId, eventTypeName ?? string.Empty, ct);
         if (resolvedByName is null)
             return EventTypeResolutionResult.Failure("UNPROCESSABLE", "Event type not found for this application.");
 
-        return EventTypeResolutionResult.Ok(resolvedByName.Id, resolvedByName.Name);
+        return EventTypeResolutionResult.Ok(resolvedByName.Id, resolvedByName.Name, resolvedByName.IdempotencyWindowMinutes);
     }
 
     private sealed record EventTypeResolutionResult(
         bool Success,
         Guid? EventTypeId,
         string? EventTypeName,
+        int? IdempotencyWindowMinutes,
         string? ErrorCode,
         string? ErrorMessage)
     {
-        public static EventTypeResolutionResult Ok(Guid eventTypeId, string eventTypeName)
-            => new(true, eventTypeId, eventTypeName, null, null);
+        public static EventTypeResolutionResult Ok(Guid eventTypeId, string eventTypeName, int? idempotencyWindowMinutes)
+            => new(true, eventTypeId, eventTypeName, idempotencyWindowMinutes, null, null);
 
         public static EventTypeResolutionResult Failure(string errorCode, string errorMessage)
-            => new(false, null, null, errorCode, errorMessage);
+            => new(false, null, null, null, errorCode, errorMessage);
     }
 
     private sealed record SendOperationResult(

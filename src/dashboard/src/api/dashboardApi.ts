@@ -307,11 +307,15 @@ export interface DashboardCreateEventTypeRequest {
   appId: string;
   name: string;
   description?: string;
+  // null on create = inherit per-app window. Positive = override per event type.
+  idempotencyWindowMinutes?: number;
 }
 
 export interface DashboardUpdateEventTypeRequest {
   name?: string;
   description?: string;
+  // 0 clears the override (falls back to per-app window).
+  idempotencyWindowMinutes?: number;
 }
 
 export async function createDashboardEventType(request: DashboardCreateEventTypeRequest): Promise<EventTypeSummary> {
