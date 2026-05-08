@@ -1,10 +1,11 @@
 # Roadmap
 # WebhookEngine — Strategic Roadmap
 
-**Last Updated:** 2026-05-05
+**Last Updated:** 2026-05-08
 **Status:** Active — Phase 2 (Traction & Feedback)
+**Latest release:** v0.1.6 (2026-05-08) — feature & polish cut covering per-resource overrides, IP allowlist, audit log, dashboard a11y, and TanStack Query data layer.
 
-> **Note:** Phase 1 is complete (launch posts and the engineering blog post remain deferred). Phase 2 core tasks (2.2, 2.3, 2.4, **2.5 payload transformation across all three rollout phases**, 2.7 application layer cleanup) are done. Remaining Phase 2 items (TypeScript SDK gated on demand signal, comparison/best-practice blog posts) are planned.
+> **Note:** Phase 1 is complete (launch posts and the engineering blog post remain deferred). Phase 2 core tasks (2.2, 2.3, 2.4, **2.5 payload transformation across all three rollout phases**, 2.7 application layer cleanup) are done. Phase 2 also gained eight follow-on features in v0.1.6 — endpoint test webhook, validate-time URL guard, per-resource overrides for retention / idempotency / rate limit, per-endpoint IP allowlist, audit log, SignalR endpoint health, and a TanStack Query dashboard data layer. Remaining Phase 2 items (TypeScript SDK gated on demand signal, comparison / best-practice blog posts) are planned.
 
 ---
 
@@ -73,6 +74,68 @@ Patch release focused on project discoverability and packaging hygiene. No new e
 | P.5 | GitHub repo homepage set to landing page | done |
 | P.6 | README header updated with website, Docker Hub, NuGet links | done |
 | P.7 | Internal planning docs removed from public repo | done |
+
+---
+
+## v0.1.4 — Payload Transformation & Multi-Arch (2026-05-05)
+
+| # | Task | Status |
+|---|------|--------|
+| 2.5 P1 | JMESPath payload transformation: schema + API (`transformExpression`, `transformEnabled`, `transformValidatedAt` on endpoints) | done |
+| 2.5 P2 | JMESPath payload transformation: delivery integration with 100 ms timeout, 256 KB output cap, fail-open fallback | done |
+| 2.5 P3 | JMESPath payload transformation: dashboard CodeMirror 6 editor + `/dashboard/transform/validate` endpoint | done |
+| — | Multi-arch Docker (linux/amd64 + linux/arm64) | done |
+| — | NuGet brand icon (`WebhookEngine.Sdk` + Docker Hub README sync) | done |
+| — | OpenAPI 3 + Scalar interactive UI (`/openapi/v1.json`, `/scalar`) — Dev / Staging only | done |
+| — | Security automations: CodeQL, Dependency Review, Dependabot (NuGet / npm / GitHub Actions / Docker) | done |
+| — | Replay + Batch integration tests | done |
+| — | Frontend toolchain: Yarn → Bun 1.2 | done |
+| — | `WebhookEngine.Application` empty scaffold removed (ADR-002 update) | done |
+
+---
+
+## v0.1.5 — Post-Audit Hardening Cut (2026-05-05)
+
+A multi-agent deep audit covering security, memory, concurrency, code quality, frontend, ops, timezone correctness, and SDK compliance produced ten F-fixes plus an idempotency race fix and an SDK target-framework simplification. No breaking API changes.
+
+| # | Task | Status |
+|---|------|--------|
+| F1 | SSRF guard with DNS-rebinding defense (`SocketsHttpHandler.ConnectCallback` IP-pinning, `WebhookEngine:SsrfGuard` options) | done |
+| F2 | Compare-and-set guards on `MessageRepository.Mark*Async` (concurrency C2 — duplicate-attempt regression on lock loss closed) | done |
+| F3 | Advisory-lock serialized `EndpointHealthTracker.WithEndpointLockAsync` (concurrency C1 — Open/HalfOpen/Closed corruption closed) | done |
+| F5 | Migration startup race serialized via `pg_advisory_lock` | done |
+| F6 | Security headers (HSTS, CSP, X-Frame-Options, Permissions-Policy), `/metrics` auth gate, cookie SecureAlways | done |
+| F7 | Idempotency race condition closed — partial unique index `idx_messages_app_endpoint_idempotency` + Stripe-style 23505 catch + retention NULL-out | done |
+| F8 | Frontend session-expiry redirect + chunk-load error boundary | done |
+| F9 | `HttpResponseMessage` disposal + `EndpointRateLimiter` idle-eviction | done |
+| F10 | `CustomHeaderPolicy` allow-list + reserved-header rejection | done |
+| Ops | Liveness / readiness probes, OpenTelemetry tracing, graceful shutdown drain window | done |
+| SDK | `WebhookVerifier` shipped in `WebhookEngine.Sdk` + target framework simplified to `net10.0` only | done |
+
+---
+
+## v0.1.6 — Per-Resource Overrides, IP Allowlist, Audit Log (2026-05-08)
+
+Eight new features, three rounds of dashboard polish, three reviewer-finding fixes, and a backend correctness pass. Test count moved from 211 to 215.
+
+| # | Task | Status |
+|---|------|--------|
+| F1 | Endpoint test webhook (`POST /api/v1/dashboard/endpoints/{id}/test`) + dashboard preview drawer | done |
+| F2 | Endpoint URL DNS resolution / private-IP rejection at validator chain | done |
+| F3 | Per-app retention overrides (`Application.RetentionDeliveredDays`, `RetentionDeadLetterDays`) | done |
+| F4 | Per-event-type idempotency window override (`EventType.IdempotencyWindowMinutes`) | done |
+| F6 | Per-application rate-limit override (`Application.RateLimitPerSecond`) | done |
+| F7 | SignalR `EndpointHealthChanged` event for circuit-state and visible status transitions | done |
+| F8 | Per-endpoint IP allowlist (`Endpoint.AllowedIpsJson`, CIDR positive-list gate at delivery) | done |
+| F9 | Append-only audit log (`audit_logs` table, `GET /api/v1/dashboard/audit`) | done |
+| F12 | TanStack Query dashboard data layer across six pages — manual `setInterval` polling and the smart-debounce shim removed | done |
+| R1 | Transient DNS retry within budget (no early dead-letter on resolver flakes) | done |
+| R3 | Cascade message-delete on application / endpoint removal | done |
+| R6 | Smart-debounced dashboard polling (later folded into F12) | done |
+| R2 + R4 + R5 | IP matcher contract guard, application rate-limiter sweep thread-safety, endpoint health tracker double-fetch removed | done |
+| DPR-1 | Modal a11y (`role="dialog"` + ARIA + focus trap), reconnect-safe SignalR cache, awaited refetches, skeleton loaders | done |
+| DPR-2 | Shared `StatusBadge` / `inputClasses` / editor theme, lazy-loaded CodeMirror, `parseError` field-error routing | done |
+| DPR-3 | Modal `dvh` sizing, mobile filter grid, payload field error, SignalR Live / Offline header badge, URL field error wiring | done |
 
 ---
 

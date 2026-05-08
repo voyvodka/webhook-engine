@@ -115,9 +115,14 @@ POST /api/v1/applications
 Request:
 ```json
 {
-  "name": "My SaaS App"
+  "name": "My SaaS App",
+  "rateLimitPerSecond": 200,
+  "retentionDeliveredDays": 30,
+  "retentionDeadLetterDays": 90
 }
 ```
+
+`rateLimitPerSecond` (v0.1.6) overrides the global `WebhookEngine:RateLimit` 1-second sliding-window cap; omit / null ⇒ use global default. `retentionDeliveredDays` and `retentionDeadLetterDays` (v0.1.6) override `WebhookEngine:Retention` for this app only; the cleanup worker partitions its sweep accordingly.
 
 Response: `201 Created`
 ```json
@@ -128,6 +133,9 @@ Response: `201 Created`
     "apiKey": "whe_abc123_xK9m...",
     "signingSecret": "base64-encoded-secret",
     "isActive": true,
+    "rateLimitPerSecond": 200,
+    "retentionDeliveredDays": 30,
+    "retentionDeadLetterDays": 90,
     "createdAt": "2026-02-26T14:30:00Z"
   }
 }
@@ -152,10 +160,14 @@ GET /api/v1/applications/{applicationId}
 PUT /api/v1/applications/{applicationId}
 ```
 
+Accepts the same `name`, `rateLimitPerSecond`, `retentionDeliveredDays`, and `retentionDeadLetterDays` fields. Sending `null` for an override field clears it (back to global default).
+
 #### Delete Application
 ```
 DELETE /api/v1/applications/{applicationId}
 ```
+
+Cascades to bound endpoints, event types, and messages. The `audit_logs` trail is preserved (no FK), and the audit row carries `beforeSnapshot.messageCount` for forensics.
 
 #### Rotate API Key
 ```
@@ -184,9 +196,12 @@ Request:
 ```json
 {
   "name": "order.created",
-  "description": "Fired when a new order is placed"
+  "description": "Fired when a new order is placed",
+  "idempotencyWindowMinutes": 60
 }
 ```
+
+`idempotencyWindowMinutes` (v0.1.6) overrides the per-app `IdempotencyOptions.WindowMinutes` for this event type only — useful when a high-volume event needs a tighter window or a low-volume one a looser one. Omit / null ⇒ use the per-app default.
 
 Response: `201 Created`
 ```json
@@ -195,6 +210,7 @@ Response: `201 Created`
     "id": "evt_abc123",
     "name": "order.created",
     "description": "Fired when a new order is placed",
+    "idempotencyWindowMinutes": 60,
     "createdAt": "2026-02-26T14:30:00Z"
   }
 }
@@ -247,9 +263,18 @@ Request:
   "metadata": {
     "customerId": "cust_001",
     "environment": "production"
-  }
+  },
+  "allowedIps": ["203.0.113.0/24", "2001:db8::/32"],
+  "transformExpression": "{ id: orderId, total: amount }",
+  "transformEnabled": false
 }
 ```
+
+The `url` host is DNS-resolved at create / update time and rejected if any resolved address sits inside RFC1918, loopback, link-local, CGNAT, cloud-metadata, or IPv6 unique-local / link-local / IPv4-mapped private ranges. The same rules fire again at connect time inside `SocketsHttpHandler.ConnectCallback` — defeats DNS rebinding.
+
+`allowedIps` is an optional CIDR positive-list (IPv4 and IPv6). When set, deliveries only fire if every resolved address sits inside at least one allowed CIDR. Empty / absent ⇒ "no allowlist" (default).
+
+`transformExpression` / `transformEnabled` configure per-endpoint JMESPath payload transformation (ADR-003); see `POST /api/v1/dashboard/transform/validate` for live validation.
 
 Response: `201 Created`
 ```json
@@ -644,6 +669,109 @@ POST /api/v1/dashboard/endpoints/{endpointId}/enable
 DELETE /api/v1/dashboard/endpoints/{endpointId}
 ```
 
+#### Dashboard — Send Test Webhook (v0.1.6)
+```
+POST /api/v1/dashboard/endpoints/{endpointId}/test
+```
+
+Sends a fully-signed test webhook to the endpoint URL **without enqueueing a `Message` row**. Returns the receiver's response and the exact request the engine sent.
+
+Request:
+```json
+{
+  "eventType": "order.created",
+  "payload": { "orderId": 42, "amount": 99.99 },
+  "customHeaders": { "X-Trace": "manual-test" }
+}
+```
+
+`payload`, `eventType`, and `customHeaders` are all optional — defaults produce a minimal `{ "test": true }` payload signed with the endpoint's secret.
+
+Response: `200 OK`
+```json
+{
+  "data": {
+    "request": {
+      "url": "https://api.customer.com/webhooks",
+      "method": "POST",
+      "headers": { "webhook-id": "msg_test_...", "webhook-timestamp": "...", "webhook-signature": "v1,..." },
+      "body": "{\"orderId\":42,\"amount\":99.99}"
+    },
+    "response": {
+      "statusCode": 200,
+      "body": "{\"ok\":true}",
+      "latencyMs": 142
+    }
+  }
+}
+```
+
+If the receiver is unreachable, `statusCode` is `0` and `body` carries the connection error message. The endpoint's circuit breaker counters are **not** affected by test deliveries.
+
+#### Dashboard — Validate Transform Expression (v0.1.4)
+```
+POST /api/v1/dashboard/transform/validate
+```
+
+Endpoint-agnostic helper that evaluates a JMESPath expression against a sample payload and returns either the transformed result or the parser error. Reuses the same `IPayloadTransformer` (and timeout / size guards) that runs in the delivery pipeline.
+
+Request:
+```json
+{
+  "expression": "{ id: orderId, total: amount }",
+  "samplePayload": { "orderId": 42, "amount": 99.99, "currency": "USD" }
+}
+```
+
+Response: `200 OK`
+```json
+{
+  "data": {
+    "success": true,
+    "result": { "id": 42, "total": 99.99 },
+    "error": null
+  }
+}
+```
+
+`200` with `success: false` indicates the expression parsed but produced an error during evaluation; `422` indicates the expression itself is invalid.
+
+#### Dashboard — Audit Log (v0.1.6)
+```
+GET /api/v1/dashboard/audit
+    ?applicationId={uuid}
+    &entityType=application      (application | endpoint | event_type | message)
+    &entityId={uuid}
+    &action=updated              (created | updated | deleted | rotated_key | replayed | retried | tested)
+    &from=2026-05-01T00:00:00Z
+    &to=2026-05-08T23:59:59Z
+    &page=1
+    &pageSize=50
+```
+
+Response:
+```json
+{
+  "data": [
+    {
+      "id": "aud_abc123",
+      "actorEmail": "admin@example.com",
+      "applicationId": "app_xyz789",
+      "entityType": "endpoint",
+      "entityId": "ep_xyz789",
+      "action": "updated",
+      "beforeSnapshot": { "url": "https://old.example.com" },
+      "afterSnapshot": { "url": "https://new.example.com" },
+      "requestId": "req_a1b2c3",
+      "createdAt": "2026-05-08T10:30:00Z"
+    }
+  ],
+  "meta": { "pagination": { "page": 1, "pageSize": 50, "totalCount": 312 } }
+}
+```
+
+The table is **append-only** — there is no `DELETE` route. Rows survive cascades (deleting an application does **not** remove its audit history), so post-incident reconstruction works even after the parent entity is gone. On application delete, `beforeSnapshot.messageCount` carries the row count of bound messages so the cascade is auditable.
+
 #### Dashboard — Event Types
 ```
 GET /api/v1/dashboard/event-types
@@ -723,7 +851,22 @@ GET /api/v1/auth/me
 
 ---
 
-## 4. Webhook Headers Sent to Endpoints
+## 4. SignalR — Live Dashboard Events
+
+The dashboard streams real-time events over SignalR at `/hubs/deliveries` (cookie-authenticated, same session as the dashboard). The hub is server-to-client only — the client does not invoke any methods.
+
+| Event | Payload | When |
+|---|---|---|
+| `DeliverySuccess` | `{ messageId, endpointId, statusCode, latencyMs }` | A delivery attempt returned 2xx |
+| `DeliveryFailure` | `{ messageId, endpointId, statusCode, error, attemptCount }` | A delivery attempt failed (will retry or dead-letter) |
+| `DeadLetter` | `{ messageId, endpointId, finalAttempt, reason }` | Message exhausted its retry budget |
+| `EndpointHealthChanged` (v0.1.6) | `{ endpointId, status, circuitState, consecutiveFailures, cooldownUntilUtc }` | `EndpointHealthTracker` mutated either the visible endpoint status or the circuit-breaker state |
+
+The dashboard treats `EndpointHealthChanged` as a cache-invalidation signal — TanStack Query refetches the endpoints list rather than patching local state, so health badges stay correct across multiple tabs / sessions.
+
+---
+
+## 5. Webhook Headers Sent to Endpoints
 
 Every webhook delivery includes these standard headers:
 
@@ -739,7 +882,7 @@ Plus any custom headers configured on the endpoint.
 
 ---
 
-## 5. Rate Limits
+## 6. Rate Limits
 
 | Scope | Limit | Header |
 |-------|-------|--------|
@@ -750,7 +893,7 @@ When rate limited: `429 Too Many Requests` with `Retry-After` header.
 
 ---
 
-## 6. SDK Usage Examples
+## 7. SDK Usage Examples
 
 ### C# SDK (NuGet)
 ```csharp

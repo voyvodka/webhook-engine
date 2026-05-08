@@ -11,11 +11,16 @@ Self-hosted webhook delivery platform with reliable at-least-once delivery, expo
 - **Exponential backoff** -- 7 retry attempts (5s, 30s, 2m, 15m, 1h, 6h, 24h)
 - **Circuit breaker** -- per-endpoint, auto-opens after 5 consecutive failures, 5-minute cooldown
 - **HMAC-SHA256 signing** -- Standard Webhooks spec (`webhook-id`, `webhook-timestamp`, `webhook-signature`)
-- **Idempotency** -- optional `idempotencyKey` prevents duplicate deliveries
+- **Idempotency** -- optional `idempotencyKey` prevents duplicate deliveries; per-event-type window override
 - **Payload transformation** -- per-endpoint JMESPath expression reshapes the body before signing; fail-open with timeout and output-size guards (ADR-003); live editor in the dashboard
-- **Real-time dashboard** -- React SPA with live delivery feed via SignalR
+- **SSRF guard** -- endpoint URLs rejected at create / update and at connect time when they resolve to RFC1918 / loopback / cloud-metadata ranges; `SocketsHttpHandler.ConnectCallback` pins the resolved IP for the lifetime of each request (DNS-rebinding defense)
+- **Per-endpoint IP allowlist** -- opt-in CIDR positive-list; deliveries are gated against the resolved IP at attempt time
+- **Per-resource overrides** -- per-application rate limit and retention windows; per-event-type idempotency window
+- **Endpoint test webhook** -- send a fully-signed test delivery from the dashboard without enqueueing a real message; signed-request preview included
+- **Append-only audit log** -- admin actions across applications, endpoints, event types, replay, retry, and rotate-key are recorded with before/after snapshots
+- **Real-time dashboard** -- React SPA with live delivery feed and circuit-state changes via SignalR; data layer on TanStack Query
 - **Single process** -- API + background workers + dashboard served from one ASP.NET Core host
-- **Data retention** -- automatic cleanup (delivered: 30 days, dead-letter: 90 days)
+- **Data retention** -- automatic cleanup (delivered: 30 days, dead-letter: 90 days; per-app overrides supported)
 
 ## Tech Stack
 
@@ -174,21 +179,24 @@ Base URL: `/api/v1/`
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/health` or `/api/v1/health` | None | Health check |
+| `GET` | `/health/live` | None | Liveness probe (process up) |
+| `GET` | `/health/ready` | None | Readiness probe (DI + DB ready, migrations applied) |
 | `POST` | `/api/v1/auth/login` | None | Dashboard login |
 | `POST` | `/api/v1/auth/logout` | Cookie | Dashboard logout |
 | `GET` | `/api/v1/auth/me` | Cookie | Current user |
 | `GET` | `/api/v1/applications` | Cookie | List applications |
 | `POST` | `/api/v1/applications` | Cookie | Create application |
 | `GET` | `/api/v1/applications/{id}` | Cookie | Get application |
-| `PUT` | `/api/v1/applications/{id}` | Cookie | Update application |
-| `DELETE` | `/api/v1/applications/{id}` | Cookie | Delete application |
+| `PUT` | `/api/v1/applications/{id}` | Cookie | Update application (incl. retention / rate-limit overrides) |
+| `DELETE` | `/api/v1/applications/{id}` | Cookie | Delete application (cascades to messages) |
 | `POST` | `/api/v1/applications/{id}/rotate-key` | Cookie | Rotate API key |
+| `POST` | `/api/v1/applications/{id}/rotate-secret` | Cookie | Rotate signing secret |
 | `GET` | `/api/v1/event-types` | API key | List event types |
 | `POST` | `/api/v1/event-types` | API key | Create event type |
 | `GET` | `/api/v1/endpoints` | API key | List endpoints |
-| `POST` | `/api/v1/endpoints` | API key | Create endpoint |
+| `POST` | `/api/v1/endpoints` | API key | Create endpoint (URL DNS-validated) |
 | `PUT` | `/api/v1/endpoints/{id}` | API key | Update endpoint |
-| `DELETE` | `/api/v1/endpoints/{id}` | API key | Delete endpoint |
+| `DELETE` | `/api/v1/endpoints/{id}` | API key | Delete endpoint (cascades to messages) |
 | `POST` | `/api/v1/endpoints/{id}/disable` | API key | Disable endpoint |
 | `POST` | `/api/v1/endpoints/{id}/enable` | API key | Enable endpoint |
 | `POST` | `/api/v1/messages` | API key | Send message |
@@ -204,6 +212,9 @@ Base URL: `/api/v1/`
 | `POST` | `/api/v1/dashboard/event-types` | Cookie | Create event type |
 | `PUT` | `/api/v1/dashboard/event-types/{id}` | Cookie | Update event type |
 | `DELETE` | `/api/v1/dashboard/event-types/{id}` | Cookie | Archive event type |
+| `POST` | `/api/v1/dashboard/endpoints/{id}/test` | Cookie | Send a customizable, fully-signed test webhook |
+| `POST` | `/api/v1/dashboard/transform/validate` | Cookie | Validate a JMESPath expression against a sample payload |
+| `GET` | `/api/v1/dashboard/audit` | Cookie | List audit log entries (filterable) |
 
 ### Send a Message
 
@@ -293,7 +304,7 @@ All configuration is via `appsettings.json` or environment variables (double-und
 # Build
 dotnet build WebhookEngine.sln
 
-# Run all tests (142 tests)
+# Run all tests (215 tests)
 dotnet test WebhookEngine.sln
 
 # Run specific test project
