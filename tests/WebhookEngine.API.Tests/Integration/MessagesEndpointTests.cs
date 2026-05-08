@@ -176,6 +176,123 @@ public class MessagesEndpointTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Replay_Caps_At_MaxMessages_And_Leaves_Older_Source_Rows_Untouched()
+    {
+        await ResetDatabaseAsync();
+        using var client = CreateClient();
+        var app = await CreateApplicationWithEndpointAndEventTypeAsync("order.created");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", app.ApiKey);
+
+        var (endpointId, eventTypeId) = await GetEndpointAndEventTypeIdsAsync(app.AppId);
+
+        var now = DateTime.UtcNow;
+        await ExecuteDbAsync(async db =>
+        {
+            // 20 candidate rows in the same window — replay should only act on
+            // MaxMessages of them, leaving the rest in place for the next call.
+            for (var i = 0; i < 20; i++)
+            {
+                db.Messages.Add(CreateMessage(app.AppId, endpointId, eventTypeId, MessageStatus.Delivered, now.AddMinutes(-30 - i)));
+            }
+            await db.SaveChangesAsync();
+        });
+
+        var response = await client.PostAsJsonAsync("/api/v1/messages/replay", new
+        {
+            eventType = "order.created",
+            from = now.AddHours(-2),
+            to = now,
+            statuses = new[] { "delivered" },
+            maxMessages = 5
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var data = (await ParseJsonAsync(response)).GetProperty("data");
+        data.GetProperty("sourceCount").GetInt32().Should().Be(5);
+        data.GetProperty("replayedCount").GetInt32().Should().Be(5);
+
+        // Source rows are *not* moved or mutated — they remain delivered
+        // alongside the 5 newly enqueued Pending replays. Total = 25.
+        await ExecuteDbAsync(async db =>
+        {
+            var total = await db.Messages.CountAsync();
+            total.Should().Be(25);
+
+            var pending = await db.Messages.CountAsync(m => m.Status == MessageStatus.Pending);
+            pending.Should().Be(5);
+
+            var delivered = await db.Messages.CountAsync(m => m.Status == MessageStatus.Delivered);
+            delivered.Should().Be(20);
+        });
+    }
+
+    [Fact]
+    public async Task Replay_Strips_Idempotency_Key_So_New_Row_Does_Not_Conflict_With_Source()
+    {
+        await ResetDatabaseAsync();
+        using var client = CreateClient();
+        var app = await CreateApplicationWithEndpointAndEventTypeAsync("order.created");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", app.ApiKey);
+
+        var (endpointId, eventTypeId) = await GetEndpointAndEventTypeIdsAsync(app.AppId);
+
+        var now = DateTime.UtcNow;
+
+        // Source row carries an idempotency key. The unique partial index on
+        // (app_id, endpoint_id, idempotency_key) WHERE idempotency_key IS NOT
+        // NULL would block a duplicate insert; the replay path explicitly
+        // sets IdempotencyKey = null on the new row to sidestep it.
+        await ExecuteDbAsync(async db =>
+        {
+            db.Messages.Add(new Message
+            {
+                Id = Guid.NewGuid(),
+                AppId = app.AppId,
+                EndpointId = endpointId,
+                EventTypeId = eventTypeId,
+                Payload = "{}",
+                Status = MessageStatus.Delivered,
+                IdempotencyKey = "order-42",
+                CreatedAt = now.AddMinutes(-30),
+                DeliveredAt = now.AddMinutes(-29),
+                MaxRetries = 7
+            });
+            await db.SaveChangesAsync();
+        });
+
+        var response = await client.PostAsJsonAsync("/api/v1/messages/replay", new
+        {
+            eventType = "order.created",
+            from = now.AddHours(-1),
+            to = now,
+            statuses = new[] { "delivered" }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var data = (await ParseJsonAsync(response)).GetProperty("data");
+        data.GetProperty("replayedCount").GetInt32().Should().Be(1);
+
+        // The replay row exists, has Pending status, and explicitly carries
+        // a NULL idempotency key — so a future producer reusing the same key
+        // is unaffected by the replay.
+        await ExecuteDbAsync(async db =>
+        {
+            var rows = await db.Messages.AsNoTracking().OrderBy(m => m.CreatedAt).ToListAsync();
+            rows.Should().HaveCount(2);
+
+            var source = rows[0];
+            var replay = rows[1];
+
+            source.IdempotencyKey.Should().Be("order-42");
+            source.Status.Should().Be(MessageStatus.Delivered);
+
+            replay.IdempotencyKey.Should().BeNull();
+            replay.Status.Should().Be(MessageStatus.Pending);
+            replay.Id.Should().NotBe(source.Id);
+        });
+    }
+
+    [Fact]
     public async Task Replay_Returns_422_When_Both_EventType_And_EventTypeId_Are_Missing()
     {
         await ResetDatabaseAsync();
