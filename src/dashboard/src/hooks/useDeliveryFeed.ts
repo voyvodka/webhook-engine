@@ -11,6 +11,18 @@ export interface DeliveryEvent {
   timestamp: string;
 }
 
+export interface EndpointHealthChange {
+  endpointId: string;
+  // Lowercase enum string ("active" | "degraded" | "failed" | "disabled") to
+  // match the existing dashboard convention.
+  status: string;
+  // PascalCase enum string ("Closed" | "Open" | "HalfOpen").
+  circuitState: string;
+  consecutiveFailures: number;
+  cooldownUntilUtc: string | null;
+  timestamp: string;
+}
+
 /** Infinite retry with capped exponential backoff (max 30s). */
 const infiniteRetryPolicy: IRetryPolicy = {
   nextRetryDelayInMilliseconds(retryContext: RetryContext) {
@@ -26,6 +38,10 @@ export function useDeliveryFeed(maxEvents = 50) {
   const connectionRef = useRef<HubConnection | null>(null);
   const [events, setEvents] = useState<DeliveryEvent[]>([]);
   const [connected, setConnected] = useState(false);
+  // Single-slot state — pages watch its identity in useEffect to patch
+  // their local endpoint state. Storing only the latest change is enough
+  // because each change is idempotent against the prior badge value.
+  const [lastHealthChange, setLastHealthChange] = useState<EndpointHealthChange | null>(null);
 
   const push = useCallback(
     (event: DeliveryEvent) => {
@@ -57,6 +73,11 @@ export function useDeliveryFeed(maxEvents = 50) {
       push({ ...data, status: "DeadLetter" });
     };
 
+    const handleHealthChange = (data: EndpointHealthChange) => {
+      if (!isMounted) return;
+      setLastHealthChange(data);
+    };
+
     const handleClose = () => {
       if (!isMounted) return;
       setConnected(false);
@@ -82,6 +103,7 @@ export function useDeliveryFeed(maxEvents = 50) {
     connection.on("DeliverySuccess", handleSuccess);
     connection.on("DeliveryFailure", handleFailure);
     connection.on("DeadLetter", handleDeadLetter);
+    connection.on("EndpointHealthChanged", handleHealthChange);
     connection.onclose(handleClose);
     connection.onreconnected(handleReconnected);
 
@@ -119,6 +141,7 @@ export function useDeliveryFeed(maxEvents = 50) {
       connection.off("DeliverySuccess", handleSuccess);
       connection.off("DeliveryFailure", handleFailure);
       connection.off("DeadLetter", handleDeadLetter);
+      connection.off("EndpointHealthChanged", handleHealthChange);
 
       if (connection.state !== HubConnectionState.Disconnected) {
         void connection.stop();
@@ -126,5 +149,5 @@ export function useDeliveryFeed(maxEvents = 50) {
     };
   }, [push]);
 
-  return { events, connected };
+  return { events, connected, lastHealthChange };
 }
