@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using WebhookEngine.API.Audit;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.API.Validators;
 using WebhookEngine.Core.Enums;
@@ -33,6 +34,7 @@ public class DashboardEndpointController : ControllerBase
     private readonly ApplicationRepository _applicationRepository;
     private readonly IPayloadTransformer _payloadTransformer;
     private readonly IEndpointTester _endpointTester;
+    private readonly IAuditLogger _auditLogger;
 
     public DashboardEndpointController(
         WebhookDbContext dbContext,
@@ -40,7 +42,8 @@ public class DashboardEndpointController : ControllerBase
         EventTypeRepository eventTypeRepository,
         ApplicationRepository applicationRepository,
         IPayloadTransformer payloadTransformer,
-        IEndpointTester endpointTester)
+        IEndpointTester endpointTester,
+        IAuditLogger auditLogger)
     {
         _dbContext = dbContext;
         _endpointRepository = endpointRepository;
@@ -48,6 +51,7 @@ public class DashboardEndpointController : ControllerBase
         _applicationRepository = applicationRepository;
         _payloadTransformer = payloadTransformer;
         _endpointTester = endpointTester;
+        _auditLogger = auditLogger;
     }
 
     // ──────────────────────────────────────────────────
@@ -251,6 +255,15 @@ public class DashboardEndpointController : ControllerBase
         await _endpointRepository.UpdateAsync(endpoint, ct);
         DeliveryLookupCache.InvalidateApplication(endpoint.AppId);
 
+        await _auditLogger.LogActionAsync(
+            HttpContext,
+            action: "endpoint.disabled",
+            resourceType: "endpoint",
+            resourceId: endpoint.Id,
+            appId: endpoint.AppId,
+            after: new { url = endpoint.Url, status = endpoint.Status.ToString() },
+            ct: ct);
+
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
             id = endpoint.Id,
@@ -271,6 +284,15 @@ public class DashboardEndpointController : ControllerBase
         await _endpointRepository.UpdateAsync(endpoint, ct);
         DeliveryLookupCache.InvalidateApplication(endpoint.AppId);
 
+        await _auditLogger.LogActionAsync(
+            HttpContext,
+            action: "endpoint.enabled",
+            resourceType: "endpoint",
+            resourceId: endpoint.Id,
+            appId: endpoint.AppId,
+            after: new { url = endpoint.Url, status = endpoint.Status.ToString() },
+            ct: ct);
+
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
             id = endpoint.Id,
@@ -289,6 +311,16 @@ public class DashboardEndpointController : ControllerBase
 
         await _endpointRepository.DeleteAsync(endpointId, ct);
         DeliveryLookupCache.InvalidateApplication(endpoint.AppId);
+
+        await _auditLogger.LogActionAsync(
+            HttpContext,
+            action: "endpoint.deleted",
+            resourceType: "endpoint",
+            resourceId: endpointId,
+            appId: endpoint.AppId,
+            before: new { url = endpoint.Url, status = endpoint.Status.ToString() },
+            ct: ct);
+
         return NoContent();
     }
 

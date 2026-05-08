@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using WebhookEngine.API.Audit;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.API.Middleware;
+using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Infrastructure.Repositories;
 using AppEntity = WebhookEngine.Core.Entities.Application;
 
@@ -25,11 +27,13 @@ public class ApplicationsController : ControllerBase
 {
     private readonly ApplicationRepository _appRepo;
     private readonly IMemoryCache _cache;
+    private readonly IAuditLogger _auditLogger;
 
-    public ApplicationsController(ApplicationRepository appRepo, IMemoryCache cache)
+    public ApplicationsController(ApplicationRepository appRepo, IMemoryCache cache, IAuditLogger auditLogger)
     {
         _appRepo = appRepo;
         _cache = cache;
+        _auditLogger = auditLogger;
     }
 
     private void InvalidateAuthCache(string apiKeyPrefix)
@@ -61,6 +65,15 @@ public class ApplicationsController : ControllerBase
         };
 
         await _appRepo.CreateAsync(application, ct);
+
+        await _auditLogger.LogActionAsync(
+            HttpContext,
+            action: "application.created",
+            resourceType: "application",
+            resourceId: application.Id,
+            appId: application.Id,
+            after: new { name = application.Name, isActive = application.IsActive },
+            ct: ct);
 
         // Return the API key in plain text ONLY on creation — it is never retrievable again
         return Created($"/api/v1/applications/{application.Id}", ApiEnvelope.Success(HttpContext, new
@@ -123,6 +136,18 @@ public class ApplicationsController : ControllerBase
         if (application is null)
             return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Application not found."));
 
+        // Snapshot the audit-relevant subset before mutating; the full row
+        // contains an api-key hash + signing secret we don't want in the log.
+        var beforeSnapshot = new
+        {
+            name = application.Name,
+            isActive = application.IsActive,
+            idempotencyWindowMinutes = application.IdempotencyWindowMinutes,
+            retentionDeliveredDays = application.RetentionDeliveredDays,
+            retentionDeadLetterDays = application.RetentionDeadLetterDays,
+            rateLimitPerSecond = application.RateLimitPerSecond
+        };
+
         application.Name = request.Name ?? application.Name;
         application.IsActive = request.IsActive ?? application.IsActive;
         application.IdempotencyWindowMinutes = request.IdempotencyWindowMinutes ?? application.IdempotencyWindowMinutes;
@@ -143,6 +168,25 @@ public class ApplicationsController : ControllerBase
 
         await _appRepo.UpdateAsync(application, ct);
         InvalidateAuthCache(application.ApiKeyPrefix);
+
+        var afterSnapshot = new
+        {
+            name = application.Name,
+            isActive = application.IsActive,
+            idempotencyWindowMinutes = application.IdempotencyWindowMinutes,
+            retentionDeliveredDays = application.RetentionDeliveredDays,
+            retentionDeadLetterDays = application.RetentionDeadLetterDays,
+            rateLimitPerSecond = application.RateLimitPerSecond
+        };
+        await _auditLogger.LogActionAsync(
+            HttpContext,
+            action: "application.updated",
+            resourceType: "application",
+            resourceId: application.Id,
+            appId: application.Id,
+            before: beforeSnapshot,
+            after: afterSnapshot,
+            ct: ct);
 
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
@@ -168,6 +212,16 @@ public class ApplicationsController : ControllerBase
 
         await _appRepo.DeleteAsync(applicationId, ct);
         InvalidateAuthCache(application.ApiKeyPrefix);
+
+        await _auditLogger.LogActionAsync(
+            HttpContext,
+            action: "application.deleted",
+            resourceType: "application",
+            resourceId: applicationId,
+            appId: applicationId,
+            before: new { name = application.Name, isActive = application.IsActive },
+            ct: ct);
+
         return NoContent();
     }
 
@@ -188,6 +242,14 @@ public class ApplicationsController : ControllerBase
         await _appRepo.UpdateAsync(application, ct);
         InvalidateAuthCache(application.ApiKeyPrefix);
 
+        await _auditLogger.LogActionAsync(
+            HttpContext,
+            action: "application.api_key_rotated",
+            resourceType: "application",
+            resourceId: application.Id,
+            appId: application.Id,
+            ct: ct);
+
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
             id = application.Id,
@@ -207,6 +269,14 @@ public class ApplicationsController : ControllerBase
         application.SigningSecret = newSigningSecret;
         await _appRepo.UpdateAsync(application, ct);
         InvalidateAuthCache(application.ApiKeyPrefix);
+
+        await _auditLogger.LogActionAsync(
+            HttpContext,
+            action: "application.signing_secret_rotated",
+            resourceType: "application",
+            resourceId: application.Id,
+            appId: application.Id,
+            ct: ct);
 
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
