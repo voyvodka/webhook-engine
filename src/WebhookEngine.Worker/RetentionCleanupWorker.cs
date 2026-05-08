@@ -104,7 +104,14 @@ public class RetentionCleanupWorker : BackgroundService
                 ct);
         }
 
-        var nulledIdempotencyKeys = await NullifyExpiredIdempotencyKeysAsync(dbContext, apps, nowUtc, ct);
+        // Pull every event type's optional idempotency-window override in one
+        // shot; the helper does the per-event-type sweep with app fallback.
+        var eventTypes = await dbContext.EventTypes
+            .AsNoTracking()
+            .Select(e => new EventTypeIdempotencyConfig(e.Id, e.AppId, e.IdempotencyWindowMinutes))
+            .ToListAsync(ct);
+
+        var nulledIdempotencyKeys = await NullifyExpiredIdempotencyKeysAsync(dbContext, apps, eventTypes, nowUtc, ct);
 
         return new RetentionCleanupResult(deletedDelivered, deletedDeadLetter, nulledIdempotencyKeys);
     }
@@ -139,32 +146,38 @@ public class RetentionCleanupWorker : BackgroundService
 
     private sealed record AppRetentionConfig(Guid Id, int? DeliveredDays, int? DeadLetterDays, int IdempotencyWindowMinutes);
 
+    private sealed record EventTypeIdempotencyConfig(Guid Id, Guid AppId, int? OverrideMinutes);
+
     // Window-expired rows lose their idempotency_key so the same key can be
     // re-used in a fresh window without violating the unique partial index
     // on (app_id, endpoint_id, idempotency_key) WHERE idempotency_key IS NOT NULL.
-    // Stripe-style: idempotency keys are valid only inside the configured
-    // per-app window (default 24h) and the row itself is preserved.
+    // Stripe-style: keys are valid only inside the configured window. The
+    // window is resolved per-message: an event-type override beats the
+    // application-level window. We sweep per event type so each batch DELETE
+    // / UPDATE can use a single, statically-known cutoff.
     private static async Task<int> NullifyExpiredIdempotencyKeysAsync(
         WebhookDbContext dbContext,
         IReadOnlyList<AppRetentionConfig> apps,
+        IReadOnlyList<EventTypeIdempotencyConfig> eventTypes,
         DateTime nowUtc,
         CancellationToken ct)
     {
+        var appWindows = apps.ToDictionary(a => a.Id, a => a.IdempotencyWindowMinutes);
         var totalNulled = 0;
 
-        foreach (var app in apps)
+        foreach (var eventType in eventTypes)
         {
-            if (ct.IsCancellationRequested)
-            {
-                break;
-            }
+            if (ct.IsCancellationRequested) break;
+            if (!appWindows.TryGetValue(eventType.AppId, out var appWindow)) continue;
 
-            var cutoff = nowUtc.AddMinutes(-app.IdempotencyWindowMinutes);
+            // Per-event-type override > per-app window.
+            var effectiveMinutes = eventType.OverrideMinutes ?? appWindow;
+            var cutoff = nowUtc.AddMinutes(-effectiveMinutes);
 
             while (!ct.IsCancellationRequested)
             {
                 var batch = await dbContext.Messages
-                    .Where(m => m.AppId == app.Id
+                    .Where(m => m.EventTypeId == eventType.Id
                         && m.IdempotencyKey != null
                         && m.CreatedAt < cutoff)
                     .OrderBy(m => m.CreatedAt)
@@ -173,10 +186,7 @@ public class RetentionCleanupWorker : BackgroundService
                         s => s.SetProperty(m => m.IdempotencyKey, (string?)null),
                         ct);
 
-                if (batch == 0)
-                {
-                    break;
-                }
+                if (batch == 0) break;
 
                 totalNulled += batch;
             }

@@ -41,7 +41,8 @@ public class EventTypesController : ControllerBase
             Description = request.Description,
             SchemaJson = request.Schema is not null
                 ? System.Text.Json.JsonSerializer.Serialize(request.Schema)
-                : null
+                : null,
+            IdempotencyWindowMinutes = request.IdempotencyWindowMinutes
         };
 
         await _eventTypeRepo.CreateAsync(eventType, ct);
@@ -100,6 +101,12 @@ public class EventTypesController : ControllerBase
         if (request.Schema is not null)
             eventType.SchemaJson = System.Text.Json.JsonSerializer.Serialize(request.Schema);
 
+        // 0 = clear the override (fall back to per-app window). Positive = override.
+        if (request.IdempotencyWindowMinutes is int windowMinutes)
+        {
+            eventType.IdempotencyWindowMinutes = windowMinutes == 0 ? null : windowMinutes;
+        }
+
         await _eventTypeRepo.UpdateAsync(eventType, ct);
         DeliveryLookupCache.InvalidateApplication(eventType.AppId);
 
@@ -125,6 +132,8 @@ public class CreateEventTypeRequest
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public object? Schema { get; set; }
+    // null on create = inherit per-app window. Positive value = override per event type.
+    public int? IdempotencyWindowMinutes { get; set; }
 }
 
 public class UpdateEventTypeRequest
@@ -132,4 +141,6 @@ public class UpdateEventTypeRequest
     public string? Name { get; set; }
     public string? Description { get; set; }
     public object? Schema { get; set; }
+    // 0 clears the override (falls back to per-app window). Positive = set override. null = leave unchanged.
+    public int? IdempotencyWindowMinutes { get; set; }
 }
