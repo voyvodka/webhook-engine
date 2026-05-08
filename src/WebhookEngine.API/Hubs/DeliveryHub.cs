@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
 
 namespace WebhookEngine.API.Hubs;
@@ -67,6 +68,27 @@ public class SignalRDeliveryNotifier : IDeliveryNotifier
             endpointId,
             attemptCount,
             status = "DeadLetter",
+            timestamp = DateTime.UtcNow
+        }, ct);
+    }
+
+    public async Task NotifyEndpointHealthChangedAsync(
+        Guid endpointId,
+        EndpointStatus endpointStatus,
+        CircuitState circuitState,
+        int consecutiveFailures,
+        DateTime? cooldownUntilUtc,
+        CancellationToken ct = default)
+    {
+        await _hubContext.Clients.All.SendAsync("EndpointHealthChanged", new
+        {
+            endpointId,
+            // Match the dashboard's existing lowercase string convention
+            // (see DashboardEndpointController.ListEndpoints).
+            status = endpointStatus.ToString().ToLowerInvariant(),
+            circuitState = circuitState.ToString(),
+            consecutiveFailures,
+            cooldownUntilUtc,
             timestamp = DateTime.UtcNow
         }, ct);
     }
