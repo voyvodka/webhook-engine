@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using WebhookEngine.API.Auth;
 using WebhookEngine.Core.Entities;
+using WebhookEngine.Core.Enums;
 using WebhookEngine.Infrastructure.Data;
 
 namespace WebhookEngine.API.Tests.Integration;
@@ -101,6 +102,13 @@ public class AuditLoggingTests : IClassFixture<TestWebApplicationFactory>
         rows[0].GetProperty("after").GetProperty("name").GetString().Should().Be("Second");
         rows[1].GetProperty("after").GetProperty("name").GetString().Should().Be("First");
     }
+
+    // Application delete + cascade + audit messageCount is exercised against
+    // a real Postgres in WebhookEngine.Infrastructure.Tests' AppDeleteCascadeTests
+    // and AuditLoggingTests. The InMemory provider used here doesn't translate
+    // ExecuteDeleteAsync (the path ApplicationRepository.DeleteAsync uses), so
+    // an end-to-end HTTP delete test against this fixture would always 500 —
+    // verifying the audit shape lives in the Testcontainers suite instead.
 
     [Fact]
     public async Task Audit_Log_List_Endpoint_Requires_Authentication()

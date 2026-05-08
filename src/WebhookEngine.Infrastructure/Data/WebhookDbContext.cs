@@ -145,8 +145,13 @@ public class WebhookDbContext : DbContext
                 .HasFilter("idempotency_key IS NOT NULL")
                 .IsUnique();
 
-            entity.HasOne(e => e.Application).WithMany(a => a.Messages).HasForeignKey(e => e.AppId);
-            entity.HasOne(e => e.Endpoint).WithMany(ep => ep.Messages).HasForeignKey(e => e.EndpointId);
+            // Cascade so admin "delete this application/endpoint" really
+            // tears down the bound message rows; without this, EF emits NoAction
+            // and a delete with live messages fails the FK constraint at the
+            // database boundary (HTTP 500 instead of a clean removal). Audit
+            // records survive because audit_logs has no FK to applications.
+            entity.HasOne(e => e.Application).WithMany(a => a.Messages).HasForeignKey(e => e.AppId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Endpoint).WithMany(ep => ep.Messages).HasForeignKey(e => e.EndpointId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.EventType).WithMany().HasForeignKey(e => e.EventTypeId);
         });
 
