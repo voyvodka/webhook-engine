@@ -88,6 +88,8 @@ Detailed rules live in `.claude/rules/` — consult them while writing code.
 - HTTP delivery uses the named `webhook-delivery` client only — never `new HttpClient()`. `SocketsHttpHandler.ConnectCallback` pins resolved IPs (DNS-rebinding defense).
 - `WebhookMetrics? metrics = null` is the optional-dependency pattern.
 
+**Comments — sparing, not generous.** Default to none. Add one only when the **why** is non-obvious: a load-bearing ordering, a hidden invariant, a workaround for a known bug. Never restate *what* the code does (names handle that), never reference the current PR / task / caller (rots fast), never expand a one-line reason into a paragraph. One short line beats five. If deleting the comment wouldn't confuse a future reader, it shouldn't have been there. Same rule for commit messages, YAML, JSON, and `# this does X` headers — keep prose for things the code itself can't say.
+
 ---
 
 ## Agents
