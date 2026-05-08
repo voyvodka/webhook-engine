@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { RetryButton } from "../components/RetryButton";
 import { Modal } from "../components/Modal";
@@ -6,7 +7,6 @@ import { Select } from "../components/Select";
 import { StatusBadge } from "../components/StatusBadge";
 import { useDeliveryFeed } from "../hooks/useDeliveryFeed";
 import { listApplications, listEndpoints, listMessages, sendDashboardMessage } from "../api/dashboardApi";
-import type { ApplicationRow, MessageRow, Pagination } from "../types";
 import { formatLocaleDateTime } from "../utils/dateTime";
 import { inputClasses } from "../utils/styles";
 import {
@@ -38,10 +38,8 @@ function toIsoOrUndefined(localDateTime: string): string | undefined {
 }
 
 export function MessagesPage() {
-  const [messages, setMessages] = useState<MessageRow[]>([]);
-  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [eventTypeFilter, setEventTypeFilter] = useState("");
@@ -51,97 +49,103 @@ export function MessagesPage() {
   const [afterFilter, setAfterFilter] = useState("");
   const [beforeFilter, setBeforeFilter] = useState("");
 
-  const [applications, setApplications] = useState<ApplicationRow[]>([]);
-  const [endpointOptions, setEndpointOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [sendAppId, setSendAppId] = useState("");
   const [sendEventType, setSendEventType] = useState("");
   const [sendPayload, setSendPayload] = useState("{}");
   const [sendIdempotencyKey, setSendIdempotencyKey] = useState("");
-  const [sending, setSending] = useState(false);
   const [lastSendAt, setLastSendAt] = useState(0);
   const [sendResult, setSendResult] = useState("");
   const [showSend, setShowSend] = useState(false);
   const { events, connected } = useDeliveryFeed(20);
 
-  const fetchMessages = useCallback(async (showSpinner = true) => {
-    if (showSpinner) setLoading(true);
-    try {
-      const result = await listMessages({
-        appId: appFilter || undefined,
-        endpointId: endpointFilter || undefined,
-        eventType: eventTypeFilter || undefined,
-        status: statusFilter || undefined,
-        after: toIsoOrUndefined(afterFilter),
-        before: toIsoOrUndefined(beforeFilter),
-        page,
-        pageSize: 20
-      });
-      setMessages(result.data);
-      setPagination(result.pagination);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load messages");
-    } finally {
-      if (showSpinner) setLoading(false);
-    }
-  }, [afterFilter, appFilter, beforeFilter, endpointFilter, eventTypeFilter, page, statusFilter]);
+  const messagesQuery = useQuery({
+    queryKey: ["messages", { page, appFilter, endpointFilter, eventTypeFilter, statusFilter, afterFilter, beforeFilter }],
+    queryFn: () => listMessages({
+      appId: appFilter || undefined,
+      endpointId: endpointFilter || undefined,
+      eventType: eventTypeFilter || undefined,
+      status: statusFilter || undefined,
+      after: toIsoOrUndefined(afterFilter),
+      before: toIsoOrUndefined(beforeFilter),
+      page,
+      pageSize: 20
+    })
+  });
+  const messages = useMemo(() => messagesQuery.data?.data ?? [], [messagesQuery.data]);
+  const pagination = messagesQuery.data?.pagination ?? null;
+  const loading = messagesQuery.isLoading;
 
+  const applicationsQuery = useQuery({
+    queryKey: ["applications-all"],
+    queryFn: () => listApplications(1, 200)
+  });
+  const applications = useMemo(() => applicationsQuery.data?.data ?? [], [applicationsQuery.data]);
+
+  // Default the "send message" form to the first available app once it lands.
   useEffect(() => {
-    Promise.resolve()
-      .then(() => fetchMessages())
-      .catch(() => { /* surfaced via fetchMessages' setError */ });
-  }, [fetchMessages]);
+    if (applications.length === 0) return;
+    void Promise.resolve().then(() => {
+      setSendAppId((c) => c || applications[0].id);
+    });
+  }, [applications]);
 
+  const endpointsQuery = useQuery({
+    queryKey: ["endpoints-for-app", appFilter],
+    queryFn: () => listEndpoints({ appId: appFilter, page: 1, pageSize: 200 }),
+    enabled: !!appFilter
+  });
+  const endpointOptions = useMemo(() => {
+    if (!appFilter || !endpointsQuery.data) return [];
+    return endpointsQuery.data.data.map((endpoint) => ({ value: endpoint.id, label: endpoint.url }));
+  }, [appFilter, endpointsQuery.data]);
+
+  // Drop the endpoint filter when its app context changes / clears so we
+  // don't carry a stale endpointId across an app filter swap.
+  useEffect(() => {
+    if (!appFilter) {
+      void Promise.resolve().then(() => setEndpointFilter(""));
+      return;
+    }
+    if (endpointOptions.length === 0) return;
+    void Promise.resolve().then(() => {
+      setEndpointFilter((current) => (endpointOptions.some((o) => o.value === current) ? current : ""));
+    });
+  }, [appFilter, endpointOptions]);
+
+  const fetchError = messagesQuery.error instanceof Error ? messagesQuery.error.message : "";
+  const displayError = error || fetchError;
+
+  const invalidateMessages = () => queryClient.invalidateQueries({ queryKey: ["messages"] });
+
+  // SignalR delivery events trigger a background invalidation rather than a
+  // direct refetch — TanStack's staleTime + dedup makes the actual network
+  // call only when the cache is stale, so a flood of events coalesces. The
+  // 7-second setInterval poll is gone; staleTime + invalidate replaces it.
   useEffect(() => {
     if (events.length === 0) return;
-    Promise.resolve()
-      .then(() => fetchMessages(false))
-      .catch(() => { /* no-op — silent refresh on real-time event */ });
-  }, [events.length, fetchMessages]);
+    void Promise.resolve().then(() => invalidateMessages());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events.length]);
 
-  useEffect(() => {
-    const interval = window.setInterval(() => { fetchMessages(false).catch(() => { /* no-op */ }); }, 7000);
-    return () => window.clearInterval(interval);
-  }, [fetchMessages]);
+  const sendMutation = useMutation({
+    mutationFn: (payload: { appId: string; eventType: string; payload: unknown; idempotencyKey?: string }) =>
+      sendDashboardMessage(payload),
+    onSuccess: (result) => {
+      setLastSendAt(Date.now());
+      setSendResult(`Queued ${result.messageIds.length} message(s) for ${result.endpointCount} endpoint(s).`);
+      invalidateMessages();
+    },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Failed to send message")
+  });
+  const sending = sendMutation.isPending;
 
-  useEffect(() => {
-    const fetchApplications = async () => {
-      try {
-        const result = await listApplications(1, 200);
-        setApplications(result.data);
-        if (result.data.length > 0) setSendAppId((c) => c || result.data[0].id);
-      } catch { /* no-op */ }
-    };
-    fetchApplications();
-  }, []);
+  const applyFilters = () => {
+    // setPage triggers a key change on messagesQuery, which re-fetches
+    // automatically. No direct fetch call needed.
+    setPage(1);
+  };
 
-  useEffect(() => {
-    const fetchEndpoints = async () => {
-      if (!appFilter) {
-        setEndpointOptions([]);
-        setEndpointFilter("");
-        return;
-      }
-
-      try {
-        const result = await listEndpoints({ appId: appFilter, page: 1, pageSize: 200 });
-        const options = result.data.map((endpoint) => ({
-          value: endpoint.id,
-          label: endpoint.url
-        }));
-        setEndpointOptions(options);
-        setEndpointFilter((current) => (options.some((option) => option.value === current) ? current : ""));
-      } catch {
-        setEndpointOptions([]);
-        setEndpointFilter("");
-      }
-    };
-
-    fetchEndpoints();
-  }, [appFilter]);
-
-  const applyFilters = () => { setPage(1); fetchMessages(); };
-
-  const handleSendMessage = async () => {
+  const handleSendMessage = () => {
     if (!sendAppId || !sendEventType.trim()) return;
     const now = Date.now();
     if (now - lastSendAt < 800) return;
@@ -149,24 +153,14 @@ export function MessagesPage() {
     let parsedPayload: unknown;
     try { parsedPayload = JSON.parse(sendPayload); } catch { setError("Payload must be valid JSON"); return; }
 
-    setSending(true);
     setError("");
     setSendResult("");
-    try {
-      const result = await sendDashboardMessage({
-        appId: sendAppId,
-        eventType: sendEventType.trim(),
-        payload: parsedPayload,
-        idempotencyKey: sendIdempotencyKey.trim() || undefined
-      });
-      setLastSendAt(now);
-      setSendResult(`Queued ${result.messageIds.length} message(s) for ${result.endpointCount} endpoint(s).`);
-      await fetchMessages();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to send message");
-    } finally {
-      setSending(false);
-    }
+    sendMutation.mutate({
+      appId: sendAppId,
+      eventType: sendEventType.trim(),
+      payload: parsedPayload,
+      idempotencyKey: sendIdempotencyKey.trim() || undefined
+    });
   };
 
   const appOptions = applications.map((a) => ({ value: a.id, label: a.name }));
@@ -190,10 +184,10 @@ export function MessagesPage() {
       </div>
 
       {/* Error */}
-      {error && (
+      {displayError && (
         <div className="flex items-center gap-2 text-danger text-xs bg-danger-soft border border-danger/20 rounded-lg px-3 py-2 animate-fade-in-up">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          {error}
+          {displayError}
           <button onClick={() => setError("")} className="ml-auto text-danger/60 hover:text-danger"><X className="w-3 h-3" /></button>
         </div>
       )}
@@ -309,7 +303,7 @@ export function MessagesPage() {
                             <ExternalLink className="w-3.5 h-3.5" />
                           </Link>
                           {(msg.status === "Failed" || msg.status === "DeadLetter") && (
-                            <RetryButton messageId={msg.id} onRetried={fetchMessages} />
+                            <RetryButton messageId={msg.id} onRetried={() => invalidateMessages()} />
                           )}
                         </div>
                       </td>
