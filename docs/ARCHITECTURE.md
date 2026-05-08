@@ -341,6 +341,20 @@ When circuit transitions to HALF_OPEN:
   - If failure → OPEN, restart cooldown
 ```
 
+`EndpointHealthTracker` serializes mutations on each endpoint with a PostgreSQL advisory lock (`pg_advisory_xact_lock`, namespace `100_001`) so concurrent workers can't corrupt the consecutive-failure counter or step on each other's state transitions. After the commit lands, the tracker emits a `EndpointHealthChanged` event over SignalR (v0.1.6) so the dashboard updates the endpoint's health badge without polling. Notification lives outside the lock + transaction — a slow client cannot keep the lock and a hub failure cannot roll back what's already committed.
+
+### 3.5 SSRF Defense (validate-time + connect-time)
+
+Every endpoint URL is rejected at create / update if its host resolves into RFC1918 / loopback / link-local / CGNAT / cloud-metadata / IPv6 unique-local / link-local / IPv4-mapped private ranges (`EndpointUrlPolicy.CheckHostSafeAsync`, v0.1.6). The same `PrivateIpDetector` rules also fire at connect time inside `SocketsHttpHandler.ConnectCallback`, where the resolved IP is **pinned for the lifetime of the request** to defeat DNS-rebinding (validate-time DNS returns a public IP, attacker swaps in a private IP at connect time). A master switch `WebhookEngine:SsrfGuard:Enabled` exists for tightly-controlled internal deployments; `AllowLoopbackInDevelopment` flips automatically in `Development`.
+
+### 3.6 Per-Endpoint IP Allowlist (v0.1.6)
+
+Optional CIDR positive-list per endpoint (`Endpoint.AllowedIpsJson`). When configured, the delivery worker resolves the endpoint host at attempt time and rejects every resolved address that is **not** inside at least one allowed CIDR. `IpAllowlistMatcher.AllAddressesAllowed` short-circuits empty allowlists *before* the empty-resolution branch (load-bearing ordering: a future caller with no allowlist and no resolved addresses must not land on the deny path). Transient resolver failures (`SocketException` / `ArgumentException`) retry inside the message's normal retry budget instead of dead-lettering on first miss (R1).
+
+### 3.7 Audit Log (v0.1.6)
+
+Admin actions write to the append-only `audit_logs` table with `actor_user_id`, `actor_email`, `application_id`, `entity_type`, `entity_id`, `action`, `before_snapshot`, `after_snapshot`, and `request_id` (mirroring `X-Request-Id` for log cross-correlation). The table holds **no foreign keys** so rows survive the cascade when an application or endpoint is deleted. `ApplicationsController.Delete` reads `MessageRepository.CountAsync(...)` *before* the delete and folds the count into the audit `before_snapshot` so post-incident reconstruction can recover scale. `GET /api/v1/dashboard/audit` exposes the table with cursor pagination and per-app, per-entity, per-action filters.
+
 ### 3.5 HTTP Delivery Service
 
 ```csharp

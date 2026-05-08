@@ -84,15 +84,18 @@ Logical tenants within WebhookEngine. A SaaS company using WebhookEngine might c
 
 ```sql
 CREATE TABLE applications (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name            VARCHAR(255) NOT NULL,
-    api_key_prefix  VARCHAR(20) NOT NULL UNIQUE,   -- "whe_app1a2b3_" for fast lookup
-    api_key_hash    VARCHAR(64) NOT NULL,           -- SHA256 hash of full API key
-    signing_secret  VARCHAR(64) NOT NULL,           -- Base64-encoded HMAC secret
-    retry_policy    JSONB NOT NULL DEFAULT '{"maxRetries":7,"backoffSchedule":[5,30,120,900,3600,21600,86400]}',
-    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name                            VARCHAR(255) NOT NULL,
+    api_key_prefix                  VARCHAR(20) NOT NULL UNIQUE,   -- "whe_app1a2b3_" for fast lookup
+    api_key_hash                    VARCHAR(64) NOT NULL,           -- SHA256 hash of full API key
+    signing_secret                  VARCHAR(64) NOT NULL,           -- Base64-encoded HMAC secret
+    retry_policy                    JSONB NOT NULL DEFAULT '{"maxRetries":7,"backoffSchedule":[5,30,120,900,3600,21600,86400]}',
+    is_active                       BOOLEAN NOT NULL DEFAULT TRUE,
+    rate_limit_per_second           INT,                            -- Per-app override; NULL → use global default (v0.1.6)
+    retention_delivered_days        INT,                            -- Per-app override; NULL → use global default (v0.1.6)
+    retention_dead_letter_days      INT,                            -- Per-app override; NULL → use global default (v0.1.6)
+    created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_applications_api_key_prefix ON applications (api_key_prefix);
@@ -104,13 +107,14 @@ Categorizes the events an application can send (e.g., `order.created`, `payment.
 
 ```sql
 CREATE TABLE event_types (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    app_id          UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
-    name            VARCHAR(255) NOT NULL,          -- "order.created"
-    description     TEXT,
-    schema_json     JSONB,                          -- Optional JSON Schema for validation
-    is_archived     BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    app_id                      UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    name                        VARCHAR(255) NOT NULL,          -- "order.created"
+    description                 TEXT,
+    schema_json                 JSONB,                          -- Optional JSON Schema for validation
+    is_archived                 BOOLEAN NOT NULL DEFAULT FALSE,
+    idempotency_window_minutes  INT,                            -- Per-event-type override; NULL → use per-app default (v0.1.6)
+    created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     UNIQUE (app_id, name)
 );
@@ -124,16 +128,20 @@ Webhook endpoints registered by API consumers. Each endpoint subscribes to speci
 
 ```sql
 CREATE TABLE endpoints (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    app_id          UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
-    url             VARCHAR(2048) NOT NULL,
-    description     VARCHAR(500),
-    status          VARCHAR(20) NOT NULL DEFAULT 'active',  -- active, disabled
-    custom_headers  JSONB DEFAULT '{}',             -- {"Authorization": "Bearer xyz"}
-    secret_override VARCHAR(64),                    -- Override app-level signing secret
-    metadata        JSONB DEFAULT '{}',             -- Arbitrary key-value pairs
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    app_id                  UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    url                     VARCHAR(2048) NOT NULL,
+    description             VARCHAR(500),
+    status                  VARCHAR(20) NOT NULL DEFAULT 'active',  -- active, degraded, failed, disabled
+    custom_headers          JSONB DEFAULT '{}',             -- {"Authorization": "Bearer xyz"}
+    secret_override         VARCHAR(64),                    -- Override app-level signing secret
+    metadata                JSONB DEFAULT '{}',             -- Arbitrary key-value pairs
+    transform_expression    VARCHAR(4096),                  -- JMESPath; v0.1.4
+    transform_enabled       BOOLEAN NOT NULL DEFAULT FALSE, -- v0.1.4
+    transform_validated_at  TIMESTAMPTZ,                    -- v0.1.4
+    allowed_ips_json        TEXT,                           -- JSON array of CIDR strings; v0.1.6
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_endpoints_app_id ON endpoints (app_id);
@@ -162,8 +170,8 @@ Also serves as the **job queue** — the Delivery Worker polls this table.
 ```sql
 CREATE TABLE messages (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    app_id          UUID NOT NULL REFERENCES applications(id),
-    endpoint_id     UUID NOT NULL REFERENCES endpoints(id),
+    app_id          UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,   -- v0.1.6
+    endpoint_id     UUID NOT NULL REFERENCES endpoints(id) ON DELETE CASCADE,      -- v0.1.6
     event_type_id   UUID NOT NULL REFERENCES event_types(id),
     event_id        VARCHAR(64),                    -- Client-provided event identifier
     idempotency_key VARCHAR(128),                   -- Prevents duplicate sends
@@ -176,14 +184,22 @@ CREATE TABLE messages (
     locked_at       TIMESTAMPTZ,                    -- Queue lock timestamp
     locked_by       VARCHAR(64),                    -- Worker instance ID
     delivered_at    TIMESTAMPTZ,                    -- When successfully delivered
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    UNIQUE (app_id, idempotency_key)                -- Idempotency per application
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Queue polling index (critical for performance)
 CREATE INDEX idx_messages_queue ON messages (scheduled_at ASC)
     WHERE status = 'pending';
+
+-- Idempotency: partial unique index serializes concurrent inserts; NULL keys
+-- are excluded so a stripped key (post-retention) doesn't collide.
+CREATE UNIQUE INDEX idx_messages_app_endpoint_idempotency
+    ON messages (app_id, endpoint_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+
+-- Companion non-unique index for the lookup path used by the time-window
+-- pre-check in the controllers.
+CREATE INDEX idx_messages_app_idempotency ON messages (app_id, idempotency_key);
 
 -- Filtering indexes
 CREATE INDEX idx_messages_app_endpoint ON messages (app_id, endpoint_id);
@@ -195,6 +211,8 @@ CREATE INDEX idx_messages_created_at ON messages (app_id, created_at DESC);
 CREATE INDEX idx_messages_stale_locks ON messages (locked_at)
     WHERE status = 'sending' AND locked_at IS NOT NULL;
 ```
+
+> **v0.1.6 cascade FKs:** `Message → Application` and `Message → Endpoint` carry `ON DELETE CASCADE`. Deleting an application or endpoint removes its message history; the audit-log trail (see § 2.9) survives the cascade because `audit_logs` does *not* hold a FK to `applications`.
 
 ### 2.6 message_attempts
 
@@ -243,12 +261,41 @@ Simple authentication for the dashboard UI.
 CREATE TABLE dashboard_users (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email           VARCHAR(255) NOT NULL UNIQUE,
-    password_hash   VARCHAR(255) NOT NULL,          -- BCrypt hash
+    password_hash   VARCHAR(255) NOT NULL,          -- PBKDF2 hash (Argon2 evaluated; PBKDF2 chosen for BCL-only)
     role            VARCHAR(20) NOT NULL DEFAULT 'admin',  -- admin, viewer
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_login_at   TIMESTAMPTZ
 );
 ```
+
+### 2.9 audit_logs (v0.1.6)
+
+Append-only forensic trail of admin actions. The table holds **no foreign keys** — rows survive the cascade when an application or endpoint is deleted, by design, so post-incident reconstruction works even after the parent entity is gone.
+
+```sql
+CREATE TABLE audit_logs (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_user_id     UUID,                           -- dashboard_users.id (no FK; rows survive user delete)
+    actor_email       VARCHAR(320) NOT NULL,
+    application_id    UUID,                           -- snapshot value; no FK
+    entity_type       VARCHAR(64) NOT NULL,           -- "application" | "endpoint" | "event_type" | "message"
+    entity_id         UUID,                           -- subject row id (nullable for non-row actions)
+    action            VARCHAR(64) NOT NULL,           -- "created" | "updated" | "deleted" | "rotated_key" | "replayed" | "retried" | "tested"
+    before_snapshot   JSONB,                          -- pre-mutation row, with messageCount on app delete
+    after_snapshot    JSONB,                          -- post-mutation row (NULL on delete)
+    request_id        VARCHAR(64),                    -- mirror of X-Request-Id for cross-correlation with logs
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_logs_application_created
+    ON audit_logs (application_id, created_at DESC);
+CREATE INDEX idx_audit_logs_entity
+    ON audit_logs (entity_type, entity_id, created_at DESC);
+CREATE INDEX idx_audit_logs_created
+    ON audit_logs (created_at DESC);
+```
+
+The dashboard exposes the table via `GET /api/v1/dashboard/audit` with cursor pagination and filters (`applicationId`, `entityType`, `entityId`, `action`, `from`, `to`). The API never emits `DELETE` against this table.
 
 ---
 
@@ -260,9 +307,10 @@ Messages and attempts accumulate fast. Retention policies:
 
 | Data | Default Retention | Configurable |
 |------|-------------------|-------------|
-| Delivered messages | 30 days | Yes |
-| Failed messages (dead letter) | 90 days | Yes |
-| Message attempts | Same as parent message | Yes |
+| Delivered messages | 30 days | Yes — global + per-app override (v0.1.6) |
+| Failed messages (dead letter) | 90 days | Yes — global + per-app override (v0.1.6) |
+| Message attempts | Same as parent message | Cascades automatically |
+| Audit logs | Indefinite | Append-only; no automatic delete |
 | Archived event types | Indefinite | No |
 
 ### 3.2 Cleanup Job
