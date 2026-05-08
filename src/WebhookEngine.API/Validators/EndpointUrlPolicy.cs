@@ -17,6 +17,11 @@ namespace WebhookEngine.API.Validators;
 /// </summary>
 public sealed class EndpointUrlPolicy
 {
+    // Hard ceiling for the DNS lookup so a misbehaving resolver can't stall
+    // request validation. Three seconds covers every healthy public DNS path
+    // with margin while staying short enough to keep form submission snappy.
+    private static readonly TimeSpan DnsTimeout = TimeSpan.FromSeconds(3);
+
     private readonly bool _allowHttp;
     private readonly bool _allowLoopback;
     private readonly bool _ssrfGuardEnabled;
@@ -66,10 +71,17 @@ public sealed class EndpointUrlPolicy
             return null;
         }
 
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(DnsTimeout);
+
         IPAddress[] addresses;
         try
         {
-            addresses = await Dns.GetHostAddressesAsync(uri.Host, ct);
+            addresses = await Dns.GetHostAddressesAsync(uri.Host, timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            return $"DNS lookup for host '{uri.Host}' timed out after {DnsTimeout.TotalSeconds:0}s.";
         }
         catch (SocketException)
         {

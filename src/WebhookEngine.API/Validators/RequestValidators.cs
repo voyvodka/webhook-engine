@@ -71,7 +71,18 @@ public class CreateEndpointRequestValidator : AbstractValidator<CreateEndpointRe
         RuleFor(x => x.Url)
             .NotEmpty()
             .Must(urlPolicy.IsValid)
-            .WithMessage(urlPolicy.ValidationMessage);
+            .WithMessage(urlPolicy.ValidationMessage)
+            .DependentRules(() =>
+            {
+                // Resolve the host eagerly so an unreachable webhook target fails the
+                // form submission instead of surfacing five minutes later as a delivery
+                // failure. SSRF-classification piggybacks on the same DNS lookup.
+                RuleFor(x => x.Url).CustomAsync(async (url, ctx, ct) =>
+                {
+                    var error = await urlPolicy.CheckHostSafeAsync(url, ct);
+                    if (error is not null) ctx.AddFailure(error);
+                });
+            });
 
         RuleFor(x => x.Description)
             .MaximumLength(500)
@@ -96,7 +107,15 @@ public class UpdateEndpointRequestValidator : AbstractValidator<UpdateEndpointRe
         RuleFor(x => x.Url)
             .Must(urlPolicy.IsValid)
             .When(x => x.Url is not null)
-            .WithMessage(urlPolicy.ValidationMessage);
+            .WithMessage(urlPolicy.ValidationMessage)
+            .DependentRules(() =>
+            {
+                RuleFor(x => x.Url!).CustomAsync(async (url, ctx, ct) =>
+                {
+                    var error = await urlPolicy.CheckHostSafeAsync(url, ct);
+                    if (error is not null) ctx.AddFailure(error);
+                }).When(x => x.Url is not null);
+            });
 
         RuleFor(x => x.Description)
             .MaximumLength(500)
@@ -135,7 +154,15 @@ public class DashboardCreateEndpointRequestValidator : AbstractValidator<Dashboa
         RuleFor(x => x.Url)
             .NotEmpty()
             .Must(urlPolicy.IsValid)
-            .WithMessage(urlPolicy.ValidationMessage);
+            .WithMessage(urlPolicy.ValidationMessage)
+            .DependentRules(() =>
+            {
+                RuleFor(x => x.Url).CustomAsync(async (url, ctx, ct) =>
+                {
+                    var error = await urlPolicy.CheckHostSafeAsync(url, ct);
+                    if (error is not null) ctx.AddFailure(error);
+                });
+            });
 
         RuleFor(x => x.Description)
             .MaximumLength(500)
@@ -160,7 +187,15 @@ public class DashboardUpdateEndpointRequestValidator : AbstractValidator<Dashboa
         RuleFor(x => x.Url)
             .Must(urlPolicy.IsValid)
             .When(x => x.Url is not null)
-            .WithMessage(urlPolicy.ValidationMessage);
+            .WithMessage(urlPolicy.ValidationMessage)
+            .DependentRules(() =>
+            {
+                RuleFor(x => x.Url!).CustomAsync(async (url, ctx, ct) =>
+                {
+                    var error = await urlPolicy.CheckHostSafeAsync(url, ct);
+                    if (error is not null) ctx.AddFailure(error);
+                }).When(x => x.Url is not null);
+            });
 
         RuleFor(x => x.Description)
             .MaximumLength(500)
