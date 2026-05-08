@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getDevTrafficStatus,
   getOverview,
@@ -7,7 +8,6 @@ import {
   startDevTraffic,
   stopDevTraffic,
   type DevTrafficSeedResult,
-  type DevTrafficStatus
 } from "../api/dashboardApi";
 import { DeliveryTimeline } from "../components/DeliveryTimeline";
 import { StatusBadge } from "../components/StatusBadge";
@@ -81,173 +81,83 @@ const accentMap = {
 };
 
 export function DashboardPage() {
-  const [overview, setOverview] = useState<DashboardOverview>(fallbackOverview);
-  const [timeline, setTimeline] = useState<TimelineBucket[]>(fallbackTimeline);
-  const [isLoading, setIsLoading] = useState(true);
-  const [devToolsAvailable, setDevToolsAvailable] = useState(false);
-  const [devStatus, setDevStatus] = useState<DevTrafficStatus | null>(null);
+  const queryClient = useQueryClient();
   const [devSeedResult, setDevSeedResult] = useState<DevTrafficSeedResult | null>(null);
-  const [devActionLoading, setDevActionLoading] = useState(false);
   const { events, connected } = useDeliveryFeed(20);
 
-  const isMountedRef = useRef(true);
-  const realtimeSyncPendingRef = useRef(false);
-  const realtimeSyncInFlightRef = useRef(false);
-  const hasEverConnectedRef = useRef(false);
-  // Floor on how often the SignalR-driven refresh actually fires the
-  // overview/timeline GETs. The hub emits a delivery event for every single
-  // message the worker processes; without a min-interval guard a busy queue
-  // (e.g. dev-traffic seed) burns one fetch per second indefinitely. Three
-  // seconds is the rough cadence a human can perceive, so the dashboard
-  // stays "live" without pummelling the API.
-  const lastRealtimeRefreshAtRef = useRef(0);
-  const REALTIME_MIN_INTERVAL_MS = 3000;
+  const overviewQuery = useQuery({
+    queryKey: ["overview"],
+    queryFn: () => getOverview(),
+    placeholderData: fallbackOverview
+  });
+  const timelineQuery = useQuery({
+    queryKey: ["timeline"],
+    queryFn: () => getTimeline(),
+    placeholderData: fallbackTimeline
+  });
 
-  const refreshDashboardData = useCallback(async (showLoading = false) => {
-    if (showLoading) setIsLoading(true);
-
-    try {
-      const [overviewData, timelineData] = await Promise.all([getOverview(), getTimeline()]);
-      if (!isMountedRef.current) return;
-
-      setOverview(overviewData);
-      setTimeline(timelineData);
-    } catch {
-      if (!isMountedRef.current) return;
-
-      if (showLoading) {
-        setOverview(fallbackOverview);
-        setTimeline(fallbackTimeline);
-      }
-    } finally {
-      if (showLoading && isMountedRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
-
-  const loadDevStatus = useCallback(async () => {
-    try {
-      const status = await getDevTrafficStatus();
-      setDevToolsAvailable(true);
-      setDevStatus(status);
-    } catch {
-      setDevToolsAvailable(false);
-      setDevStatus(null);
-    }
-  }, []);
-
+  // R6's manual debounce rig (1 s / 5 s tick + min-interval ref + pending
+  // / in-flight flags + lastRealtimeRefreshAtRef) is replaced by this
+  // single line: SignalR events invalidate the overview + timeline cache,
+  // staleTime (30 s in App.tsx) coalesces floods, and TanStack handles
+  // dedup + cancellation. Reconnect already invalidates lastHealthChange
+  // separately (DPR-1); here we only need the delivery-event triggered
+  // refresh.
   useEffect(() => {
-    Promise.resolve()
-      .then(() => refreshDashboardData(true))
-      .catch(() => { /* surfaced via fallback state */ });
+    if (events.length === 0 && !connected) return;
+    void Promise.resolve().then(() => {
+      queryClient.invalidateQueries({ queryKey: ["overview"] });
+      queryClient.invalidateQueries({ queryKey: ["timeline"] });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events.length, connected]);
 
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, [refreshDashboardData]);
+  const overview = overviewQuery.data ?? fallbackOverview;
+  const timeline = timelineQuery.data ?? fallbackTimeline;
+  const isLoading = overviewQuery.isLoading || timelineQuery.isLoading;
 
-  useEffect(() => {
-    Promise.resolve()
-      .then(() => loadDevStatus())
-      .catch(() => { /* dev tools optional, errors swallowed */ });
-  }, [loadDevStatus]);
+  // Dev tools availability is implied by the status query succeeding; a
+  // refetchInterval drives the adaptive 3 s / 30 s cadence based on the
+  // last-known running flag. retry: false so an unauthenticated /not-mounted
+  // dev endpoint falls cleanly into devToolsAvailable=false instead of
+  // hammering the API.
+  const devStatusQuery = useQuery({
+    queryKey: ["dev-status"],
+    queryFn: () => getDevTrafficStatus(),
+    retry: false,
+    refetchInterval: (query) => (query.state.data?.running ? 3000 : 30_000)
+  });
+  const devToolsAvailable = !devStatusQuery.isError && devStatusQuery.data !== undefined;
+  const devStatus = devStatusQuery.data ?? null;
 
-  useEffect(() => {
-    if (!devToolsAvailable) return;
-
-    // Adaptive cadence: while a dev-traffic flow is actually running the
-    // status block is interesting enough to poll quickly (3 s), but once the
-    // generator is idle the same poll is just network noise — drop it to 30 s
-    // so a long-running idle dashboard doesn't churn the dev-status endpoint.
-    const isRunning = devStatus?.running === true;
-    const interval = isRunning ? 3000 : 30_000;
-
-    const timer = window.setInterval(() => {
-      void loadDevStatus();
-    }, interval);
-
-    return () => window.clearInterval(timer);
-  }, [devToolsAvailable, loadDevStatus, devStatus?.running]);
-
-  useEffect(() => {
-    const latestEvent = events[0];
-    if (!latestEvent) return;
-
-    realtimeSyncPendingRef.current = true;
-  }, [events]);
-
-  useEffect(() => {
-    if (!connected) return;
-
-    if (!hasEverConnectedRef.current) {
-      hasEverConnectedRef.current = true;
-      return;
-    }
-
-    realtimeSyncPendingRef.current = true;
-  }, [connected]);
-
-  useEffect(() => {
-    // Tick at 5 s instead of 1 s and guard with a 3 s min-interval since the
-    // last completed refresh, so a flood of SignalR delivery events (e.g.
-    // dev-traffic seed) coalesces into at most one overview/timeline fetch
-    // every few seconds rather than one per second. This is a tactical fix
-    // ahead of F12; once TanStack Query is wired in, the queryClient's own
-    // staleTime + invalidateQueries replaces this manual debounce entirely.
-    const timer = window.setInterval(() => {
-      if (!realtimeSyncPendingRef.current || realtimeSyncInFlightRef.current) {
-        return;
-      }
-
-      const now = Date.now();
-      if (now - lastRealtimeRefreshAtRef.current < REALTIME_MIN_INTERVAL_MS) {
-        return;
-      }
-
-      realtimeSyncPendingRef.current = false;
-      realtimeSyncInFlightRef.current = true;
-
-      void refreshDashboardData(false).finally(() => {
-        realtimeSyncInFlightRef.current = false;
-        lastRealtimeRefreshAtRef.current = Date.now();
-      });
-    }, 5000);
-
-    return () => window.clearInterval(timer);
-  }, [refreshDashboardData]);
-
-  const handleSeedOnce = async () => {
-    setDevActionLoading(true);
-    try {
-      const result = await seedDevTraffic({ messages: 1 });
+  const seedMutation = useMutation({
+    mutationFn: () => seedDevTraffic({ messages: 1 }),
+    onSuccess: (result) => {
       setDevSeedResult(result);
-      await Promise.all([loadDevStatus(), refreshDashboardData(false)]);
-    } finally {
-      setDevActionLoading(false);
+      queryClient.invalidateQueries({ queryKey: ["dev-status"] });
+      queryClient.invalidateQueries({ queryKey: ["overview"] });
+      queryClient.invalidateQueries({ queryKey: ["timeline"] });
     }
-  };
-
-  const handleStartFlow = async () => {
-    setDevActionLoading(true);
-    try {
-      const status = await startDevTraffic({ intervalMs: 1200, messagesPerTick: 6 });
-      setDevStatus(status);
+  });
+  const startMutation = useMutation({
+    mutationFn: () => startDevTraffic({ intervalMs: 1200, messagesPerTick: 6 }),
+    onSuccess: (status) => {
+      queryClient.setQueryData(["dev-status"], status);
       setDevSeedResult(null);
-    } finally {
-      setDevActionLoading(false);
     }
-  };
+  });
+  const stopMutation = useMutation({
+    mutationFn: () => stopDevTraffic(),
+    onSuccess: (status) => {
+      queryClient.setQueryData(["dev-status"], status);
+    }
+  });
 
-  const handleStopFlow = async () => {
-    setDevActionLoading(true);
-    try {
-      const status = await stopDevTraffic();
-      setDevStatus(status);
-    } finally {
-      setDevActionLoading(false);
-    }
-  };
+  const devActionLoading = seedMutation.isPending || startMutation.isPending || stopMutation.isPending;
+
+  const handleSeedOnce = () => seedMutation.mutate();
+  const handleStartFlow = () => startMutation.mutate();
+  const handleStopFlow = () => stopMutation.mutate();
 
   const cards = useMemo<StatCard[]>(
     () => [
