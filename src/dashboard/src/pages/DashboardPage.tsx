@@ -93,6 +93,14 @@ export function DashboardPage() {
   const realtimeSyncPendingRef = useRef(false);
   const realtimeSyncInFlightRef = useRef(false);
   const hasEverConnectedRef = useRef(false);
+  // Floor on how often the SignalR-driven refresh actually fires the
+  // overview/timeline GETs. The hub emits a delivery event for every single
+  // message the worker processes; without a min-interval guard a busy queue
+  // (e.g. dev-traffic seed) burns one fetch per second indefinitely. Three
+  // seconds is the rough cadence a human can perceive, so the dashboard
+  // stays "live" without pummelling the API.
+  const lastRealtimeRefreshAtRef = useRef(0);
+  const REALTIME_MIN_INTERVAL_MS = 3000;
 
   const refreshDashboardData = useCallback(async (showLoading = false) => {
     if (showLoading) setIsLoading(true);
@@ -147,12 +155,19 @@ export function DashboardPage() {
   useEffect(() => {
     if (!devToolsAvailable) return;
 
+    // Adaptive cadence: while a dev-traffic flow is actually running the
+    // status block is interesting enough to poll quickly (3 s), but once the
+    // generator is idle the same poll is just network noise — drop it to 30 s
+    // so a long-running idle dashboard doesn't churn the dev-status endpoint.
+    const isRunning = devStatus?.running === true;
+    const interval = isRunning ? 3000 : 30_000;
+
     const timer = window.setInterval(() => {
       void loadDevStatus();
-    }, 3000);
+    }, interval);
 
     return () => window.clearInterval(timer);
-  }, [devToolsAvailable, loadDevStatus]);
+  }, [devToolsAvailable, loadDevStatus, devStatus?.running]);
 
   useEffect(() => {
     const latestEvent = events[0];
@@ -173,8 +188,19 @@ export function DashboardPage() {
   }, [connected]);
 
   useEffect(() => {
+    // Tick at 5 s instead of 1 s and guard with a 3 s min-interval since the
+    // last completed refresh, so a flood of SignalR delivery events (e.g.
+    // dev-traffic seed) coalesces into at most one overview/timeline fetch
+    // every few seconds rather than one per second. This is a tactical fix
+    // ahead of F12; once TanStack Query is wired in, the queryClient's own
+    // staleTime + invalidateQueries replaces this manual debounce entirely.
     const timer = window.setInterval(() => {
       if (!realtimeSyncPendingRef.current || realtimeSyncInFlightRef.current) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastRealtimeRefreshAtRef.current < REALTIME_MIN_INTERVAL_MS) {
         return;
       }
 
@@ -183,8 +209,9 @@ export function DashboardPage() {
 
       void refreshDashboardData(false).finally(() => {
         realtimeSyncInFlightRef.current = false;
+        lastRealtimeRefreshAtRef.current = Date.now();
       });
-    }, 1000);
+    }, 5000);
 
     return () => window.clearInterval(timer);
   }, [refreshDashboardData]);
