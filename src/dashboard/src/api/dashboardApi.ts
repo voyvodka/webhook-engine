@@ -165,9 +165,18 @@ export async function createApplication(name: string): Promise<ApplicationCreate
   return payload.data;
 }
 
+export interface ApplicationUpdate {
+  name?: string;
+  isActive?: boolean;
+  idempotencyWindowMinutes?: number;
+  // 0 clears the per-app override (falls back to global RetentionOptions).
+  retentionDeliveredDays?: number;
+  retentionDeadLetterDays?: number;
+}
+
 export async function updateApplication(
   id: string,
-  updates: { name?: string; isActive?: boolean }
+  updates: ApplicationUpdate
 ): Promise<ApplicationRow> {
   const payload = await mutate<ApiEnvelope<ApplicationRow>>(
     `/api/v1/applications/${id}`,

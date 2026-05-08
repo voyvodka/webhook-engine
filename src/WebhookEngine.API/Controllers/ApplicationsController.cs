@@ -107,6 +107,9 @@ public class ApplicationsController : ControllerBase
             name = application.Name,
             apiKeyPrefix = application.ApiKeyPrefix,
             isActive = application.IsActive,
+            idempotencyWindowMinutes = application.IdempotencyWindowMinutes,
+            retentionDeliveredDays = application.RetentionDeliveredDays,
+            retentionDeadLetterDays = application.RetentionDeadLetterDays,
             createdAt = application.CreatedAt,
             updatedAt = application.UpdatedAt
         }));
@@ -123,6 +126,16 @@ public class ApplicationsController : ControllerBase
         application.IsActive = request.IsActive ?? application.IsActive;
         application.IdempotencyWindowMinutes = request.IdempotencyWindowMinutes ?? application.IdempotencyWindowMinutes;
 
+        // 0 = clear the override (fall back to global). > 0 = override. null = leave unchanged.
+        if (request.RetentionDeliveredDays is int delivered)
+        {
+            application.RetentionDeliveredDays = delivered == 0 ? null : delivered;
+        }
+        if (request.RetentionDeadLetterDays is int deadLetter)
+        {
+            application.RetentionDeadLetterDays = deadLetter == 0 ? null : deadLetter;
+        }
+
         await _appRepo.UpdateAsync(application, ct);
         InvalidateAuthCache(application.ApiKeyPrefix);
 
@@ -133,6 +146,8 @@ public class ApplicationsController : ControllerBase
             apiKeyPrefix = application.ApiKeyPrefix,
             isActive = application.IsActive,
             idempotencyWindowMinutes = application.IdempotencyWindowMinutes,
+            retentionDeliveredDays = application.RetentionDeliveredDays,
+            retentionDeadLetterDays = application.RetentionDeadLetterDays,
             createdAt = application.CreatedAt,
             updatedAt = application.UpdatedAt
         }));
@@ -206,4 +221,9 @@ public class UpdateApplicationRequest
     public string? Name { get; set; }
     public bool? IsActive { get; set; }
     public int? IdempotencyWindowMinutes { get; set; }
+
+    // Send 0 to clear an override and fall back to the global RetentionOptions.
+    // Send a positive integer to override per-app. Send null to leave unchanged.
+    public int? RetentionDeliveredDays { get; set; }
+    public int? RetentionDeadLetterDays { get; set; }
 }

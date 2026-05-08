@@ -46,6 +46,10 @@ export interface ApplicationRow {
   name: string;
   apiKeyPrefix: string;
   isActive: boolean;
+  idempotencyWindowMinutes?: number;
+  // null/undefined = falling back to global RetentionOptions.
+  retentionDeliveredDays?: number | null;
+  retentionDeadLetterDays?: number | null;
   createdAt: string;
   updatedAt: string;
 }

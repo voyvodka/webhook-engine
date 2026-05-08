@@ -40,31 +40,13 @@ public class RetentionCleanupWorker : BackgroundService
                 using var scope = _serviceProvider.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<WebhookDbContext>();
 
-                var now = DateTime.UtcNow;
-                var deliveredCutoff = now.AddDays(-_options.DeliveredRetentionDays);
-                var deadLetterCutoff = now.AddDays(-_options.DeadLetterRetentionDays);
-
-                var deletedDelivered = await DeleteInBatchesAsync(
-                    dbContext,
-                    MessageStatus.Delivered,
-                    deliveredCutoff,
-                    stoppingToken);
-
-                var deletedDeadLetter = await DeleteInBatchesAsync(
-                    dbContext,
-                    MessageStatus.DeadLetter,
-                    deadLetterCutoff,
-                    stoppingToken);
-
-                var nulledIdempotencyKeys = await NullifyExpiredIdempotencyKeysAsync(
-                    dbContext,
-                    stoppingToken);
+                var result = await RunCleanupAsync(dbContext, DateTime.UtcNow, stoppingToken);
 
                 _logger.LogInformation(
                     "Retention cleanup completed. DeletedDelivered: {DeletedDelivered}, DeletedDeadLetter: {DeletedDeadLetter}, NulledIdempotencyKeys: {NulledIdempotencyKeys}",
-                    deletedDelivered,
-                    deletedDeadLetter,
-                    nulledIdempotencyKeys);
+                    result.DeletedDelivered,
+                    result.DeletedDeadLetter,
+                    result.NulledIdempotencyKeys);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -80,8 +62,56 @@ public class RetentionCleanupWorker : BackgroundService
         _logger.LogInformation("RetentionCleanupWorker stopped");
     }
 
+    /// <summary>
+    /// Runs one cleanup pass over all applications. Exposed as <c>public</c>
+    /// so integration tests can drive it deterministically with a fixed
+    /// <paramref name="nowUtc"/> instead of waiting for the daily 03:00 schedule.
+    /// In production it is only invoked from <see cref="ExecuteAsync"/>.
+    /// </summary>
+    public async Task<RetentionCleanupResult> RunCleanupAsync(
+        WebhookDbContext dbContext,
+        DateTime nowUtc,
+        CancellationToken ct)
+    {
+        var apps = await dbContext.Applications
+            .AsNoTracking()
+            .Select(a => new AppRetentionConfig(a.Id, a.RetentionDeliveredDays, a.RetentionDeadLetterDays, a.IdempotencyWindowMinutes))
+            .ToListAsync(ct);
+
+        var deletedDelivered = 0;
+        var deletedDeadLetter = 0;
+
+        foreach (var app in apps)
+        {
+            if (ct.IsCancellationRequested) break;
+
+            // Per-app override or fall back to the deployment-level RetentionOptions.
+            var deliveredDays = app.DeliveredDays ?? _options.DeliveredRetentionDays;
+            var deadLetterDays = app.DeadLetterDays ?? _options.DeadLetterRetentionDays;
+
+            deletedDelivered += await DeleteInBatchesAsync(
+                dbContext,
+                app.Id,
+                MessageStatus.Delivered,
+                nowUtc.AddDays(-deliveredDays),
+                ct);
+
+            deletedDeadLetter += await DeleteInBatchesAsync(
+                dbContext,
+                app.Id,
+                MessageStatus.DeadLetter,
+                nowUtc.AddDays(-deadLetterDays),
+                ct);
+        }
+
+        var nulledIdempotencyKeys = await NullifyExpiredIdempotencyKeysAsync(dbContext, apps, nowUtc, ct);
+
+        return new RetentionCleanupResult(deletedDelivered, deletedDeadLetter, nulledIdempotencyKeys);
+    }
+
     private static async Task<int> DeleteInBatchesAsync(
         WebhookDbContext dbContext,
+        Guid appId,
         MessageStatus status,
         DateTime cutoff,
         CancellationToken ct)
@@ -91,7 +121,7 @@ public class RetentionCleanupWorker : BackgroundService
         while (!ct.IsCancellationRequested)
         {
             var deleted = await dbContext.Messages
-                .Where(m => m.Status == status && m.CreatedAt < cutoff)
+                .Where(m => m.AppId == appId && m.Status == status && m.CreatedAt < cutoff)
                 .OrderBy(m => m.CreatedAt)
                 .Take(BatchSize)
                 .ExecuteDeleteAsync(ct);
@@ -107,6 +137,8 @@ public class RetentionCleanupWorker : BackgroundService
         return totalDeleted;
     }
 
+    private sealed record AppRetentionConfig(Guid Id, int? DeliveredDays, int? DeadLetterDays, int IdempotencyWindowMinutes);
+
     // Window-expired rows lose their idempotency_key so the same key can be
     // re-used in a fresh window without violating the unique partial index
     // on (app_id, endpoint_id, idempotency_key) WHERE idempotency_key IS NOT NULL.
@@ -114,15 +146,11 @@ public class RetentionCleanupWorker : BackgroundService
     // per-app window (default 24h) and the row itself is preserved.
     private static async Task<int> NullifyExpiredIdempotencyKeysAsync(
         WebhookDbContext dbContext,
+        IReadOnlyList<AppRetentionConfig> apps,
+        DateTime nowUtc,
         CancellationToken ct)
     {
-        var apps = await dbContext.Applications
-            .AsNoTracking()
-            .Select(a => new { a.Id, a.IdempotencyWindowMinutes })
-            .ToListAsync(ct);
-
         var totalNulled = 0;
-        var nowUtc = DateTime.UtcNow;
 
         foreach (var app in apps)
         {
@@ -169,3 +197,12 @@ public class RetentionCleanupWorker : BackgroundService
         return nextRun - nowUtc;
     }
 }
+
+/// <summary>
+/// Per-pass tally of what the retention sweep removed. Returned by
+/// <see cref="RetentionCleanupWorker.RunCleanupAsync"/> for tests and logs.
+/// </summary>
+public sealed record RetentionCleanupResult(
+    int DeletedDelivered,
+    int DeletedDeadLetter,
+    int NulledIdempotencyKeys);

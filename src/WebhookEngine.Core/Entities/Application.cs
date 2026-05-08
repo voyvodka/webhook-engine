@@ -10,6 +10,12 @@ public class Application
     public string RetryPolicyJson { get; set; } = """{"maxRetries":7,"backoffSchedule":[5,30,120,900,3600,21600,86400]}""";
     public bool IsActive { get; set; } = true;
     public int IdempotencyWindowMinutes { get; set; } = 1440;
+
+    // Per-app retention overrides. Null = fall back to global RetentionOptions
+    // (DeliveredRetentionDays = 30, DeadLetterRetentionDays = 90 by default).
+    public int? RetentionDeliveredDays { get; set; }
+    public int? RetentionDeadLetterDays { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

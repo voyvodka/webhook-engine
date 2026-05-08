@@ -26,8 +26,22 @@ public class UpdateApplicationRequestValidator : AbstractValidator<UpdateApplica
             .InclusiveBetween(1, 10080)
             .When(x => x.IdempotencyWindowMinutes.HasValue);
 
+        // 0 is allowed and means "clear the override / fall back to global RetentionOptions";
+        // 1..365 sets a per-app override. Any other value is rejected.
+        RuleFor(x => x.RetentionDeliveredDays)
+            .InclusiveBetween(0, 365)
+            .When(x => x.RetentionDeliveredDays.HasValue);
+
+        RuleFor(x => x.RetentionDeadLetterDays)
+            .InclusiveBetween(0, 365)
+            .When(x => x.RetentionDeadLetterDays.HasValue);
+
         RuleFor(x => x)
-            .Must(x => x.Name is not null || x.IsActive.HasValue || x.IdempotencyWindowMinutes.HasValue)
+            .Must(x => x.Name is not null
+                || x.IsActive.HasValue
+                || x.IdempotencyWindowMinutes.HasValue
+                || x.RetentionDeliveredDays.HasValue
+                || x.RetentionDeadLetterDays.HasValue)
             .WithMessage("At least one field must be provided.");
     }
 }

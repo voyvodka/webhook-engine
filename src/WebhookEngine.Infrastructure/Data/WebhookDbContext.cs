@@ -39,6 +39,10 @@ public class WebhookDbContext : DbContext
             entity.Property(e => e.IdempotencyWindowMinutes)
                 .HasColumnName("idempotency_window_minutes")
                 .HasDefaultValue(1440);
+            entity.Property(e => e.RetentionDeliveredDays)
+                .HasColumnName("retention_delivered_days");
+            entity.Property(e => e.RetentionDeadLetterDays)
+                .HasColumnName("retention_dead_letter_days");
 
             entity.HasIndex(e => e.ApiKeyPrefix).IsUnique();
         });
