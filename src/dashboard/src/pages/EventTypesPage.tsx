@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Modal } from "../components/Modal";
 import { Select } from "../components/Select";
@@ -9,7 +10,7 @@ import {
   listDashboardEventTypes,
   updateDashboardEventType
 } from "../api/dashboardApi";
-import type { ApplicationRow, EventTypeSummary } from "../types";
+import type { EventTypeSummary } from "../types";
 import {
   Plus,
   Pencil,
@@ -41,22 +42,57 @@ const closedConfirm: ConfirmState = {
 };
 
 export function EventTypesPage() {
-  const [applications, setApplications] = useState<ApplicationRow[]>([]);
+  const queryClient = useQueryClient();
   const [selectedAppId, setSelectedAppId] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
-  const [eventTypes, setEventTypes] = useState<EventTypeSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Mutation errors live in a local string state; the two queries below
+  // surface their own loading/error already, so we don't double-track.
   const [error, setError] = useState("");
+
+  const applicationsQuery = useQuery({
+    queryKey: ["applications"],
+    queryFn: () => listApplications(1, 200)
+  });
+  // Memoise so dependent useEffect / useMemo hooks don't re-fire on every
+  // render just because the fallback `[]` would otherwise be a fresh array.
+  const applications = useMemo(() => applicationsQuery.data?.data ?? [], [applicationsQuery.data]);
+
+  // Default to the first available application on first land. Microtask defer
+  // matches the codebase's existing pattern for set-state-in-effect.
+  useEffect(() => {
+    if (applications.length === 0) return;
+    void Promise.resolve().then(() => {
+      setSelectedAppId((current) => current || applications[0].id);
+    });
+  }, [applications]);
+
+  const eventTypesQuery = useQuery({
+    queryKey: ["eventTypes", selectedAppId, includeArchived],
+    queryFn: () => listDashboardEventTypes(selectedAppId, includeArchived),
+    enabled: !!selectedAppId
+  });
+  const eventTypes = useMemo(() => eventTypesQuery.data ?? [], [eventTypesQuery.data]);
+  const loading = eventTypesQuery.isLoading && !!selectedAppId;
+
+  const fetchError =
+    (applicationsQuery.error instanceof Error && applicationsQuery.error.message) ||
+    (eventTypesQuery.error instanceof Error && eventTypesQuery.error.message) ||
+    "";
+  const displayError = error || fetchError;
+
+  // Invalidate the eventTypes cache whenever any mutation succeeds; staleTime
+  // (30 s in App.tsx) governs background refresh, but post-mutation we want
+  // an immediate refetch so the table reflects the change.
+  const invalidateEventTypes = () =>
+    queryClient.invalidateQueries({ queryKey: ["eventTypes", selectedAppId, includeArchived] });
 
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
-  const [creating, setCreating] = useState(false);
 
   const [editingEventTypeId, setEditingEventTypeId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
-  const [updating, setUpdating] = useState(false);
 
   const [confirm, setConfirm] = useState<ConfirmState>(closedConfirm);
 
@@ -70,46 +106,28 @@ export function EventTypesPage() {
     [editingEventTypeId, eventTypes]
   );
 
-  const fetchEventTypes = useCallback(async () => {
-    if (!selectedAppId) {
-      setEventTypes([]);
-      setLoading(false);
-      return;
-    }
+  const createMutation = useMutation({
+    mutationFn: (vars: { appId: string; name: string; description?: string }) =>
+      createDashboardEventType({ appId: vars.appId, name: vars.name, description: vars.description }),
+    onSuccess: () => invalidateEventTypes(),
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Failed to create event type")
+  });
 
-    setLoading(true);
-    setError("");
-    try {
-      const rows = await listDashboardEventTypes(selectedAppId, includeArchived);
-      setEventTypes(rows);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load event types");
-    } finally {
-      setLoading(false);
-    }
-  }, [includeArchived, selectedAppId]);
+  const updateMutation = useMutation({
+    mutationFn: (vars: { id: string; name: string; description?: string }) =>
+      updateDashboardEventType(vars.id, { name: vars.name, description: vars.description }),
+    onSuccess: () => invalidateEventTypes(),
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Failed to update event type")
+  });
 
-  useEffect(() => {
-    const fetchApplications = async () => {
-      try {
-        const result = await listApplications(1, 200);
-        setApplications(result.data);
-        if (result.data.length > 0) {
-          setSelectedAppId((current) => current || result.data[0].id);
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load applications");
-      }
-    };
+  const archiveMutation = useMutation({
+    mutationFn: (id: string) => archiveDashboardEventType(id),
+    onSuccess: () => invalidateEventTypes(),
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Failed to archive event type")
+  });
 
-    fetchApplications();
-  }, []);
-
-  useEffect(() => {
-    Promise.resolve()
-      .then(() => fetchEventTypes())
-      .catch(() => { /* surfaced via fetchEventTypes' setError */ });
-  }, [fetchEventTypes]);
+  const creating = createMutation.isPending;
+  const updating = updateMutation.isPending;
 
   const resetCreateForm = () => {
     setCreateName("");
@@ -123,26 +141,19 @@ export function EventTypesPage() {
   };
 
   const handleCreate = async () => {
-    if (!selectedAppId || !createName.trim()) {
-      return;
-    }
+    if (!selectedAppId || !createName.trim()) return;
 
-    setCreating(true);
     setError("");
     try {
-      await createDashboardEventType({
+      await createMutation.mutateAsync({
         appId: selectedAppId,
         name: createName.trim(),
         description: createDescription.trim() || undefined
       });
-
       setShowCreate(false);
       resetCreateForm();
-      await fetchEventTypes();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create event type");
-    } finally {
-      setCreating(false);
+    } catch {
+      // Already surfaced via createMutation.onError → setError.
     }
   };
 
@@ -153,24 +164,18 @@ export function EventTypesPage() {
   };
 
   const handleUpdate = async () => {
-    if (!editingEventType || !editName.trim()) {
-      return;
-    }
+    if (!editingEventType || !editName.trim()) return;
 
-    setUpdating(true);
     setError("");
     try {
-      await updateDashboardEventType(editingEventType.id, {
+      await updateMutation.mutateAsync({
+        id: editingEventType.id,
         name: editName.trim(),
         description: editDescription.trim() || undefined
       });
-
       cancelEdit();
-      await fetchEventTypes();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update event type");
-    } finally {
-      setUpdating(false);
+    } catch {
+      // Already surfaced via updateMutation.onError → setError.
     }
   };
 
@@ -181,13 +186,8 @@ export function EventTypesPage() {
       description: `Archive "${eventType.name}"? Existing messages stay intact, but this type cannot be used for new sends.`,
       confirmLabel: "Archive",
       variant: "danger",
-      onConfirm: async () => {
-        try {
-          await archiveDashboardEventType(eventType.id);
-          await fetchEventTypes();
-        } catch (e) {
-          setError(e instanceof Error ? e.message : "Failed to archive event type");
-        }
+      onConfirm: () => {
+        archiveMutation.mutate(eventType.id);
       }
     });
   };
@@ -209,10 +209,10 @@ export function EventTypesPage() {
         </button>
       </div>
 
-      {error && (
+      {displayError && (
         <div className="flex items-center gap-2 text-danger text-xs bg-danger-soft border border-danger/20 rounded-lg px-3 py-2 animate-fade-in-up">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          {error}
+          {displayError}
           <button onClick={() => setError("")} className="ml-auto text-danger/60 hover:text-danger">
             <X className="w-3 h-3" />
           </button>
