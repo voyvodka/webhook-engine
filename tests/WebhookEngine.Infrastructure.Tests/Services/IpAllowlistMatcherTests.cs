@@ -67,6 +67,17 @@ public class IpAllowlistMatcherTests
     }
 
     [Fact]
+    public void AllAddressesAllowed_Returns_True_When_Both_Allowlist_And_Resolution_Are_Empty()
+    {
+        // Empty allowlist short-circuits BEFORE the empty-resolution branch,
+        // so the "allowlist not configured" semantics survive even when the
+        // caller passes an empty resolved set. Today no production path lands
+        // here (DeliveryWorker skips the matcher entirely when the allowlist
+        // is empty), but the contract guard keeps a future caller honest.
+        IpAllowlistMatcher.AllAddressesAllowed([], []).Should().BeTrue();
+    }
+
+    [Fact]
     public void AllAddressesAllowed_Returns_False_When_Resolution_Is_Empty_With_NonEmpty_List()
     {
         var allowed = IpAllowlistMatcher.Parse("""["203.0.113.0/24"]""");
