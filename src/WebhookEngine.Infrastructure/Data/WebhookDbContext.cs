@@ -46,6 +46,12 @@ public class WebhookDbContext : DbContext
                 .HasColumnName("retention_dead_letter_days");
             entity.Property(e => e.RateLimitPerSecond)
                 .HasColumnName("rate_limit_per_second");
+            entity.Property(e => e.PortalSigningKey)
+                .HasColumnName("portal_signing_key")
+                .HasMaxLength(64);
+            entity.Property(e => e.AllowedPortalOriginsJson)
+                .HasColumnName("allowed_portal_origins")
+                .HasColumnType("jsonb");
 
             entity.HasIndex(e => e.ApiKeyPrefix).IsUnique();
         });

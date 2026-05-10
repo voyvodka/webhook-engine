@@ -40,4 +40,29 @@ public class ApplicationEntityTests
         // Default: [5,30,120,900,3600,21600,86400]
         app.RetryPolicyJson.Should().Contain("[5,30,120,900,3600,21600,86400]");
     }
+
+    [Fact]
+    public void New_Application_Defaults_Both_Portal_Fields_To_Null()
+    {
+        var app = new Application();
+
+        // Portal access is opt-in; a freshly-created application has no
+        // signing key and no allowed origins, which is the "portal disabled"
+        // state the API auth path will check for.
+        app.PortalSigningKey.Should().BeNull();
+        app.AllowedPortalOriginsJson.Should().BeNull();
+    }
+
+    [Fact]
+    public void Application_Can_Set_And_Read_PortalSigningKey_And_AllowedPortalOriginsJson()
+    {
+        var app = new Application
+        {
+            PortalSigningKey = "base64-encoded-32-byte-secret",
+            AllowedPortalOriginsJson = """["https://app.acme.com","https://staging.acme.com"]"""
+        };
+
+        app.PortalSigningKey.Should().Be("base64-encoded-32-byte-secret");
+        app.AllowedPortalOriginsJson.Should().Be("""["https://app.acme.com","https://staging.acme.com"]""");
+    }
 }
