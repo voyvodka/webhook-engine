@@ -1,0 +1,58 @@
+name: Sync bun.lock for Dependabot
+
+# Dependabot only knows about npm — when it bumps a package in
+# src/dashboard/package.json it does NOT regenerate src/dashboard/bun.lock,
+# and CI's `bun install --frozen-lockfile` then fails with a lockfile drift.
+# This workflow auto-runs `bun install` on Dependabot PRs that touch the
+# dashboard's package.json and commits the refreshed lockfile back to the
+# PR branch so CI can go green without a manual sync commit.
+#
+# Trigger is `pull_request_target` so the workflow runs with write access
+# to the base repo (needed to push the lockfile back); we still gate on
+# `github.actor == 'dependabot[bot]'` so an external contributor cannot
+# repurpose this surface to push arbitrary commits.
+
+on:
+  pull_request_target:
+    paths:
+      - "src/dashboard/package.json"
+
+permissions:
+  contents: write
+
+env:
+  BUN_VERSION: "1.2.x"
+
+jobs:
+  sync-lockfile:
+    name: Sync bun.lock
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Regenerate lockfile
+        working-directory: src/dashboard
+        run: bun install --no-save
+
+      - name: Commit and push if lockfile changed
+        working-directory: src/dashboard
+        run: |
+          if git diff --quiet bun.lock; then
+            echo "::notice::bun.lock is already in sync with package.json"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bun.lock
+          git commit -m "chore(deps): sync bun.lock with package.json"
+          git push
