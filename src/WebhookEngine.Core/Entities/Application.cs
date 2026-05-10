@@ -23,6 +23,23 @@ public class Application
     /// </summary>
     public int? RateLimitPerSecond { get; set; }
 
+    /// <summary>
+    /// HMAC-SHA256 secret used to verify short-lived portal JWTs that the host
+    /// SaaS mints for its end-users. Null = the embeddable customer portal is
+    /// disabled for this application. Treat as a secret: never returned through
+    /// list/read APIs, never written to the audit log; only the dedicated
+    /// rotation endpoint exposes the raw value, and only at generation time.
+    /// </summary>
+    public string? PortalSigningKey { get; set; }
+
+    /// <summary>
+    /// JSON-serialized array of allowed CORS origins for portal endpoints
+    /// (e.g. <c>["https://app.acme.com"]</c>). Wildcards are intentionally not
+    /// supported — the host SaaS must enumerate exact origins. Null = portal
+    /// CORS is unconfigured (effectively no allowed origins).
+    /// </summary>
+    public string? AllowedPortalOriginsJson { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
