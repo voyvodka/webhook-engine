@@ -7,6 +7,33 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-10
+
+The first minor release. Adds an embeddable customer-facing portal: SaaS operators can now hand customers a self-service `<EndpointManager />` React component that runs against a narrowed `/api/v1/portal/*` API surface, scoped per-application via short-lived HS256 JWTs minted by the host SaaS backend. The engine never mints these tokens — it only verifies them — and the per-app signing key is generated, rotated, and revoked from the operator dashboard. No breaking changes to the existing v1 surface; the `v1` route prefix and Standard Webhooks signature header names are preserved.
+
+### Added
+- **Embeddable customer portal — engine half** (B1 Steps 2-4). New `Application.PortalSigningKey` (HS256 secret, 64-char varchar) and `Application.AllowedPortalOriginsJson` (JSONB) columns; new `PortalTokenAuthMiddleware` validates short-lived HS256 JWTs (algorithm-pinned, 15-minute lifetime cap, capability-scoped via `endpoints:read|write|test` and `attempts:read`); new `PortalCorsMiddleware` does per-application dynamic CORS with RFC 6454-compliant ordinal-case-insensitive origin matching; new `/api/v1/portal/*` route group exposes a narrowed CRUD-and-test surface that silently strips admin-only fields (`transformExpression`, `allowedIpsJson`) on writes and never returns the signing key.
+- **Embeddable customer portal — operator dashboard** (B1 Step 5). New `DashboardPortalController` (`/api/v1/dashboard/applications/{appId}/portal/...`) with 5 cookie-authed actions (read, enable, rotate, disable, update-origins). New `<PortalAccessModal />` React component opened from the Applications page row actions: enable/rotate/disable controls with show-once secret reveal, chip-list editor for allowed CORS origins, copy-paste embed snippet for the host SaaS. Audit log records every mutating action with `PortalSigningKey` redacted to a `portalEnabled` boolean — the literal secret never enters the snapshot. Cache invalidation via `PortalLookupCache.InvalidateApplication(appId)` after every mutating write so rotations take effect within milliseconds rather than within the 60-second cache TTL.
+- **`Application.PortalRotatedAt`** column for surfacing "last rotated at" in the dashboard.
+- **`MessageRepository.ListAttemptsByEndpointAsync` / `CountAttemptsByEndpointAsync`** for the portal's per-endpoint attempt history feed; uses the existing `idx_attempts_endpoint_status` index, no new migration.
+- **Bun workspaces** (B1 Step 1). Root `package.json` declares `["src/dashboard", "packages/*"]` so the upcoming `@webhookengine/endpoint-manager` package can land at `packages/endpoint-manager/` without a second migration. Single `bun.lock` at the workspace root; Dockerfile and CI workflow updated. No source changes.
+
+### Changed
+- **`AuditLogsController` no longer bypasses the repository pattern.** New `AuditLogRepository.ListAsync(...)` carries the filter chain and pagination; the controller keeps the JSON hydration since that is HTTP response-shaping, not persistence. Behavior unchanged.
+- **`tailwindcss` and `@tailwindcss/vite` 4.2.4 → 4.3.0**, with the transitive `@tailwindcss/node` and `@tailwindcss/oxide` platform binaries.
+- **Dependabot npm PRs auto-sync `bun.lock`** via a new `pull_request_target`-triggered workflow gated on `github.actor == 'dependabot[bot]'`. Eliminates the manual `bun install + commit + push` that every minor / patch frontend bump previously required.
+- **Documentation drift sync.** `CLAUDE.md` and `README.md` stack lines updated to match `src/dashboard/package.json` (TypeScript 6 / Vite 8 / TanStack Query 5; previous wording said TypeScript 5.9 / Vite 7). ADR-003 (payload transformation) flipped from Proposed to Accepted with an Implementation section recording the three-phase rollout that shipped in v0.1.4.
+
+### Security
+- **HS256-only algorithm allowlist** on portal JWTs. `ValidAlgorithms = [HmacSha256]` is enforced via `Microsoft.IdentityModel.Tokens` 8.17.0; `alg=none` and `alg=HS384`/`HS512` tokens are rejected with `PORTAL_AUTH_INVALID_SIGNATURE`. Catch-ladder absorbs algorithm-rejection without echoing the rejected algorithm name.
+- **Per-app dynamic CORS** with explicit allowed-origins enumeration (no wildcards); `PortalCorsMiddleware` echoes the validated request `Origin` (never `*`) and is RFC 6454-compliant case-insensitive on host comparisons.
+- **App-scope isolation across the portal surface.** Every portal route reads `AppId` from the JWT, never from query/body/route. Cross-tenant probes return `404 PORTAL_NOT_FOUND` (not 403) so the response shape doesn't leak the existence of cross-tenant resources.
+- **`SecretOverride` entropy floor on portal writes.** The portal `Create`/`Update` endpoint validators require the `whsec_` prefix and a 32-128 char range so a customer cannot silently downgrade their HMAC secret to `password123`.
+- **Audit redaction** — `DashboardPortalController` writes audit-log snapshots with `PortalSigningKey` reduced to a boolean `portalEnabled` flag; the literal secret never enters `before_json` / `after_json`. Verified by a load-bearing negative test that scans the column for `whsec_` after a real enable call.
+
+### Fixed
+- (Nothing user-visible. Reviewer follow-ups for HS256 lifetime semantics, CORS origin case-sensitivity, and a missing-`nbf` guard landed alongside the originating PRs and have no user-facing change.)
+
 ## [0.1.6] - 2026-05-08
 
 A feature-and-polish cut covering eight new capabilities (per-resource overrides, IP allowlist, audit log, endpoint test webhook, SignalR endpoint health, validate-time URL guard), three rounds of dashboard polish (a11y, UX, TanStack Query data layer), three reviewer-finding fixes (transient DNS retry, cascade delete, polling debounce), and a backend correctness pass on the IP allowlist matcher, application rate-limiter sweep, and endpoint health tracker. No breaking changes — the `v1` route prefix and Standard Webhooks signature surface are preserved. Test count moved from 211 to 215.

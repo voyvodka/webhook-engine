@@ -21,6 +21,7 @@ Self-hosted webhook delivery platform with reliable at-least-once delivery, expo
 - **Real-time dashboard** -- React SPA with live delivery feed and circuit-state changes via SignalR; data layer on TanStack Query
 - **Single process** -- API + background workers + dashboard served from one ASP.NET Core host
 - **Data retention** -- automatic cleanup (delivered: 30 days, dead-letter: 90 days; per-app overrides supported)
+- **Embeddable customer portal** -- ship a `<EndpointManager />` React component into your own settings UI; per-application HS256 JWT auth minted by your backend, RFC 6454 dynamic CORS, capability scoping (`endpoints:read|write|test`, `attempts:read`); operator-managed signing key + allowed origins from the dashboard
 
 ## Tech Stack
 
@@ -110,6 +111,7 @@ Dashboard dev server runs on `http://localhost:5173` with API proxy to `localhos
 
 - [Getting Started](docs/GETTING-STARTED.md) — from zero to first webhook
 - [Self-Hosting Guide](docs/SELF-HOSTING.md) — production deployment and operations
+- [Customer Portal Guide](docs/PORTAL.md) — embeddable portal: operator setup, JWT minting, security model
 - [Release Guide](docs/RELEASE.md) — Docker Hub and NuGet publishing flow
 - [Roadmap](docs/ROADMAP.md) — current phase status and upcoming priorities
 - [PRD](docs/PRD.md) — product scope, goals, and requirement definitions

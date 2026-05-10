@@ -25,6 +25,7 @@ docs/*
 !docs/ROADMAP.md
 !docs/PRD.md
 !docs/PERFORMANCE.md
+!docs/PORTAL.md
 !docs/adr/
 docs/adr/*
 !docs/adr/*.md

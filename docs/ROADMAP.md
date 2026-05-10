@@ -1,11 +1,10 @@
-# Roadmap
 # WebhookEngine — Strategic Roadmap
 
-**Last Updated:** 2026-05-08
+**Last Updated:** 2026-05-10
 **Status:** Active — Phase 2 (Traction & Feedback)
-**Latest release:** v0.1.6 (2026-05-08) — feature & polish cut covering per-resource overrides, IP allowlist, audit log, dashboard a11y, and TanStack Query data layer.
+**Latest release:** v0.2.0 (2026-05-10) — first minor release; embeddable customer portal (B1 Steps 1-5): portal engine surface (`/api/v1/portal/*`), HS256 JWT middleware, per-app dynamic CORS, operator dashboard controls, and `<PortalAccessModal />` UI.
 
-> **Note:** Phase 1 is complete (launch posts and the engineering blog post remain deferred). Phase 2 core tasks (2.2, 2.3, 2.4, **2.5 payload transformation across all three rollout phases**, 2.7 application layer cleanup) are done. Phase 2 also gained eight follow-on features in v0.1.6 — endpoint test webhook, validate-time URL guard, per-resource overrides for retention / idempotency / rate limit, per-endpoint IP allowlist, audit log, SignalR endpoint health, and a TanStack Query dashboard data layer. Remaining Phase 2 items (TypeScript SDK gated on demand signal, comparison / best-practice blog posts) are planned.
+> **Note:** Phase 1 is complete (launch posts and the engineering blog post remain deferred). Phase 2 core tasks (2.2, 2.3, 2.4, **2.5 payload transformation across all three rollout phases**, 2.7 application layer cleanup) are done. v0.1.6 added eight follow-on features (endpoint test webhook, validate-time URL guard, per-resource overrides, IP allowlist, audit log, SignalR endpoint health, TanStack Query data layer). v0.2.0 adds the embeddable customer portal (engine + dashboard half). The `@webhookengine/endpoint-manager` npm package (B1 Step 7 / Step 11) lands in a follow-up `portal-v0.1.0` tag. Remaining Phase 2 items (TypeScript SDK gated on demand signal, comparison / best-practice blog posts) are planned.
 
 ---
 
@@ -136,6 +135,25 @@ Eight new features, three rounds of dashboard polish, three reviewer-finding fix
 | DPR-1 | Modal a11y (`role="dialog"` + ARIA + focus trap), reconnect-safe SignalR cache, awaited refetches, skeleton loaders | done |
 | DPR-2 | Shared `StatusBadge` / `inputClasses` / editor theme, lazy-loaded CodeMirror, `parseError` field-error routing | done |
 | DPR-3 | Modal `dvh` sizing, mobile filter grid, payload field error, SignalR Live / Offline header badge, URL field error wiring | done |
+
+---
+
+## v0.2.0 — Embeddable Customer Portal (2026-05-10)
+
+First minor release. The engine half and operator dashboard half of the embeddable customer portal land here. The `@webhookengine/endpoint-manager` React package lands in a follow-up `portal-v0.1.0` tag.
+
+| # | Task | Status |
+|---|------|--------|
+| B1 Step 1 | Bun workspaces — root `package.json` + single `bun.lock` + Dockerfile/CI plumbing | done |
+| B1 Step 2 | `Application.PortalSigningKey` + `AllowedPortalOriginsJson` migration | done |
+| B1 Step 3 | `PortalTokenAuthMiddleware` (HS256 algorithm-pinned, 15-min cap, capability-scoped) + `PortalCorsMiddleware` (RFC 6454 ordinal-case-insensitive) + `PortalLookupCache` + `PortalCapability` enum | done |
+| B1 Step 4 | `PortalEndpointsController` — 9 narrowed `/api/v1/portal/*` routes; `MessageRepository.ListAttemptsByEndpointAsync` / `CountAttemptsByEndpointAsync` | done |
+| B1 Step 5 | `DashboardPortalController` (5 routes) + `<PortalAccessModal />` + `Application.PortalRotatedAt` migration; audit log redacts signing key to boolean | done |
+| — | `AuditLogRepository` extract — `AuditLogsController` no longer bypasses repository pattern | done |
+| — | Tailwind 4.2.4 → 4.3.0 | done |
+| — | Dependabot npm `bun.lock` auto-sync workflow | done |
+| — | Documentation drift sync (ADR-003 Accepted, stack version lines) | done |
+| B1 Step 7 | `@webhookengine/endpoint-manager` npm package | planned (`portal-v0.1.0` tag) |
 
 ---
 
@@ -298,17 +316,3 @@ All: PostgreSQL-only, Docker Compose, MIT licensed, .NET native.
 - Kubernetes Helm chart
 - Embeddable endpoint management portal
 - A/B testing for notification content
-- Analytics (delivery rate, open rate, click rate)
-- Svix-compatible API (easy migration)
-
----
-
-## Metrics Dashboard
-
-| Metric | Phase 1 | Phase 2 | Phase 3 | Phase 4 |
-|--------|---------|---------|---------|---------|
-| GitHub stars | 50+ | 200+ | 1000+ | 1500+ |
-| Docker pulls | 100+ | 500+ | 5000+ | 10000+ |
-| NuGet downloads | 50+ | 500+ | 2000+ | 5000+ |
-| Contributors | 1 | 3+ | 10+ | 15+ |
-| Blog posts | 1 | 3+ | 5+ | 7+ |
