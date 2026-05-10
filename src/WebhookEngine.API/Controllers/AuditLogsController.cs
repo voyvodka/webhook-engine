@@ -2,9 +2,8 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using WebhookEngine.API.Contracts;
-using WebhookEngine.Infrastructure.Data;
+using WebhookEngine.Infrastructure.Repositories;
 
 namespace WebhookEngine.API.Controllers;
 
@@ -23,11 +22,11 @@ public class AuditLogsController : ControllerBase
 {
     private const int MaxPageSize = 100;
 
-    private readonly WebhookDbContext _dbContext;
+    private readonly AuditLogRepository _auditLogRepo;
 
-    public AuditLogsController(WebhookDbContext dbContext)
+    public AuditLogsController(AuditLogRepository auditLogRepo)
     {
-        _dbContext = dbContext;
+        _auditLogRepo = auditLogRepo;
     }
 
     [HttpGet]
@@ -45,51 +44,24 @@ public class AuditLogsController : ControllerBase
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
-        var query = _dbContext.AuditLogs.AsNoTracking().AsQueryable();
-
-        if (appId.HasValue) query = query.Where(l => l.AppId == appId);
-        if (!string.IsNullOrWhiteSpace(action)) query = query.Where(l => l.Action == action);
-        if (!string.IsNullOrWhiteSpace(resourceType)) query = query.Where(l => l.ResourceType == resourceType);
-        if (resourceId.HasValue) query = query.Where(l => l.ResourceId == resourceId);
-        if (from.HasValue) query = query.Where(l => l.CreatedAt >= from);
-        if (to.HasValue) query = query.Where(l => l.CreatedAt <= to);
-
-        var total = await query.CountAsync(ct);
-        var rows = await query
-            .OrderByDescending(l => l.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(l => new
-            {
-                id = l.Id,
-                appId = l.AppId,
-                userId = l.UserId,
-                action = l.Action,
-                resourceType = l.ResourceType,
-                resourceId = l.ResourceId,
-                before = l.BeforeJson,
-                after = l.AfterJson,
-                ipAddress = l.IpAddress,
-                userAgent = l.UserAgent,
-                createdAt = l.CreatedAt
-            })
-            .ToListAsync(ct);
+        var (rows, total) = await _auditLogRepo.ListAsync(
+            appId, action, resourceType, resourceId, from, to, page, pageSize, ct);
 
         // Re-shape before/after as JsonElement so the client can render them
         // as structured JSON instead of escaped strings.
         var hydrated = rows.Select(r => new
         {
-            r.id,
-            r.appId,
-            r.userId,
-            r.action,
-            r.resourceType,
-            r.resourceId,
-            before = ParseJson(r.before),
-            after = ParseJson(r.after),
-            r.ipAddress,
-            r.userAgent,
-            r.createdAt
+            id = r.Id,
+            appId = r.AppId,
+            userId = r.UserId,
+            action = r.Action,
+            resourceType = r.ResourceType,
+            resourceId = r.ResourceId,
+            before = ParseJson(r.BeforeJson),
+            after = ParseJson(r.AfterJson),
+            ipAddress = r.IpAddress,
+            userAgent = r.UserAgent,
+            createdAt = r.CreatedAt
         });
 
         return Ok(ApiEnvelope.Success(HttpContext, hydrated, ApiEnvelope.Pagination(page, pageSize, total)));
