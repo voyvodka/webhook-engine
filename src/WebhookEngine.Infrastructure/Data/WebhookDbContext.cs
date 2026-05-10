@@ -52,6 +52,8 @@ public class WebhookDbContext : DbContext
             entity.Property(e => e.AllowedPortalOriginsJson)
                 .HasColumnName("allowed_portal_origins")
                 .HasColumnType("jsonb");
+            entity.Property(e => e.PortalRotatedAt)
+                .HasColumnName("portal_rotated_at");
 
             entity.HasIndex(e => e.ApiKeyPrefix).IsUnique();
         });

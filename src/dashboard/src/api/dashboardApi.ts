@@ -263,6 +263,64 @@ export async function rotateSigningSecret(id: string): Promise<{ signingSecret: 
   return { signingSecret: payload.data.signingSecret };
 }
 
+// ── Portal access ─────────────────────────────────────
+
+export interface PortalAccessState {
+  portalEnabled: boolean;
+  allowedOrigins: string[];
+  rotatedAt: string | null;
+  // Always null on read — key is only returned from enable / rotate responses.
+  signingKey: null;
+}
+
+export interface PortalSigningKeyReveal {
+  signingKey: string;
+  rotatedAt: string;
+  instructions: string;
+}
+
+export async function getPortalAccess(appId: string): Promise<PortalAccessState> {
+  const payload = await fetchJson<ApiEnvelope<PortalAccessState>>(
+    `/api/v1/dashboard/applications/${appId}/portal`
+  );
+  return payload.data;
+}
+
+export async function enablePortal(appId: string): Promise<PortalSigningKeyReveal> {
+  const payload = await mutate<ApiEnvelope<PortalSigningKeyReveal>>(
+    `/api/v1/dashboard/applications/${appId}/portal/enable`,
+    "POST"
+  );
+  return payload.data;
+}
+
+export async function rotatePortalKey(appId: string): Promise<PortalSigningKeyReveal> {
+  const payload = await mutate<ApiEnvelope<PortalSigningKeyReveal>>(
+    `/api/v1/dashboard/applications/${appId}/portal/rotate`,
+    "POST"
+  );
+  return payload.data;
+}
+
+export async function disablePortal(appId: string): Promise<void> {
+  await mutate<void>(
+    `/api/v1/dashboard/applications/${appId}/portal/disable`,
+    "POST"
+  );
+}
+
+export async function updatePortalOrigins(
+  appId: string,
+  origins: string[]
+): Promise<{ allowedOrigins: string[] }> {
+  const payload = await mutate<ApiEnvelope<{ allowedOrigins: string[] }>>(
+    `/api/v1/dashboard/applications/${appId}/portal/origins`,
+    "PUT",
+    { origins }
+  );
+  return payload.data;
+}
+
 // ── Endpoints ───────────────────────────────────
 
 export interface EndpointListParams {
