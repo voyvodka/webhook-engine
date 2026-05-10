@@ -156,6 +156,38 @@ public class MessageRepository
             .CountAsync(a => a.MessageId == messageId && a.Message.AppId == appId, ct);
     }
 
+    /// <summary>
+    /// Lists attempts for a single endpoint, app-scoped via the parent <see cref="Message"/>.
+    /// MessageAttempt has no AppId column of its own — the join through Message is what
+    /// keeps cross-tenant rows out of the result. Ordered most-recent first so the portal's
+    /// "Recent attempts" list works without client-side sorting.
+    /// </summary>
+    public async Task<List<MessageAttempt>> ListAttemptsByEndpointAsync(
+        Guid appId,
+        Guid endpointId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        return await _dbContext.MessageAttempts
+            .AsNoTracking()
+            .Where(a => a.EndpointId == endpointId && a.Message.AppId == appId)
+            .OrderByDescending(a => a.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+    }
+
+    public async Task<int> CountAttemptsByEndpointAsync(
+        Guid appId,
+        Guid endpointId,
+        CancellationToken ct = default)
+    {
+        return await _dbContext.MessageAttempts
+            .AsNoTracking()
+            .CountAsync(a => a.EndpointId == endpointId && a.Message.AppId == appId, ct);
+    }
+
     public async Task CreateAttemptAsync(MessageAttempt attempt, CancellationToken ct = default)
     {
         _dbContext.MessageAttempts.Add(attempt);
