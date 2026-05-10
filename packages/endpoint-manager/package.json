@@ -27,7 +27,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup && bun run build:css",
+    "build": "bun run clean && bun run build:css && tsup",
     "build:css": "tailwindcss -i src/styles.css -o dist/style.css --minify",
     "dev": "vite --config demo/vite.config.ts",
     "typecheck": "tsc --noEmit",

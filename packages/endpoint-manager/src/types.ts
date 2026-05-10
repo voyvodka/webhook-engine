@@ -38,14 +38,44 @@ export interface PortalEventTypeListItem {
   description: string | null;
 }
 
+/**
+ * Single delivery attempt row returned by GET /api/v1/portal/endpoints/{id}/attempts.
+ * Field names mirror PortalAttemptRow on the server (PortalDtos.cs).
+ */
 export interface PortalAttempt {
   id: string;
-  endpointId: string;
+  messageId: string;
+  attemptNumber: number;
+  /** "success" | "failure" — serialised from AttemptStatus enum as camelCase */
   status: string;
-  httpStatus: number | null;
-  latencyMs: number | null;
-  occurredAt: string;
-  responseBody: string | null;
+  /** HTTP status code; null when a network-level error occurred before a response */
+  statusCode: number | null;
+  error: string | null;
+  latencyMs: number;
+  createdAt: string;
+}
+
+/**
+ * Result returned by POST /api/v1/portal/endpoints/{id}/test.
+ * Field names mirror EndpointTestResult on the server (EndpointTestModels.cs).
+ */
+export interface PortalTestResult {
+  success: boolean;
+  statusCode: number;
+  latencyMs: number;
+  responseBody: string;
+  error: string | null;
+  request: PortalTestRequestPreview;
+}
+
+/**
+ * The signed request that was actually sent to the endpoint.
+ * Mirrors EndpointTestRequestPreview on the server.
+ */
+export interface PortalTestRequestPreview {
+  url: string;
+  headers: Record<string, string>;
+  body: string;
 }
 
 export interface PortalCreateEndpointInput {

@@ -1,9 +1,11 @@
 import type {
+  PortalAttempt,
   PortalCapability,
   PortalCreateEndpointInput,
   PortalEndpointDetail,
   PortalEndpointSummary,
   PortalEventTypeListItem,
+  PortalTestResult,
   PortalUpdateEndpointInput,
 } from "../types.js";
 
@@ -49,6 +51,12 @@ export class PortalError extends Error {
   }
 }
 
+export interface PortalTestEndpointInput {
+  eventType: string;
+  payload: Record<string, unknown>;
+  customHeaders?: Record<string, string>;
+}
+
 export interface PortalClient {
   listEndpoints(params?: {
     page?: number;
@@ -61,9 +69,8 @@ export interface PortalClient {
   enableEndpoint(id: string): Promise<void>;
   disableEndpoint(id: string): Promise<void>;
   listEventTypes(): Promise<PortalEventTypeListItem[]>;
-  // Step 9 will add testEndpoint + listAttempts.
-  testEndpoint(id: string, payload: Record<string, unknown>): Promise<never>;
-  listAttempts(id: string, params?: { page?: number; pageSize?: number }): Promise<never>;
+  testEndpoint(id: string, input: PortalTestEndpointInput): Promise<PortalTestResult>;
+  listAttempts(id: string, params?: { page?: number; pageSize?: number }): Promise<PortalListResult<PortalAttempt>>;
 }
 
 interface ApiErrorEnvelope {
@@ -246,12 +253,18 @@ export function createPortalClient(options: PortalClientOptions): PortalClient {
       return request<PortalEventTypeListItem[]>("GET", "/api/v1/portal/event-types");
     },
 
-    testEndpoint(_id, _payload) {
-      throw new Error("Not implemented yet — lands in B1 Step 9");
+    testEndpoint(id, input) {
+      return request<PortalTestResult>("POST", `/api/v1/portal/endpoints/${id}/test`, {
+        body: {
+          eventType: input.eventType,
+          payload: input.payload,
+          ...(input.customHeaders !== undefined ? { customHeaders: input.customHeaders } : {}),
+        },
+      });
     },
 
-    listAttempts(_id, _params) {
-      throw new Error("Not implemented yet — lands in B1 Step 9");
+    listAttempts(id, params) {
+      return requestList<PortalAttempt>(`/api/v1/portal/endpoints/${id}/attempts`, params);
     },
   };
 }
