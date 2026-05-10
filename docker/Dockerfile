@@ -9,6 +9,7 @@ WORKDIR /workspace
 # graph correctly. Only the package manifests are copied for layer caching.
 COPY package.json bun.lock ./
 COPY src/dashboard/package.json src/dashboard/package.json
+COPY packages/endpoint-manager/package.json packages/endpoint-manager/package.json
 RUN bun install --frozen-lockfile
 
 COPY src/dashboard src/dashboard

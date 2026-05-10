@@ -232,6 +232,9 @@ PublishScripts/
 **/[Pp]ackages/*
 # except build/, which is used as an MSBuild target.
 !**/[Pp]ackages/build/
+# and except the workspace npm packages folder (B1 Step 7+ — endpoint-manager etc.)
+!/packages/
+!/packages/**
 # Uncomment if necessary however generally it will be regenerated when needed
 #!**/[Pp]ackages/repositories.config
 # NuGet v3's project.json files produces more ignorable files
@@ -512,6 +515,9 @@ $RECYCLE.BIN/
 # Dashboard (React SPA)
 src/dashboard/node_modules/
 src/dashboard/dist/
+
+# Workspace packages build output
+packages/*/dist/
 
 # Dashboard build output bundled into API host (generated)
 src/WebhookEngine.API/wwwroot/index.html
