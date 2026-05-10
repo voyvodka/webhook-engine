@@ -120,6 +120,7 @@ builder.Services.AddScoped<MessageRepository>();
 builder.Services.AddScoped<EventTypeRepository>();
 builder.Services.AddScoped<DashboardUserRepository>();
 builder.Services.AddScoped<DashboardStatsRepository>();
+builder.Services.AddScoped<AuditLogRepository>();
 
 // Services
 builder.Services.AddScoped<IMessageQueue, PostgresMessageQueue>();
