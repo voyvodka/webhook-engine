@@ -40,6 +40,13 @@ public class Application
     /// </summary>
     public string? AllowedPortalOriginsJson { get; set; }
 
+    /// <summary>
+    /// Timestamp of the last portal-signing-key mint (enable or rotate). Null
+    /// when the portal is disabled. Surfaced through the read endpoint so the
+    /// dashboard can show "rotated 3 minutes ago" without reading the secret.
+    /// </summary>
+    public DateTime? PortalRotatedAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

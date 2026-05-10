@@ -10,6 +10,7 @@ import {
 } from "../api/dashboardApi";
 import { Modal } from "../components/Modal";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { PortalAccessModal } from "../components/PortalAccessModal";
 import type { EndpointRow } from "../types";
 import { formatLocaleDate } from "../utils/dateTime";
 import {
@@ -22,7 +23,8 @@ import {
   AlertCircle,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Globe
 } from "lucide-react";
 
 function CopyButton({ text }: { text: string }) {
@@ -175,6 +177,9 @@ export function ApplicationsPage() {
 
   // Confirm modal
   const [confirm, setConfirm] = useState<ConfirmState>(closedConfirm);
+
+  // Portal access modal
+  const [portalTarget, setPortalTarget] = useState<{ id: string; name: string } | null>(null);
 
   const createMutation = useMutation({
     mutationFn: (name: string) => createApplication(name),
@@ -394,6 +399,13 @@ export function ApplicationsPage() {
                         <td className="px-4 py-2.5 text-xs text-text-muted">{formatLocaleDate(app.createdAt)}</td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => setPortalTarget({ id: app.id, name: app.name })}
+                              className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent-soft transition-colors"
+                              title="Portal access"
+                            >
+                              <Globe className="w-3.5 h-3.5" />
+                            </button>
                             <button onClick={() => requestRotateKey(app.id)} className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent-soft transition-colors" title="Rotate API Key">
                               <KeyRound className="w-3.5 h-3.5" />
                             </button>
@@ -474,6 +486,16 @@ export function ApplicationsPage() {
         confirmLabel={confirm.confirmLabel}
         variant={confirm.variant}
       />
+
+      {/* Portal Access Modal */}
+      {portalTarget && (
+        <PortalAccessModal
+          open={portalTarget !== null}
+          onClose={() => setPortalTarget(null)}
+          appId={portalTarget.id}
+          appName={portalTarget.name}
+        />
+      )}
     </div>
   );
 }
