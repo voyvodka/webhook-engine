@@ -48,6 +48,7 @@ builder.Services.Configure<DashboardAuthOptions>(builder.Configuration.GetSectio
 builder.Services.Configure<RetentionOptions>(builder.Configuration.GetSection(RetentionOptions.SectionName));
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
 builder.Services.Configure<TransformationOptions>(builder.Configuration.GetSection(TransformationOptions.SectionName));
+builder.Services.Configure<PortalAuthOptions>(builder.Configuration.GetSection(PortalAuthOptions.SectionName));
 
 // Database
 builder.Services.AddDbContext<WebhookDbContext>(options =>
@@ -200,12 +201,15 @@ builder.Services.AddMvcCore(options => options.Filters.Add<FluentValidationFilte
 // SignalR
 builder.Services.AddSignalR();
 
-// In-memory cache used by ApiKeyAuthMiddleware (api-key→application) and
+// In-memory cache used by ApiKeyAuthMiddleware (api-key→application),
 // DeliveryLookupCache (event-type / subscribed-endpoints on the public
-// send path). SizeLimit caps unbounded growth in multi-tenant deployments;
-// every Set passes Size=1 so the limit translates to "10k entries".
+// send path), and PortalLookupCache (portal signing-key + allowed
+// origins per app). SizeLimit caps unbounded growth in multi-tenant
+// deployments; every Set passes Size=1 so the limit translates to
+// "10k entries".
 builder.Services.AddMemoryCache(o => o.SizeLimit = 10_000);
 builder.Services.AddScoped<DeliveryLookupCache>();
+builder.Services.AddScoped<PortalLookupCache>();
 
 // Readiness gate — flipped to true after migrations + admin seeding
 // complete. /health/ready reads this; orchestrators should probe that.
@@ -344,11 +348,23 @@ else
 }
 
 // Middleware pipeline (order matters)
+//   SecurityHeaders → MetricsAuth → RequestLogging → ExceptionHandling
+//   → ApiKeyAuth → PortalTokenAuth → PortalCors → RateLimiter
+//   → Authentication → Authorization
+//
+// PortalTokenAuth and PortalCors only act on /api/v1/portal/* requests;
+// they're inserted between ApiKeyAuth (which deliberately skips the
+// portal prefix) and the rate limiter so portal-token-derived AppIds
+// flow into the existing send-by-appid partition. PortalTokenAuth MUST
+// run before PortalCors for non-OPTIONS requests — the CORS layer reads
+// the validated app lookup from HttpContext.Items.
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<MetricsAuthMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<ApiKeyAuthMiddleware>();
+app.UseMiddleware<PortalTokenAuthMiddleware>();
+app.UseMiddleware<PortalCorsMiddleware>();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();

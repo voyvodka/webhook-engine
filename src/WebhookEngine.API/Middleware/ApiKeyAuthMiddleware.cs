@@ -22,13 +22,16 @@ public class ApiKeyAuthMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        // Only apply to /api/v1/* routes (except auth endpoints)
+        // Only apply to /api/v1/* routes (except auth, dashboard, applications,
+        // health, metrics, and the embeddable customer portal — the portal
+        // has its own JWT-based middleware that runs after this one).
         var path = context.Request.Path.Value ?? "";
         if (!path.StartsWith("/api/v1/")
             || path.StartsWith("/api/v1/auth")
             || path.StartsWith("/api/v1/dashboard")
             || path.StartsWith("/api/v1/applications")
             || path.StartsWith("/api/v1/health")
+            || path.StartsWith("/api/v1/portal")
             || path.StartsWith("/metrics"))
         {
             await _next(context);
