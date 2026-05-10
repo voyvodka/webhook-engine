@@ -94,6 +94,18 @@ jobs:
       - name: Build
         run: bun run build
 
+      - name: Lint (endpoint-manager)
+        working-directory: packages/endpoint-manager
+        run: bun run lint
+
+      - name: Type check (endpoint-manager)
+        working-directory: packages/endpoint-manager
+        run: bun run typecheck
+
+      - name: Build (endpoint-manager)
+        working-directory: packages/endpoint-manager
+        run: bun run build
+
   docker:
     name: Docker build
     runs-on: ubuntu-latest

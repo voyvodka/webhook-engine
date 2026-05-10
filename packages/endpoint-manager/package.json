@@ -1,0 +1,49 @@
+{
+  "name": "@webhookengine/endpoint-manager",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Embeddable React portal for managing webhook endpoints — pairs with WebhookEngine self-hosted.",
+  "license": "MIT",
+  "homepage": "https://github.com/voyvodka/webhook-engine",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/voyvodka/webhook-engine.git",
+    "directory": "packages/endpoint-manager"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "10.3.0",
+    "tsup": "^8.5.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.59.2"
+  }
+}
