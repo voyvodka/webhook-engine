@@ -3,12 +3,16 @@
 # ============================================================
 # Image digests pinned so Dependabot can track and bump them.
 FROM oven/bun:1-alpine@sha256:4de475389889577f346c636f956b42a5c31501b654664e9ae5726f94d7bb5349 AS dashboard-build
-WORKDIR /dashboard
+WORKDIR /workspace
 
-COPY src/dashboard/package.json src/dashboard/bun.lock ./
+# Workspace plumbing: install from the root so Bun resolves the workspace
+# graph correctly. Only the package manifests are copied for layer caching.
+COPY package.json bun.lock ./
+COPY src/dashboard/package.json src/dashboard/package.json
 RUN bun install --frozen-lockfile
 
-COPY src/dashboard/ .
+COPY src/dashboard src/dashboard
+WORKDIR /workspace/src/dashboard
 RUN bun run build
 
 # ============================================================
@@ -35,8 +39,8 @@ COPY src/ src/
 
 # Copy dashboard build output into wwwroot before publish.
 # Vite outDir is configured as ../WebhookEngine.API/wwwroot, which resolves
-# to /WebhookEngine.API/wwwroot inside the dashboard-build stage.
-COPY --from=dashboard-build /WebhookEngine.API/wwwroot/ src/WebhookEngine.API/wwwroot/
+# to /workspace/src/WebhookEngine.API/wwwroot inside the dashboard-build stage.
+COPY --from=dashboard-build /workspace/src/WebhookEngine.API/wwwroot/ src/WebhookEngine.API/wwwroot/
 
 RUN dotnet publish src/WebhookEngine.API/WebhookEngine.API.csproj \
     -c Release \
