@@ -1,7 +1,13 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { EndpointManager } from "../src/index.js";
-import type { PortalEndpointSummary, PortalEndpointDetail, PortalEventTypeListItem } from "../src/types.js";
+import type {
+  PortalEndpointSummary,
+  PortalEndpointDetail,
+  PortalEventTypeListItem,
+  PortalAttempt,
+  PortalTestResult,
+} from "../src/types.js";
 import type { PortalListResult } from "../src/api/createPortalClient.js";
 
 // ---------------------------------------------------------------------------
@@ -51,6 +57,86 @@ const EVENT_TYPES: PortalEventTypeListItem[] = [
   { id: "et-4", name: "payment.failed", description: null },
 ];
 
+// Synthetic attempt history — mix of success/failure, various latencies.
+const ATTEMPTS_STORE: Record<string, PortalAttempt[]> = {
+  "ep-1": [
+    {
+      id: "att-1",
+      messageId: "msg-001",
+      attemptNumber: 1,
+      status: "success",
+      statusCode: 200,
+      error: null,
+      latencyMs: 124,
+      createdAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+    },
+    {
+      id: "att-2",
+      messageId: "msg-002",
+      attemptNumber: 1,
+      status: "failure",
+      statusCode: 503,
+      error: "Service temporarily unavailable",
+      latencyMs: 3001,
+      createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+    },
+    {
+      id: "att-3",
+      messageId: "msg-002",
+      attemptNumber: 2,
+      status: "success",
+      statusCode: 200,
+      error: null,
+      latencyMs: 89,
+      createdAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
+    },
+    {
+      id: "att-4",
+      messageId: "msg-003",
+      attemptNumber: 1,
+      status: "failure",
+      statusCode: null,
+      error: "connect ECONNREFUSED 203.0.113.42:443",
+      latencyMs: 5000,
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+    },
+    {
+      id: "att-5",
+      messageId: "msg-004",
+      attemptNumber: 1,
+      status: "success",
+      statusCode: 201,
+      error: null,
+      latencyMs: 201,
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+    },
+    {
+      id: "att-6",
+      messageId: "msg-005",
+      attemptNumber: 1,
+      status: "failure",
+      statusCode: 404,
+      error: "Not Found",
+      latencyMs: 55,
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
+    },
+    {
+      id: "att-7",
+      messageId: "msg-006",
+      attemptNumber: 1,
+      status: "success",
+      statusCode: 200,
+      error: null,
+      latencyMs: 310,
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+    },
+  ],
+};
+
+function getAttempts(endpointId: string): PortalAttempt[] {
+  return ATTEMPTS_STORE[endpointId] ?? [];
+}
+
 function toSummary(d: PortalEndpointDetail): PortalEndpointSummary {
   return {
     id: d.id,
@@ -85,7 +171,60 @@ function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
     return ok(EVENT_TYPES);
   }
 
-  // GET /api/v1/portal/endpoints/:id/enable or /disable
+  // POST /api/v1/portal/endpoints/:id/test
+  const testMatch = url.match(/\/endpoints\/([^/]+)\/test$/);
+  if (method === "POST" && testMatch) {
+    const id = testMatch[1]!;
+    const ep = store.find((e) => e.id === id);
+    if (!ep) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ error: { code: "PORTAL_NOT_FOUND", message: "Not found" }, meta: {} }),
+          { status: 404, headers: { "content-type": "application/json" } },
+        ),
+      );
+    }
+    const result: PortalTestResult = {
+      success: true,
+      statusCode: 200,
+      latencyMs: 87,
+      responseBody: "ok",
+      error: null,
+      request: {
+        url: ep.url,
+        headers: {
+          "webhook-id": `msg_${Math.random().toString(36).slice(2, 10)}`,
+          "webhook-timestamp": String(Math.floor(Date.now() / 1000)),
+          "webhook-signature": `v1,${btoa("demo-signature-placeholder")}`,
+          "Content-Type": "application/json",
+        },
+        body: init?.body as string ?? "{}",
+      },
+    };
+    return ok(result);
+  }
+
+  // GET /api/v1/portal/endpoints/:id/attempts
+  const attemptsMatch = url.match(/\/endpoints\/([^/]+)\/attempts/);
+  if (method === "GET" && attemptsMatch) {
+    const id = attemptsMatch[1]!;
+    const params = new URL(url).searchParams;
+    const page = parseInt(params.get("page") ?? "1", 10);
+    const pageSize = parseInt(params.get("pageSize") ?? "20", 10);
+    const all = getAttempts(id);
+    const sliced = all.slice((page - 1) * pageSize, page * pageSize);
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: sliced,
+          meta: { pagination: { page, pageSize, total: all.length } },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+  }
+
+  // POST /api/v1/portal/endpoints/:id/enable
   const enableMatch = url.match(/\/endpoints\/([^/]+)\/enable$/);
   if (method === "POST" && enableMatch) {
     const id = enableMatch[1]!;
@@ -94,6 +233,7 @@ function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
     return noContent();
   }
 
+  // POST /api/v1/portal/endpoints/:id/disable
   const disableMatch = url.match(/\/endpoints\/([^/]+)\/disable$/);
   if (method === "POST" && disableMatch) {
     const id = disableMatch[1]!;
@@ -102,7 +242,7 @@ function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
     return noContent();
   }
 
-  // GET /api/v1/portal/endpoints/:id
+  // GET /api/v1/portal/endpoints/:id (single)
   const singleMatch = url.match(/\/endpoints\/([^/?]+)$/);
   if (method === "GET" && singleMatch) {
     const ep = store.find((e) => e.id === singleMatch[1]);
@@ -174,6 +314,10 @@ function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
   return Promise.resolve(new Response(null, { status: 404 }));
 }
 
+// Type alias just to keep the cast clean.
+type ListResult<T> = PortalListResult<T>;
+void (null as unknown as ListResult<unknown>);
+
 // ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
@@ -183,10 +327,8 @@ function App() {
       baseUrl="http://localhost:0000"
       token="demo-token"
       appId="00000000-0000-0000-0000-000000000000"
-      capabilities={["endpoints:read", "endpoints:write"]}
+      capabilities={["endpoints:read", "endpoints:write", "endpoints:test", "attempts:read"]}
       // Inject the mock fetch so no real HTTP is made.
-      // EndpointManager exposes fetch injection via createPortalClient internally —
-      // for the demo we monkey-patch globalThis.fetch before the component mounts.
     />
   );
 }

@@ -11,6 +11,8 @@ import type {
   PortalEndpointSummary,
   PortalEndpointDetail,
   PortalEventTypeListItem,
+  PortalAttempt,
+  PortalTestResult,
 } from "../types.js";
 
 const BASE = "https://engine.example.com";
@@ -36,6 +38,35 @@ const EVENT_TYPE: PortalEventTypeListItem = {
   id: "et-1",
   name: "order.created",
   description: null,
+};
+
+const ATTEMPT: PortalAttempt = {
+  id: "att-1",
+  messageId: "msg-1",
+  attemptNumber: 1,
+  status: "success",
+  statusCode: 200,
+  error: null,
+  latencyMs: 142,
+  createdAt: "2026-05-10T18:30:00Z",
+};
+
+const TEST_RESULT: PortalTestResult = {
+  success: true,
+  statusCode: 200,
+  latencyMs: 87,
+  responseBody: "ok",
+  error: null,
+  request: {
+    url: "https://consumer.example.com/hooks",
+    headers: {
+      "webhook-id": "msg_abc123",
+      "webhook-timestamp": "1715363400",
+      "webhook-signature": "v1,abc123def456",
+      "Content-Type": "application/json",
+    },
+    body: '{"orderId":"abc123"}',
+  },
 };
 
 describe("createPortalClient", () => {
@@ -202,13 +233,160 @@ describe("createPortalClient", () => {
     expect(result[0]?.name).toBe("order.created");
   });
 
-  it("testEndpoint — throws 'Not implemented'", () => {
-    const client = createPortalClient({ baseUrl: BASE, token: TOKEN });
-    expect(() => client.testEndpoint("ep-1", {})).toThrow("Not implemented yet");
+  // ── testEndpoint ──────────────────────────────────────────────────────────
+
+  it("testEndpoint — POSTs to correct URL and returns PortalTestResult", async () => {
+    let capturedUrl = "";
+    let capturedBody: unknown;
+    const fetch = createMockFetch([
+      {
+        method: "POST",
+        pattern: "/api/v1/portal/endpoints/ep-1/test",
+        handler: (url, init) => {
+          capturedUrl = url;
+          capturedBody = JSON.parse(init?.body as string);
+          return jsonOk(TEST_RESULT);
+        },
+      },
+    ]);
+    const client = createPortalClient({ baseUrl: BASE, token: TOKEN, fetch });
+    const result = await client.testEndpoint("ep-1", {
+      eventType: "order.created",
+      payload: { orderId: "abc123" },
+    });
+
+    expect(capturedUrl).toContain("/api/v1/portal/endpoints/ep-1/test");
+    expect(capturedBody).toMatchObject({
+      eventType: "order.created",
+      payload: { orderId: "abc123" },
+    });
+    expect(result.statusCode).toBe(200);
+    expect(result.latencyMs).toBe(87);
+    expect(result.responseBody).toBe("ok");
+    expect(result.request.headers["webhook-signature"]).toMatch(/^v1,/);
   });
 
-  it("listAttempts — throws 'Not implemented'", () => {
-    const client = createPortalClient({ baseUrl: BASE, token: TOKEN });
-    expect(() => client.listAttempts("ep-1")).toThrow("Not implemented yet");
+  it("testEndpoint — includes customHeaders in body when provided", async () => {
+    let capturedBody: unknown;
+    const fetch = createMockFetch([
+      {
+        method: "POST",
+        pattern: "/test",
+        handler: (_url, init) => {
+          capturedBody = JSON.parse(init?.body as string);
+          return jsonOk(TEST_RESULT);
+        },
+      },
+    ]);
+    const client = createPortalClient({ baseUrl: BASE, token: TOKEN, fetch });
+    await client.testEndpoint("ep-1", {
+      eventType: "order.created",
+      payload: {},
+      customHeaders: { "X-Custom": "value" },
+    });
+
+    expect(capturedBody).toMatchObject({ customHeaders: { "X-Custom": "value" } });
+  });
+
+  it("testEndpoint — 403 throws PortalError with PORTAL_INSUFFICIENT_CAPABILITY", async () => {
+    const fetch = createMockFetch([
+      {
+        method: "POST",
+        pattern: "/test",
+        handler: () =>
+          jsonError(403, "PORTAL_INSUFFICIENT_CAPABILITY", "Insufficient capability"),
+      },
+    ]);
+    const client = createPortalClient({ baseUrl: BASE, token: TOKEN, fetch });
+
+    let caught: PortalError | null = null;
+    try {
+      await client.testEndpoint("ep-1", { eventType: "order.created", payload: {} });
+    } catch (err) {
+      caught = err as PortalError;
+    }
+
+    expect(caught).toBeInstanceOf(PortalError);
+    expect(caught?.code).toBe("PORTAL_INSUFFICIENT_CAPABILITY");
+    expect(caught?.status).toBe(403);
+  });
+
+  it("testEndpoint — 422 populates fieldErrors", async () => {
+    const fetch = createMockFetch([
+      {
+        method: "POST",
+        pattern: "/test",
+        handler: () =>
+          jsonError(422, "VALIDATION_FAILED", "Validation failed", {
+            eventType: "Event type is required",
+          }),
+      },
+    ]);
+    const client = createPortalClient({ baseUrl: BASE, token: TOKEN, fetch });
+
+    let caught: PortalError | null = null;
+    try {
+      await client.testEndpoint("ep-1", { eventType: "", payload: {} });
+    } catch (err) {
+      caught = err as PortalError;
+    }
+
+    expect(caught?.fieldErrors?.["eventType"]).toBe("Event type is required");
+  });
+
+  // ── listAttempts ──────────────────────────────────────────────────────────
+
+  it("listAttempts — GETs correct URL with pagination params", async () => {
+    let capturedUrl = "";
+    const fetch = createMockFetch([
+      {
+        method: "GET",
+        pattern: "/attempts",
+        handler: (url) => {
+          capturedUrl = url;
+          return jsonList([ATTEMPT], { page: 2, pageSize: 10, total: 47 });
+        },
+      },
+    ]);
+    const client = createPortalClient({ baseUrl: BASE, token: TOKEN, fetch });
+    const result = await client.listAttempts("ep-1", { page: 2, pageSize: 10 });
+
+    expect(capturedUrl).toContain("/api/v1/portal/endpoints/ep-1/attempts");
+    expect(capturedUrl).toContain("page=2");
+    expect(capturedUrl).toContain("pageSize=10");
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]?.id).toBe("att-1");
+  });
+
+  it("listAttempts — pagination shape is flattened into result.pagination", async () => {
+    const fetch = createMockFetch([
+      {
+        method: "GET",
+        pattern: "/attempts",
+        handler: () =>
+          jsonList([ATTEMPT], { page: 2, pageSize: 10, total: 47 }),
+      },
+    ]);
+    const client = createPortalClient({ baseUrl: BASE, token: TOKEN, fetch });
+    const result = await client.listAttempts("ep-1", { page: 2, pageSize: 10 });
+
+    expect(result.pagination).toEqual({ page: 2, pageSize: 10, total: 47 });
+  });
+
+  it("listAttempts — 403 throws PortalError with PORTAL_INSUFFICIENT_CAPABILITY", async () => {
+    const fetch = createMockFetch([
+      {
+        method: "GET",
+        pattern: "/attempts",
+        handler: () =>
+          jsonError(403, "PORTAL_INSUFFICIENT_CAPABILITY", "Insufficient capability"),
+      },
+    ]);
+    const client = createPortalClient({ baseUrl: BASE, token: TOKEN, fetch });
+
+    await expect(client.listAttempts("ep-1")).rejects.toMatchObject({
+      code: "PORTAL_INSUFFICIENT_CAPABILITY",
+      status: 403,
+    });
   });
 });
