@@ -1,7 +1,7 @@
 # ADR-003: Webhook Payload Transformation
 
-**Status:** Proposed
-**Date:** 2026-03-30
+**Status:** Accepted
+**Date:** 2026-03-30 (proposed) · 2026-05-05 (accepted, all three rollout phases shipped in v0.1.4)
 **Context:** Phase 04 Performance & Future Decisions (GHIS-05, GitHub #5)
 
 ## Context
@@ -196,3 +196,33 @@ In `HttpDeliveryService.DeliverAsync()`, after payload retrieval and before HTTP
 | JmesPath.Net library abandoned | Low | Medium | JMESPath spec is stable; alternative .NET libraries exist; expressions are engine-agnostic |
 | Payload size inflation via transformation | Low | Low | Output size limit (256KB) matches input limit |
 | Feature complexity discourages adoption | Medium | Low | Feature is entirely optional; disabled by default |
+
+## Implementation
+
+All three rollout phases shipped together in **v0.1.4** (2026-05-05). The `v0.3.x` / `v0.4.0` placeholders in the original rollout plan were superseded by the actual SemVer cadence.
+
+### Phase 1 — Schema + API (v0.1.4)
+- Migration `20260504220757_AddTransformFieldsToEndpoint` adds the three columns.
+- `Endpoint` entity carries `TransformExpression`, `TransformEnabled`, `TransformValidatedAt`.
+- All four endpoint validators (public Bearer-key + dashboard, create + update) accept and validate the new fields.
+- `EndpointResponseDto` exposes them on read.
+
+### Phase 2 — Delivery integration (v0.1.4)
+- `JmesPath.Net` 1.1.0 added to `WebhookEngine.Infrastructure`.
+- `IPayloadTransformer` interface + `JmesPathPayloadTransformer` implementation.
+- `DeliveryWorker` invokes `ApplyTransformation` immediately before signing — the transformed payload is what gets HMAC-signed and POSTed.
+- Hard guardrails: 100 ms wall-clock timeout, 256 KB output cap, global kill switch `WebhookEngine:Transformation:Enabled` (default `true`).
+- Fail-open behavior: invalid expression / timeout / oversized output / invalid JSON falls back to the original payload with a warning log.
+- OpenTelemetry counters: `webhookengine.transformations.applied`, `webhookengine.transformations.failed_open`.
+- 6 unit tests cover identity, reshape, invalid expression, empty expression, oversized output, invalid JSON.
+
+### Phase 3 — Dashboard editor (v0.1.4)
+- CodeMirror 6 (`@uiw/react-codemirror` + `@codemirror/lang-json`) chosen over Monaco for ~10× smaller bundle (lazy-loaded via `React.lazy()` since v0.1.6 so the chunk only loads when the endpoint editor mounts).
+- `<TransformSection />` component: enable toggle + expression editor + collapsible sample-payload playground + Run + result panel.
+- `POST /api/v1/dashboard/transform/validate` endpoint (endpoint-agnostic so the editor works during create flows before the row exists). Reuses the same `IPayloadTransformer` that runs at delivery — what passes the editor behaves identically at delivery time.
+- 4 integration tests: happy path, invalid expression (200 + `success=false`), empty expression (422), unauthenticated (401).
+
+### Deviations from the original proposal
+- **Nested depth limit (10 levels) was not added** — JmesPath.Net does not expose a depth-counting hook, and the 100 ms timeout + 256 KB output cap are sufficient guards in practice. Re-evaluate if a pathological expression survives both.
+- **Transformation metrics in the dashboard UI were not added** — the OpenTelemetry counters are emitted but not surfaced in any dashboard panel yet. Tracked as opt-in follow-up; will land when there is real demand.
+- **`TransformValidatedAt` is server-managed but not yet shown in the dashboard.** Field is populated on successful validate-endpoint call; surfacing it in the editor is a small UX polish, not a behavior change.

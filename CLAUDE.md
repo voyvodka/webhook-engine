@@ -6,7 +6,7 @@ Queue-based webhook delivery engine with retry logic, circuit breaker, HMAC sign
 
 **Core Value:** Reliable, observable webhook delivery — messages must reach their endpoints with guaranteed retry, proper signing, and full delivery visibility.
 
-**Stack at a glance:** .NET 10 / ASP.NET Core / EF Core 10 / PostgreSQL 17 · React 19 / TypeScript 5.9 / Vite 7 / Tailwind 4 · SignalR · Serilog · OpenTelemetry + Prometheus · FluentValidation · xUnit / Testcontainers / FluentAssertions / NSubstitute. Exact versions live in the `.csproj` files and `src/dashboard/package.json`.
+**Stack at a glance:** .NET 10 / ASP.NET Core / EF Core 10 / PostgreSQL 17 · React 19 / TypeScript 6 / Vite 8 / Tailwind 4 / TanStack Query 5 · SignalR · Serilog · OpenTelemetry + Prometheus · FluentValidation · xUnit / Testcontainers / FluentAssertions / NSubstitute. Exact versions live in the `.csproj` files and `src/dashboard/package.json`.
 
 ### Constraints
 
@@ -73,7 +73,7 @@ Detailed rules live in `.claude/rules/` — consult them while writing code.
 | `.claude/rules/infrastructure.md` | EF Core, repositories, queue, advisory locks, migrations |
 | `.claude/rules/backend-api.md` | Controllers, middleware, validators, SignalR, ApiEnvelope |
 | `.claude/rules/workers.md` | `BackgroundService` pattern (scope-per-iteration, error backoff) |
-| `.claude/rules/dashboard.md` | React 19 + Vite 7 + Tailwind 4 + Bun conventions, SignalR client, lazy routes |
+| `.claude/rules/dashboard.md` | React 19 + Vite 8 + Tailwind 4 + TanStack Query + Bun conventions, SignalR client, lazy routes |
 | `.claude/rules/sdk.md` | `WebhookEngine.Sdk` public surface, `WebhookVerifier`, NuGet metadata |
 | `.claude/rules/testing.md` | xUnit + Testcontainers (no mocked DB), race-condition tests, naming |
 | `.claude/rules/context7.md` | When and how to use Context7 for library / framework docs |

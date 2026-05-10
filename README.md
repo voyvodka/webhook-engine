@@ -28,7 +28,7 @@ Self-hosted webhook delivery platform with reliable at-least-once delivery, expo
 |---|---|
 | Backend | C# / .NET 10, ASP.NET Core, Entity Framework Core |
 | Database | PostgreSQL 17+ |
-| Frontend | React 19, TypeScript 5.9, Vite 7, Tailwind CSS 4, Recharts 3, Lucide React |
+| Frontend | React 19, TypeScript 6, Vite 8, Tailwind CSS 4, TanStack Query 5, Recharts 3, Lucide React |
 | Real-time | SignalR |
 | Testing | xUnit, FluentAssertions, NSubstitute, Testcontainers |
 | Logging | Serilog (structured JSON) |
