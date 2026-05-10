@@ -122,6 +122,21 @@ public class EndpointRepository
 
     public async Task DeleteAsync(Guid appId, Guid id, CancellationToken ct = default)
     {
+        // ExecuteDeleteAsync isn't translated by the InMemory provider used in
+        // API integration tests; fall back to a tracked-entity remove there
+        // (mirrors EventTypeRepository.ArchiveAsync). Production runs Postgres
+        // and stays on the bulk-delete path.
+        if (string.Equals(_dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal))
+        {
+            var endpoint = await _dbContext.Endpoints.FirstOrDefaultAsync(e => e.AppId == appId && e.Id == id, ct);
+            if (endpoint is null)
+                return;
+
+            _dbContext.Endpoints.Remove(endpoint);
+            await _dbContext.SaveChangesAsync(ct);
+            return;
+        }
+
         await _dbContext.Endpoints
             .Where(e => e.AppId == appId && e.Id == id)
             .ExecuteDeleteAsync(ct);
