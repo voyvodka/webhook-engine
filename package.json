@@ -1,0 +1,8 @@
+{
+  "name": "webhook-engine",
+  "private": true,
+  "workspaces": [
+    "src/dashboard",
+    "packages/*"
+  ]
+}

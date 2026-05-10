@@ -81,7 +81,8 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      - name: Install dependencies
+      - name: Install dependencies (workspace root)
+        working-directory: .
         run: bun install --frozen-lockfile
 
       - name: Lint

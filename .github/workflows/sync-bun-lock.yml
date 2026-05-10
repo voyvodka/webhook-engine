@@ -1,11 +1,12 @@
 name: Sync bun.lock for Dependabot
 
 # Dependabot only knows about npm — when it bumps a package in
-# src/dashboard/package.json it does NOT regenerate src/dashboard/bun.lock,
-# and CI's `bun install --frozen-lockfile` then fails with a lockfile drift.
-# This workflow auto-runs `bun install` on Dependabot PRs that touch the
-# dashboard's package.json and commits the refreshed lockfile back to the
-# PR branch so CI can go green without a manual sync commit.
+# src/dashboard/package.json it does NOT regenerate the workspace-root
+# bun.lock, and CI's `bun install --frozen-lockfile` then fails with a
+# lockfile drift. This workflow auto-runs `bun install` from the workspace
+# root on Dependabot PRs that touch the dashboard's package.json and
+# commits the refreshed lockfile back to the PR branch so CI can go green
+# without a manual sync commit.
 #
 # Trigger is `pull_request_target` so the workflow runs with write access
 # to the base repo (needed to push the lockfile back); we still gate on
@@ -40,12 +41,10 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      - name: Regenerate lockfile
-        working-directory: src/dashboard
+      - name: Regenerate lockfile (workspace root)
         run: bun install --no-save
 
       - name: Commit and push if lockfile changed
-        working-directory: src/dashboard
         run: |
           if git diff --quiet bun.lock; then
             echo "::notice::bun.lock is already in sync with package.json"
