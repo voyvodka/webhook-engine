@@ -1,29 +1,130 @@
+import { useMemo, useReducer, useCallback } from "react";
 import type { JSX } from "react";
-import type { EndpointManagerProps } from "./types.js";
+import type { EndpointManagerProps, PortalCapability, PortalEndpointSummary, PortalEndpointDetail } from "./types.js";
+import { createPortalClient } from "./api/createPortalClient.js";
+import { EndpointList } from "./components/EndpointList.js";
+import { EndpointEditor } from "./components/EndpointEditor.js";
+import type { EditorMode } from "./components/EndpointEditor.js";
+
+interface ManagerState {
+  view: "list" | "editor";
+  editorMode: EditorMode;
+  selectedEndpoint: PortalEndpointDetail | null;
+  /** Bump this to force the list to refetch. */
+  listKey: number;
+}
+
+type ManagerAction =
+  | { type: "OPEN_NEW" }
+  | { type: "OPEN_EDIT"; endpoint: PortalEndpointDetail }
+  | { type: "CLOSE_EDITOR"; action: "saved" | "deleted" | "cancelled" };
+
+function managerReducer(state: ManagerState, action: ManagerAction): ManagerState {
+  switch (action.type) {
+    case "OPEN_NEW":
+      return { ...state, view: "editor", editorMode: "create", selectedEndpoint: null };
+    case "OPEN_EDIT":
+      return {
+        ...state,
+        view: "editor",
+        editorMode: "edit",
+        selectedEndpoint: action.endpoint,
+      };
+    case "CLOSE_EDITOR":
+      return {
+        ...state,
+        view: "list",
+        selectedEndpoint: null,
+        // Bump listKey so the list re-fetches after a save or delete.
+        listKey: action.action !== "cancelled" ? state.listKey + 1 : state.listKey,
+      };
+  }
+}
+
+const DEFAULT_CAPABILITIES: PortalCapability[] = ["endpoints:read"];
 
 export function EndpointManager(props: EndpointManagerProps): JSX.Element {
-  void props; // referenced to keep noUnusedParameters happy
+  const {
+    baseUrl,
+    token,
+    appId,
+    capabilities = DEFAULT_CAPABILITIES,
+    className,
+    onError,
+    onUnauthorized,
+  } = props;
+
+  const client = useMemo(
+    () =>
+      createPortalClient({
+        baseUrl,
+        token,
+        onError,
+        onUnauthorized,
+      }),
+    [baseUrl, token, onError, onUnauthorized],
+  );
+
+  const [state, dispatch] = useReducer(managerReducer, {
+    view: "list",
+    editorMode: "create",
+    selectedEndpoint: null,
+    listKey: 0,
+  });
+
+  const handleEditEndpoint = useCallback(
+    async (summary: PortalEndpointSummary) => {
+      try {
+        const detail = await client.getEndpoint(summary.id);
+        dispatch({ type: "OPEN_EDIT", endpoint: detail });
+      } catch {
+        // Fall back to a partial detail from the summary if getEndpoint fails.
+        const fallback: PortalEndpointDetail = {
+          id: summary.id,
+          url: summary.url,
+          description: summary.description,
+          isActive: summary.isActive,
+          hasSecretOverride: summary.hasSecretOverride,
+          filterEventTypes: summary.filterEventTypes,
+          customHeaders: {},
+          createdAt: summary.createdAt,
+          updatedAt: summary.createdAt,
+        };
+        dispatch({ type: "OPEN_EDIT", endpoint: fallback });
+      }
+    },
+    [client],
+  );
+
+  const handleCloseEditor = useCallback(
+    (action: "saved" | "deleted" | "cancelled") => {
+      dispatch({ type: "CLOSE_EDITOR", action });
+    },
+    [],
+  );
+
   return (
-    <div
-      style={{
-        padding: "1.5rem",
-        borderRadius: "0.75rem",
-        border: "1px solid rgba(127, 127, 127, 0.25)",
-        fontFamily: "system-ui, -apple-system, sans-serif",
-        fontSize: "0.875rem",
-        lineHeight: 1.5,
-        color: "rgba(120, 120, 120, 0.9)"
-      }}
-    >
-      <strong style={{ display: "block", marginBottom: "0.5rem", color: "rgba(80, 80, 80, 0.95)" }}>
-        WebhookEngine portal
-      </strong>
-      <span>
-        The interactive components (endpoint list, editor, tester, attempt history) ship in B1
-        Step 8 of the WebhookEngine roadmap. This package is currently a placeholder — install it
-        early to lock the import path; it will gain the real UI in{" "}
-        <code>portal-v0.1.0</code>.
-      </span>
+    <div className={`whe-portal ${className ?? ""}`}>
+      {state.view === "list" && (
+        <EndpointList
+          key={state.listKey}
+          client={client}
+          appId={appId}
+          capabilities={capabilities}
+          onEditEndpoint={(summary) => void handleEditEndpoint(summary)}
+          onNewEndpoint={() => dispatch({ type: "OPEN_NEW" })}
+        />
+      )}
+
+      {state.view === "editor" && (
+        <EndpointEditor
+          client={client}
+          capabilities={capabilities}
+          mode={state.editorMode}
+          endpoint={state.selectedEndpoint ?? undefined}
+          onClose={handleCloseEditor}
+        />
+      )}
     </div>
   );
 }

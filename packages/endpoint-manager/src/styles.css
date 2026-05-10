@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@source "../src/**/*.{ts,tsx}";
+
+/* Theme tokens — consumers override at :root or .whe-portal scope */
+@theme {
+  --color-whe-bg-0: #09090b;
+  --color-whe-bg-1: #0f0f12;
+  --color-whe-bg-2: #18181b;
+  --color-whe-bg-3: #27272a;
+  --color-whe-text-primary: #fafafa;
+  --color-whe-text-secondary: #a1a1aa;
+  --color-whe-text-muted: #71717a;
+  --color-whe-border: #27272a;
+  --color-whe-border-subtle: #1e1e22;
+  --color-whe-accent: #06b6d4;
+  --color-whe-accent-soft: rgb(6 182 212 / 0.15);
+  --color-whe-success: #22c55e;
+  --color-whe-success-soft: rgb(34 197 94 / 0.15);
+  --color-whe-danger: #ef4444;
+  --color-whe-danger-soft: rgb(239 68 68 / 0.15);
+  --color-whe-warning: #f59e0b;
+  --color-whe-warning-soft: rgb(245 158 11 / 0.15);
+}
+
+/* Scope all package styles under .whe-portal so consumer page styles are not touched */
+.whe-portal {
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  color: var(--color-whe-text-primary);
+}
