@@ -123,10 +123,9 @@ public class PortalEndpointsControllerTests : IClassFixture<PortalEndpointsContr
         var token = MintFullToken(appId);
         using var client = CreateClient(token);
 
-        var response = await client.PutAsJsonAsync($"{PortalRoot}/endpoints/{endpointId}", new
-        {
-            description = "updated by portal"
-        });
+        var response = await client.PatchAsync(
+            $"{PortalRoot}/endpoints/{endpointId}",
+            JsonContent.Create(new { description = "updated by portal" }));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -309,7 +308,9 @@ public class PortalEndpointsControllerTests : IClassFixture<PortalEndpointsContr
         using var client = CreateClient(tokenA);
 
         var body = new { url = "https://example.com/new" };
-        var response = await client.PutAsJsonAsync($"{PortalRoot}/endpoints/{otherEndpointId}", body);
+        var response = await client.PatchAsync(
+            $"{PortalRoot}/endpoints/{otherEndpointId}",
+            JsonContent.Create(body));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ReadErrorCodeAsync(response)).Should().Be("PORTAL_NOT_FOUND");

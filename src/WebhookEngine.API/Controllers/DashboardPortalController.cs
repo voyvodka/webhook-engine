@@ -157,8 +157,11 @@ public class DashboardPortalController : ControllerBase
 
         var beforeSnapshot = BuildAuditSnapshot(application);
 
+        // Disable revokes the auth surface (signing key + rotated-at) but
+        // preserves the operator-curated CORS allowlist so a re-enable
+        // doesn't lose the origin configuration. Operators wanting a full
+        // wipe can clear origins explicitly via PUT /portal/origins.
         application.PortalSigningKey = null;
-        application.AllowedPortalOriginsJson = null;
         application.PortalRotatedAt = null;
 
         await _applicationRepository.UpdateAsync(application, ct);

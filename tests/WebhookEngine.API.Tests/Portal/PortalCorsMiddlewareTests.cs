@@ -137,6 +137,36 @@ public class PortalCorsMiddlewareTests : IClassFixture<PortalCorsMiddlewareTests
         response.Headers.Contains("Access-Control-Allow-Origin").Should().BeFalse();
     }
 
+    [Fact]
+    public async Task Preflight_Deny_Decision_Is_Cached_Within_Ttl()
+    {
+        // Regression for the deny-cache fix: previously every disallowed
+        // OPTIONS bypassed any cache and re-scanned the portal-enabled apps.
+        // Now both allow and deny outcomes are cached for LookupCacheTtlSeconds,
+        // so a first preflight that returns 403 must keep returning 403 even
+        // if the DB starts allowing the origin within the TTL window. Uses
+        // a unique origin so the assertion isn't polluted by other tests
+        // sharing the IClassFixture's MemoryCache.
+        const string uniqueOrigin = "https://deny-cache-fix.example";
+
+        await SeedAppAsync(allowedOriginsJson: "[\"https://other.example\"]");
+        var first = await SendAsync(HttpMethod.Options, PingPath, uniqueOrigin);
+        first.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        // Mutate DB to now allow the origin — without invalidating the CORS
+        // cache the cached deny decision must still win until TTL elapses.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<WebhookDbContext>();
+            var app = await db.Applications.FirstAsync();
+            app.AllowedPortalOriginsJson = $"[\"{uniqueOrigin}\"]";
+            await db.SaveChangesAsync();
+        }
+
+        var second = await SendAsync(HttpMethod.Options, PingPath, uniqueOrigin);
+        second.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     private async Task<HttpResponseMessage> SendAsync(
         HttpMethod method,
         string path,

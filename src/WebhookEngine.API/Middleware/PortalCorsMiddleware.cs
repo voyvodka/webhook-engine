@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
+using WebhookEngine.Core.Options;
 using WebhookEngine.Core.Utilities;
 using WebhookEngine.Infrastructure.Repositories;
 using WebhookEngine.Infrastructure.Services;
@@ -76,8 +79,27 @@ public class PortalCorsMiddleware
 
     private static async Task HandlePreflightAsync(HttpContext context, string origin)
     {
-        var appRepo = context.RequestServices.GetRequiredService<ApplicationRepository>();
-        var allowed = await appRepo.AnyAllowsPortalOriginAsync(origin, context.RequestAborted);
+        // Deny-cache the preflight decision so an attacker can't trigger an
+        // unbounded per-app candidate scan via OPTIONS spam (browsers don't
+        // cache rejected preflights, so the absence of a server-side cache
+        // turned every disallowed OPTIONS into a fresh DB sweep). Both
+        // allow and deny outcomes are cached for the same TTL as the
+        // signing-key lookup; eventual consistency on origin updates is
+        // bounded by that TTL, mirroring the existing per-app cache.
+        var cache = context.RequestServices.GetRequiredService<IMemoryCache>();
+        var options = context.RequestServices.GetRequiredService<IOptions<PortalAuthOptions>>().Value;
+        var cacheKey = $"portal:cors:{origin.ToLowerInvariant()}";
+
+        if (!cache.TryGetValue<bool>(cacheKey, out var allowed))
+        {
+            var appRepo = context.RequestServices.GetRequiredService<ApplicationRepository>();
+            allowed = await appRepo.AnyAllowsPortalOriginAsync(origin, context.RequestAborted);
+            cache.Set(cacheKey, allowed, new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(options.LookupCacheTtlSeconds),
+                Size = 1
+            });
+        }
 
         var logger = context.RequestServices
             .GetRequiredService<ILoggerFactory>()

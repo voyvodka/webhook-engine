@@ -117,8 +117,11 @@ public class DashboardPortalControllerTests : IClassFixture<TestWebApplicationFa
     }
 
     [Fact]
-    public async Task Disable_Clears_SigningKey_And_Origins()
+    public async Task Disable_Clears_SigningKey_But_Preserves_Origins()
     {
+        // Operator behaviour: disable revokes auth (signing key + rotated-at)
+        // but keeps the CORS allowlist so re-enable doesn't force the
+        // operator to re-curate origins. Explicit clear is via /portal/origins.
         await ResetDatabaseAsync();
         var (appId, _) = await SeedAppAsync(
             portalEnabled: true,
@@ -132,8 +135,8 @@ public class DashboardPortalControllerTests : IClassFixture<TestWebApplicationFa
         {
             var app = await db.Applications.AsNoTracking().FirstAsync(a => a.Id == appId);
             app.PortalSigningKey.Should().BeNull();
-            app.AllowedPortalOriginsJson.Should().BeNull();
             app.PortalRotatedAt.Should().BeNull();
+            app.AllowedPortalOriginsJson.Should().Be("[\"https://app.acme.com\"]");
         });
     }
 

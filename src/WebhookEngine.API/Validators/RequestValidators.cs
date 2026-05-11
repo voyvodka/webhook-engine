@@ -107,8 +107,7 @@ public class CreateEndpointRequestValidator : AbstractValidator<CreateEndpointRe
     {
         RuleFor(x => x.Url)
             .NotEmpty()
-            .Must(urlPolicy.IsValid)
-            .WithMessage(urlPolicy.ValidationMessage)
+            .EndpointUrlSyntax(urlPolicy)
             .DependentRules(() =>
             {
                 // Resolve the host eagerly so an unreachable webhook target fails the
@@ -122,22 +121,19 @@ public class CreateEndpointRequestValidator : AbstractValidator<CreateEndpointRe
             });
 
         RuleFor(x => x.Description)
-            .MaximumLength(500)
+            .EndpointDescription()
             .When(x => x.Description is not null);
 
         RuleFor(x => x.TransformExpression)
-            .MaximumLength(4096)
-            .When(x => x.TransformExpression is not null)
-            .WithMessage("TransformExpression must not exceed 4096 characters.");
+            .EndpointTransformExpression()
+            .When(x => x.TransformExpression is not null);
 
         RuleFor(x => x.CustomHeaders)
-            .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
-            .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
+            .EndpointCustomHeaders()
             .When(x => x.CustomHeaders is not null);
 
         RuleFor(x => x.AllowedIps)
-            .Must(list => list!.All(cidr => IpAllowlistMatcher.TryParseCidr(cidr, out _)))
-            .WithMessage("AllowedIps must contain valid CIDR notations (e.g. \"203.0.113.0/24\").")
+            .EndpointAllowedIpsCidrs()
             .When(x => x.AllowedIps is { Count: > 0 });
     }
 }
@@ -147,9 +143,8 @@ public class UpdateEndpointRequestValidator : AbstractValidator<UpdateEndpointRe
     public UpdateEndpointRequestValidator(EndpointUrlPolicy urlPolicy)
     {
         RuleFor(x => x.Url)
-            .Must(urlPolicy.IsValid)
+            .EndpointUrlSyntax(urlPolicy)
             .When(x => x.Url is not null)
-            .WithMessage(urlPolicy.ValidationMessage)
             .DependentRules(() =>
             {
                 RuleFor(x => x.Url!).CustomAsync(async (url, ctx, ct) =>
@@ -160,22 +155,19 @@ public class UpdateEndpointRequestValidator : AbstractValidator<UpdateEndpointRe
             });
 
         RuleFor(x => x.Description)
-            .MaximumLength(500)
+            .EndpointDescription()
             .When(x => x.Description is not null);
 
         RuleFor(x => x.TransformExpression)
-            .MaximumLength(4096)
-            .When(x => x.TransformExpression is not null)
-            .WithMessage("TransformExpression must not exceed 4096 characters.");
+            .EndpointTransformExpression()
+            .When(x => x.TransformExpression is not null);
 
         RuleFor(x => x.CustomHeaders)
-            .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
-            .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
+            .EndpointCustomHeaders()
             .When(x => x.CustomHeaders is not null);
 
         RuleFor(x => x.AllowedIps)
-            .Must(list => list!.All(cidr => IpAllowlistMatcher.TryParseCidr(cidr, out _)))
-            .WithMessage("AllowedIps must contain valid CIDR notations (e.g. \"203.0.113.0/24\").")
+            .EndpointAllowedIpsCidrs()
             .When(x => x.AllowedIps is { Count: > 0 });
 
         RuleFor(x => x)
@@ -200,8 +192,7 @@ public class DashboardCreateEndpointRequestValidator : AbstractValidator<Dashboa
 
         RuleFor(x => x.Url)
             .NotEmpty()
-            .Must(urlPolicy.IsValid)
-            .WithMessage(urlPolicy.ValidationMessage)
+            .EndpointUrlSyntax(urlPolicy)
             .DependentRules(() =>
             {
                 RuleFor(x => x.Url).CustomAsync(async (url, ctx, ct) =>
@@ -212,22 +203,19 @@ public class DashboardCreateEndpointRequestValidator : AbstractValidator<Dashboa
             });
 
         RuleFor(x => x.Description)
-            .MaximumLength(500)
+            .EndpointDescription()
             .When(x => x.Description is not null);
 
         RuleFor(x => x.TransformExpression)
-            .MaximumLength(4096)
-            .When(x => x.TransformExpression is not null)
-            .WithMessage("TransformExpression must not exceed 4096 characters.");
+            .EndpointTransformExpression()
+            .When(x => x.TransformExpression is not null);
 
         RuleFor(x => x.CustomHeaders)
-            .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
-            .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
+            .EndpointCustomHeaders()
             .When(x => x.CustomHeaders is not null);
 
         RuleFor(x => x.AllowedIps)
-            .Must(list => list!.All(cidr => IpAllowlistMatcher.TryParseCidr(cidr, out _)))
-            .WithMessage("AllowedIps must contain valid CIDR notations (e.g. \"203.0.113.0/24\").")
+            .EndpointAllowedIpsCidrs()
             .When(x => x.AllowedIps is { Count: > 0 });
     }
 }
@@ -237,9 +225,8 @@ public class DashboardUpdateEndpointRequestValidator : AbstractValidator<Dashboa
     public DashboardUpdateEndpointRequestValidator(EndpointUrlPolicy urlPolicy)
     {
         RuleFor(x => x.Url)
-            .Must(urlPolicy.IsValid)
+            .EndpointUrlSyntax(urlPolicy)
             .When(x => x.Url is not null)
-            .WithMessage(urlPolicy.ValidationMessage)
             .DependentRules(() =>
             {
                 RuleFor(x => x.Url!).CustomAsync(async (url, ctx, ct) =>
@@ -250,22 +237,19 @@ public class DashboardUpdateEndpointRequestValidator : AbstractValidator<Dashboa
             });
 
         RuleFor(x => x.Description)
-            .MaximumLength(500)
+            .EndpointDescription()
             .When(x => x.Description is not null);
 
         RuleFor(x => x.TransformExpression)
-            .MaximumLength(4096)
-            .When(x => x.TransformExpression is not null)
-            .WithMessage("TransformExpression must not exceed 4096 characters.");
+            .EndpointTransformExpression()
+            .When(x => x.TransformExpression is not null);
 
         RuleFor(x => x.CustomHeaders)
-            .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
-            .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
+            .EndpointCustomHeaders()
             .When(x => x.CustomHeaders is not null);
 
         RuleFor(x => x.AllowedIps)
-            .Must(list => list!.All(cidr => IpAllowlistMatcher.TryParseCidr(cidr, out _)))
-            .WithMessage("AllowedIps must contain valid CIDR notations (e.g. \"203.0.113.0/24\").")
+            .EndpointAllowedIpsCidrs()
             .When(x => x.AllowedIps is { Count: > 0 });
 
         RuleFor(x => x)

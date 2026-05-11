@@ -157,7 +157,7 @@ public class PortalEndpointsController : ControllerBase
             ApiEnvelope.Success(HttpContext, created.ToPortalDetail()));
     }
 
-    [HttpPut("endpoints/{endpointId:guid}")]
+    [HttpPatch("endpoints/{endpointId:guid}")]
     public async Task<IActionResult> Update(
         Guid endpointId,
         [FromBody] PortalUpdateEndpointRequest request,

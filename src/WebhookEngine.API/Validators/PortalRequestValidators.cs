@@ -10,8 +10,7 @@ public class PortalCreateEndpointRequestValidator : AbstractValidator<PortalCrea
     {
         RuleFor(x => x.Url)
             .NotEmpty()
-            .Must(urlPolicy.IsValid)
-            .WithMessage(urlPolicy.ValidationMessage)
+            .EndpointUrlSyntax(urlPolicy)
             .DependentRules(() =>
             {
                 RuleFor(x => x.Url).CustomAsync(async (url, ctx, ct) =>
@@ -22,19 +21,15 @@ public class PortalCreateEndpointRequestValidator : AbstractValidator<PortalCrea
             });
 
         RuleFor(x => x.Description)
-            .MaximumLength(500)
+            .EndpointDescription()
             .When(x => x.Description is not null);
 
         RuleFor(x => x.CustomHeaders)
-            .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
-            .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
+            .EndpointCustomHeaders()
             .When(x => x.CustomHeaders is not null);
 
         RuleFor(x => x.SecretOverride)
-            .MinimumLength(32)
-            .MaximumLength(128)
-            .Must(s => s!.StartsWith("whsec_", StringComparison.Ordinal))
-            .WithMessage("SecretOverride must start with the 'whsec_' prefix and be at least 32 characters. Use the portal's rotate-secret action to generate one rather than typing a password.")
+            .EndpointSecretOverride()
             .When(x => x.SecretOverride is not null);
     }
 }
@@ -44,9 +39,8 @@ public class PortalUpdateEndpointRequestValidator : AbstractValidator<PortalUpda
     public PortalUpdateEndpointRequestValidator(EndpointUrlPolicy urlPolicy)
     {
         RuleFor(x => x.Url)
-            .Must(urlPolicy.IsValid)
+            .EndpointUrlSyntax(urlPolicy)
             .When(x => x.Url is not null)
-            .WithMessage(urlPolicy.ValidationMessage)
             .DependentRules(() =>
             {
                 RuleFor(x => x.Url!).CustomAsync(async (url, ctx, ct) =>
@@ -57,19 +51,15 @@ public class PortalUpdateEndpointRequestValidator : AbstractValidator<PortalUpda
             });
 
         RuleFor(x => x.Description)
-            .MaximumLength(500)
+            .EndpointDescription()
             .When(x => x.Description is not null);
 
         RuleFor(x => x.CustomHeaders)
-            .Must(headers => CustomHeaderPolicy.Validate(headers) is null)
-            .WithMessage(x => CustomHeaderPolicy.Validate(x.CustomHeaders) ?? "Invalid custom headers.")
+            .EndpointCustomHeaders()
             .When(x => x.CustomHeaders is not null);
 
         RuleFor(x => x.SecretOverride)
-            .MinimumLength(32)
-            .MaximumLength(128)
-            .Must(s => s!.StartsWith("whsec_", StringComparison.Ordinal))
-            .WithMessage("SecretOverride must start with the 'whsec_' prefix and be at least 32 characters. Use the portal's rotate-secret action to generate one rather than typing a password.")
+            .EndpointSecretOverride()
             .When(x => x.SecretOverride is not null);
 
         RuleFor(x => x)
