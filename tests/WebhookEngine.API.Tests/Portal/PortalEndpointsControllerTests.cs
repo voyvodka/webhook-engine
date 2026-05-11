@@ -338,6 +338,137 @@ public class PortalEndpointsControllerTests : IClassFixture<PortalEndpointsContr
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
+    // ── Capability claim shape (defense-in-depth) ──────
+
+    [Fact]
+    public async Task Portal_Token_Without_Any_Capabilities_Cannot_Access_Endpoints()
+    {
+        // Silent regression guard: if a future refactor accidentally treats
+        // a missing `capabilities` claim as full access (e.g. by collapsing
+        // the HashSet check to "is null OR contains"), every read path would
+        // open up. This test pins the contract that absence == 403.
+        await ResetDatabaseAsync();
+        var (appId, _) = await SeedAppAsync();
+        var token = MintToken(appId); // zero capabilities
+        using var client = CreateClient(token);
+
+        var response = await client.GetAsync($"{PortalRoot}/endpoints");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ReadErrorCodeAsync(response)).Should().Be("PORTAL_INSUFFICIENT_CAPABILITY");
+    }
+
+    // ── Cross-tenant: every mutating route is its own CAS surface ──
+
+    [Fact]
+    public async Task Portal_Cannot_Delete_Other_Apps_Endpoint()
+    {
+        // The 2-arg app-scoped GetByIdAsync inside Delete is the only check
+        // standing between this and a quiet cross-tenant wipe — without it
+        // EndpointRepository.DeleteAsync would happily 0-row the request and
+        // surface as a 204 No Content (silent leak).
+        await ResetDatabaseAsync();
+        var (appA, _) = await SeedAppAsync(name: "tenant-A");
+        var (_, otherEndpointId) = await SeedAppAndEndpointAsync(name: "tenant-B");
+
+        var tokenA = MintFullToken(appA);
+        using var client = CreateClient(tokenA);
+
+        var response = await client.DeleteAsync($"{PortalRoot}/endpoints/{otherEndpointId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ReadErrorCodeAsync(response)).Should().Be("PORTAL_NOT_FOUND");
+
+        // Belt-and-braces: the row must still exist in tenant B's slice.
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<WebhookDbContext>();
+        (await db.Endpoints.AsNoTracking().AnyAsync(e => e.Id == otherEndpointId))
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Portal_Cannot_Enable_Other_Apps_Endpoint()
+    {
+        await ResetDatabaseAsync();
+        var (appA, _) = await SeedAppAsync(name: "tenant-A");
+        var (_, otherEndpointId) = await SeedAppAndEndpointAsync(name: "tenant-B");
+
+        var tokenA = MintFullToken(appA);
+        using var client = CreateClient(tokenA);
+
+        var response = await client.PostAsync(
+            $"{PortalRoot}/endpoints/{otherEndpointId}/enable",
+            content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ReadErrorCodeAsync(response)).Should().Be("PORTAL_NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task Portal_Cannot_Disable_Other_Apps_Endpoint()
+    {
+        await ResetDatabaseAsync();
+        var (appA, _) = await SeedAppAsync(name: "tenant-A");
+        var (_, otherEndpointId) = await SeedAppAndEndpointAsync(name: "tenant-B");
+
+        var tokenA = MintFullToken(appA);
+        using var client = CreateClient(tokenA);
+
+        var response = await client.PostAsync(
+            $"{PortalRoot}/endpoints/{otherEndpointId}/disable",
+            content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ReadErrorCodeAsync(response)).Should().Be("PORTAL_NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task Portal_Cannot_Test_Other_Apps_Endpoint()
+    {
+        // /test fires a real outbound HTTP POST (in production), so a
+        // cross-tenant probe here would let tenant A trigger arbitrary
+        // requests through tenant B's signing key. The 404 must precede any
+        // delivery dispatch — verified by asserting the EndpointTester fake
+        // never received a call.
+        await ResetDatabaseAsync();
+        // Shared NSubstitute fake survives across tests in the class fixture;
+        // clear any prior call history so DidNotReceive() reflects this test.
+        _factory.EndpointTester.ClearReceivedCalls();
+        var (appA, _) = await SeedAppAsync(name: "tenant-A");
+        var (_, otherEndpointId) = await SeedAppAndEndpointAsync(name: "tenant-B");
+
+        var tokenA = MintFullToken(appA);
+        using var client = CreateClient(tokenA);
+
+        var body = new { eventType = "test.event", payload = new { } };
+        var response = await client.PostAsJsonAsync(
+            $"{PortalRoot}/endpoints/{otherEndpointId}/test",
+            body);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ReadErrorCodeAsync(response)).Should().Be("PORTAL_NOT_FOUND");
+        await _factory.EndpointTester.DidNotReceive()
+            .ExecuteAsync(Arg.Any<EndpointTestContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Portal_Cannot_Read_Attempts_Of_Other_Apps_Endpoint()
+    {
+        await ResetDatabaseAsync();
+        var (appA, _) = await SeedAppAsync(name: "tenant-A");
+        var (appB, otherEndpointId) = await SeedAppAndEndpointAsync(name: "tenant-B");
+        await SeedAttemptsAsync(appB, otherEndpointId, count: 2);
+
+        var tokenA = MintFullToken(appA);
+        using var client = CreateClient(tokenA);
+
+        var response = await client.GetAsync(
+            $"{PortalRoot}/endpoints/{otherEndpointId}/attempts");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ReadErrorCodeAsync(response)).Should().Be("PORTAL_NOT_FOUND");
+    }
+
     // ── Plumbing ──────────────────────────────────────
 
     private HttpClient CreateClient(string bearerToken)
