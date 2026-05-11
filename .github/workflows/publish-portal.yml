@@ -1,0 +1,84 @@
+name: Publish Portal Package
+
+on:
+  push:
+    tags:
+      - "portal-v*"
+
+permissions:
+  contents: read
+  id-token: write   # required for npm provenance / sigstore attestation
+
+env:
+  BUN_VERSION: "1.2.x"
+  NODE_VERSION: "20"
+
+jobs:
+  publish:
+    name: Publish @webhookengine/endpoint-manager
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      # setup-node is required alongside setup-bun because `npm publish`
+      # is the canonical npm registry client; bun's npm publish path does not
+      # reliably emit sigstore provenance attestations on GitHub-hosted runners.
+      - name: Setup Node (for npm publish)
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies (workspace root)
+        run: bun install --frozen-lockfile
+
+      - name: Pre-publish guard — typecheck + lint + test
+        working-directory: packages/endpoint-manager
+        run: |
+          bun run typecheck
+          bun run lint
+          bun run test
+
+      - name: Build package
+        working-directory: packages/endpoint-manager
+        run: bun run build
+
+      - name: Verify build artifacts
+        working-directory: packages/endpoint-manager
+        run: |
+          test -f dist/index.js   || (echo "::error::dist/index.js missing";   exit 1)
+          test -f dist/index.d.ts || (echo "::error::dist/index.d.ts missing"; exit 1)
+          test -f dist/style.css  || (echo "::error::dist/style.css missing";  exit 1)
+          ls -la dist/
+
+      - name: Set package version from tag
+        working-directory: packages/endpoint-manager
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#portal-v}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Verify package not marked private before publish
+        working-directory: packages/endpoint-manager
+        run: |
+          PRIVATE=$(node -p "require('./package.json').private || false")
+          if [ "$PRIVATE" = "true" ]; then
+            echo "::error::package.json carries private:true — cannot publish."
+            echo "::error::Flip private:false (or remove the field) on the release branch before pushing portal-v* tags."
+            exit 1
+          fi
+
+      - name: Publish to npm
+        working-directory: packages/endpoint-manager
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acme SaaS — Webhook settings (portal-host sample)</title>
+    <style>
+      /*
+       * Host-brand theme override: demonstrate that the component's CSS
+       * custom properties can be overridden at the page level without
+       * touching the @webhookengine/endpoint-manager package.
+       *
+       * Full token list: see packages/endpoint-manager/src/styles.css
+       */
+      :root {
+        --color-whe-accent: #7c3aed;
+        --color-whe-accent-soft: rgb(124 58 237 / 0.15);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

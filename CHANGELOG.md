@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+- **npm publish workflow** (`publish-portal.yml`). New `.github/workflows/publish-portal.yml` fires on `portal-v*` tags and publishes `@webhookengine/endpoint-manager` to npmjs.com with sigstore provenance (`--provenance`). Includes a pre-publish guard that fails with a human-readable error if `private:true` is still set in `package.json`, preventing accidental publishes from dev branches.
+- **`samples/portal-host/` reference application.** Standalone Vite + React app demonstrating host-SaaS integration with `<EndpointManager />`. Uses a browser-native Web Crypto HS256 mint (`mint-token.ts`) and an in-memory fetch shim (`mock-fetch.ts`) — no engine instance required to run. Shows prop wiring, CSS custom-property theme overrides, and the server-side token-mint pattern.
+- **`docs/PORTAL.md` Section 5 — Component Usage.** Replaced the "coming soon" placeholder with a full quickstart: reference to `samples/portal-host/`, a server-side `jose` + Express JWT mint snippet, a React-side `<EndpointManager />` embedding snippet, and CSS theme override instructions.
+- **`docs/RELEASE.md` Section 6 — Portal package release.** Documents the `portal-v*` tag scheme, `NPM_TOKEN` secret setup steps, sigstore provenance setup, and the pre-flight checklist to run before pushing a release tag.
+
 ## [0.2.0] - 2026-05-10
 
 The first minor release. Adds an embeddable customer-facing portal: SaaS operators can now hand customers a self-service `<EndpointManager />` React component that runs against a narrowed `/api/v1/portal/*` API surface, scoped per-application via short-lived HS256 JWTs minted by the host SaaS backend. The engine never mints these tokens — it only verifies them — and the per-app signing key is generated, rotated, and revoked from the operator dashboard. No breaking changes to the existing v1 surface; the `v1` route prefix and Standard Webhooks signature header names are preserved.

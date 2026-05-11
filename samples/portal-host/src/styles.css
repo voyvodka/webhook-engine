@@ -1,0 +1,46 @@
+:root {
+  /* Host SaaS theme override — lighter accent + brand colour.
+   * These custom properties are declared in the host page, not inside
+   * the @webhookengine/endpoint-manager package, so they safely override
+   * the component's defaults without touching the package itself. */
+  --color-whe-accent: #7c3aed;
+  --color-whe-accent-soft: rgb(124 58 237 / 0.15);
+}
+
+body {
+  margin: 0;
+  background: #0a0a0c;
+  color: #e5e5e5;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.page {
+  max-width: 960px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+
+.page header {
+  margin-bottom: 2rem;
+}
+
+.page h1 {
+  font-size: 1.5rem;
+  margin: 0 0 0.5rem;
+}
+
+.page p {
+  color: #a1a1aa;
+  margin: 0;
+}
+
+.page code {
+  background: #18181b;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+}
+
+.loading {
+  margin-top: 2rem;
+}
