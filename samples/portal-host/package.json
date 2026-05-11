@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@webhookengine/endpoint-manager": "workspace:*",
+    "@webhookengine/endpoint-manager": "*",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
