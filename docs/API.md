@@ -866,6 +866,201 @@ The dashboard treats `EndpointHealthChanged` as a cache-invalidation signal — 
 
 ---
 
+### 3.8 Portal API (Customer-Facing JWT) — v0.2.0
+
+The portal API is a narrowed mirror of the public endpoint surface, scoped to a single application via a short-lived JWT minted by the host SaaS. It powers the embeddable `<EndpointManager />` React component (`@webhookengine/endpoint-manager` on npm). The engine **only verifies** these tokens — it never mints them. Per-application signing key, allowed CORS origins, and capability set are managed by the operator from the dashboard.
+
+For host-side integration (token mint, CSS theming, sample app), see `docs/PORTAL.md`. This section is the wire reference.
+
+#### Authentication
+
+Every request to `/api/v1/portal/*` (except `OPTIONS` preflight) requires a Bearer JWT in `Authorization: Bearer <token>`.
+
+- **Algorithm:** HS256 only. `alg=none` and HS384/HS512 are rejected with `PORTAL_AUTH_INVALID_SIGNATURE`.
+- **Signing key:** per-application `PortalSigningKey` (32 bytes minimum). Generated at portal-enable time; never returned by the engine after creation. Rotated via the dashboard rotate action.
+- **Lifetime cap:** `exp - nbf <= 15 minutes` (configurable via `WebhookEngine:PortalAuth:MaxLifetimeMinutes`). Tokens with longer requested lifetimes are rejected as `PORTAL_AUTH_LIFETIME_TOO_LONG` even when currently valid.
+- **Clock skew:** ±30 s (`PortalAuth:ClockSkewSeconds`).
+- **Token size cap:** 8 KiB (`PortalAuth:MaxTokenSizeBytes`). Larger payloads are rejected before parsing.
+- **Required claims:** `appId` (UUID — selects the signing key), `nbf`, `exp`. `sub` is recommended, `iat` is optional. Repeated `capabilities` claims grant scope (see below).
+
+#### Capabilities
+
+Tokens are scoped by repeated `capabilities` claims (colon-delimited wire format). Missing capability → `403 PORTAL_INSUFFICIENT_CAPABILITY`. **Absence of any `capabilities` claim grants nothing**, not full access.
+
+| Capability | Grants |
+|---|---|
+| `endpoints:read` | `GET /endpoints`, `GET /endpoints/{id}`, `GET /event-types` |
+| `endpoints:write` | `POST /endpoints`, `PUT /endpoints/{id}`, `DELETE /endpoints/{id}`, `/enable`, `/disable` |
+| `endpoints:test` | `POST /endpoints/{id}/test` (highest-risk — fires real outbound HTTP) |
+| `attempts:read` | `GET /endpoints/{id}/attempts` |
+
+#### CORS
+
+Per-application allowed origins are stored on `Application.AllowedPortalOriginsJson` and managed via `PUT /api/v1/dashboard/applications/{appId}/portal/origins`.
+
+- Wildcards are **not** supported — host SaaS must enumerate exact origins.
+- HTTPS-only outside Development. Up to 50 origins per app, 256 chars each.
+- Origin matching is RFC 6454 case-insensitive on scheme + host.
+- `OPTIONS` preflight returns `204` with `Access-Control-Allow-Origin: <echoed origin>`, `Allow-Methods`, `Allow-Headers: Authorization, Content-Type`, `Max-Age: 600`. A disallowed origin returns `403` with no CORS headers (so the browser correctly surfaces a CORS error).
+
+#### Rate limiting
+
+Portal routes share the public API's `send-by-appid` token-bucket partition. The portal token's `appId` flows into the limiter via `HttpContext.Items["AppId"]`. A 429 carries the standard `Retry-After` header.
+
+#### Cross-tenant isolation
+
+Every resource lookup is scoped via the 2-arg `GetByIdAsync(appId, endpointId)` repository method. A token for tenant A asking for tenant B's endpoint id receives **`404 PORTAL_NOT_FOUND`** (never 403 — that would leak the existence of resources owned by other apps).
+
+#### Routes
+
+##### List Endpoints
+```
+GET /api/v1/portal/endpoints
+    ?status=active|degraded|failed|disabled
+    &page=1
+    &pageSize=20
+```
+
+Response shape strips `secretOverride` (returns `hasSecretOverride: bool` instead) and full custom-header values (returns `customHeaderNames: string[]`).
+
+##### Get Endpoint
+```
+GET /api/v1/portal/endpoints/{endpointId}
+```
+
+Strips `transformExpression`, `transformEnabled`, `transformValidatedAt`, `allowedIpsJson` — these are admin-only fields.
+
+##### Create Endpoint
+```
+POST /api/v1/portal/endpoints
+```
+```json
+{
+  "url": "https://api.acme.example/webhooks/orders",
+  "description": "Order lifecycle events",
+  "filterEventTypes": ["uuid-of-event-type"],
+  "customHeaders": { "X-Source": "webhookengine" },
+  "metadata": { "team": "growth" },
+  "secretOverride": "whsec_AbCdEf01234567890aBcDeF0123456789"
+}
+```
+
+`url` must pass the SSRF-hardened URL policy (HTTPS, public DNS, no private/loopback IPs at validate-time and at connect-time). `secretOverride` requires the `whsec_` prefix and ≥32 chars — typing a weak password is rejected with `422 PORTAL_VALIDATION_FAILED`. `transformExpression` / `allowedIpsJson` are not exposed; if smuggled into the body, model binding drops them silently.
+
+##### Update Endpoint
+```
+PUT /api/v1/portal/endpoints/{endpointId}
+```
+
+Partial replace — every field is optional, only non-null fields are applied. `filterEventTypes`, when provided, replaces the full list (clear by sending `[]`). At least one field must be present.
+
+##### Delete Endpoint
+```
+DELETE /api/v1/portal/endpoints/{endpointId}
+```
+
+Returns `204 No Content` on success.
+
+##### Enable / Disable Endpoint
+```
+POST /api/v1/portal/endpoints/{endpointId}/enable
+POST /api/v1/portal/endpoints/{endpointId}/disable
+```
+
+Returns `200 OK` with the updated endpoint detail.
+
+##### Send Test Webhook
+```
+POST /api/v1/portal/endpoints/{endpointId}/test
+```
+```json
+{
+  "eventType": "order.created",
+  "payload": { "orderId": "ord_abc123" }
+}
+```
+
+Fires a real outbound HTTP POST through the engine's `webhook-delivery` HttpClient (HMAC-signed, SSRF-checked). Returns the request preview, response status, latency, and body. **Does not** affect endpoint health or retention; the dispatch never enters the persistent queue.
+
+##### List Attempts for an Endpoint
+```
+GET /api/v1/portal/endpoints/{endpointId}/attempts
+    ?page=1
+    &pageSize=20
+```
+
+Most-recent-first delivery attempts for the endpoint. `attempts:read` capability required.
+
+##### List Event Types
+```
+GET /api/v1/portal/event-types
+    ?page=1
+    &pageSize=100
+```
+
+Read-only dropdown source for the embedded UI. Archived event types are excluded; their lifecycle is admin-only.
+
+#### Dashboard portal-admin routes
+
+These cookie-authenticated dashboard routes manage the portal grant per application:
+
+```
+GET  /api/v1/dashboard/applications/{appId}/portal
+POST /api/v1/dashboard/applications/{appId}/portal/enable
+POST /api/v1/dashboard/applications/{appId}/portal/rotate
+POST /api/v1/dashboard/applications/{appId}/portal/disable
+PUT  /api/v1/dashboard/applications/{appId}/portal/origins
+```
+
+`enable` and `rotate` return the new `portalSigningKey` **once** — capture it on the host SaaS (it's never returned again). `disable` clears the signing key (in-flight tokens are rejected within `PortalAuth:LookupCacheTtlSeconds` on remote nodes; instantly on the local node via the lookup-cache invalidation hook). Audit log records every mutating action with the signing key redacted to `portalEnabled: bool`.
+
+#### Error codes (portal-specific)
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `PORTAL_AUTH_REQUIRED` | 401 | Missing or malformed `Authorization: Bearer` header. |
+| `PORTAL_AUTH_INVALID_TOKEN` | 401 | JWT is malformed, oversized (>8 KiB), or fails post-parse validation. |
+| `PORTAL_AUTH_INVALID_SIGNATURE` | 401 | Wrong key, wrong algorithm, or `alg=none`. |
+| `PORTAL_AUTH_TOKEN_EXPIRED` | 401 | `exp` is in the past beyond clock skew. |
+| `PORTAL_AUTH_LIFETIME_TOO_LONG` | 401 | `exp - nbf` exceeds `MaxLifetimeMinutes`. |
+| `PORTAL_NOT_ENABLED` | 401 | App exists but `PortalSigningKey` is null. |
+| `PORTAL_INSUFFICIENT_CAPABILITY` | 403 | Token lacks the capability required by the route. |
+| `PORTAL_NOT_FOUND` | 404 | Endpoint/event-type not found in this tenant's scope. |
+| `PORTAL_VALIDATION_FAILED` | 422 | Request body failed FluentValidation. |
+
+#### cURL — end-to-end probe
+
+Mint a token on the host SaaS (Node.js example below) then call the portal:
+
+```js
+// Server-side (host SaaS), Node.js + jose
+import { SignJWT } from 'jose';
+const secret = new TextEncoder().encode(process.env.PORTAL_SIGNING_KEY);
+const token = await new SignJWT({
+  appId: '00000000-0000-0000-0000-000000000001',
+  capabilities: ['endpoints:read', 'endpoints:write', 'endpoints:test', 'attempts:read'],
+})
+  .setProtectedHeader({ alg: 'HS256' })
+  .setNotBefore('0s')
+  .setExpirationTime('10m')
+  .sign(secret);
+```
+
+```bash
+# List endpoints
+curl https://hooks.example.com/api/v1/portal/endpoints \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Origin: https://app.acme.example"
+
+# Send a test webhook
+curl -X POST https://hooks.example.com/api/v1/portal/endpoints/{id}/test \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"eventType":"order.created","payload":{"orderId":"ord_abc"}}'
+```
+
+---
+
 ## 5. Webhook Headers Sent to Endpoints
 
 Every webhook delivery includes these standard headers:

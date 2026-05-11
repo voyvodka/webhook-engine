@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Documentation
+- **`docs/API.md` §3.8 — Portal API (Customer-Facing JWT).** Replaces the doc-drift gap surfaced by the v0.2.0 audit (where the portal API surface existed in code and CHANGELOG but was absent from `docs/API.md`). Covers HS256 JWT contract, capability scopes, per-app CORS, rate-limit partition reuse, cross-tenant `404` semantics, every route under `/api/v1/portal/*`, the dashboard portal-admin routes, the portal-specific error code table, and an end-to-end Node.js (`jose`) + cURL probe.
+- **`docs/ARCHITECTURE.md` §4.3 — Portal Token Authentication.** Documents the load-bearing middleware ordering (`ApiKeyAuth` → `PortalTokenAuth` → `PortalCors` → `RateLimiter`), the three invariants it encodes, the `PortalLookupCache` TTL + atomic-CTS-swap behaviour, and the JWT validator's defense-in-depth choices (HS256 pin, 8 KiB token cap, `MapInboundClaims=false`, lifetime cap, opaque error bodies).
+
 ### Added
 - **Portal stack test coverage — 23 new tests closing the v0.2.0 audit gaps.** New `PortalCorsMiddlewareTests` (7 facts) covers preflight allow / reject / case-insensitive match / subdomain-spoofing reject / missing-Origin pass-through and the real-request CORS-header echo path — previously zero coverage. New `PortalLookupCacheTests` (5 facts) pins TTL hit, invalidation forces DB reload, portal-disabled returns null, and concurrent-Invalidate doesn't double-dispose (regression for the audit fix). New `PortalOriginsAllowlistE2ETests` (7 facts, Testcontainers) runs `ApplicationRepository.AnyAllowsPortalOriginAsync` against real PostgreSQL JSONB. `PortalEndpointsControllerTests` gains four cross-tenant guards (`DELETE`, `/enable`, `/disable`, `/test`, `/attempts` against another tenant's endpoint id all return `404 PORTAL_NOT_FOUND`) and a defense-in-depth test for empty-capabilities tokens (the absence of any `capabilities` claim must surface as `403 PORTAL_INSUFFICIENT_CAPABILITY`, not silent full access).
 

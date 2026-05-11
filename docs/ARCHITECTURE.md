@@ -424,6 +424,52 @@ Stored: SHA256 hash in database (never stored in plaintext)
 Lookup: prefix (whe_app1a2b3_) used for fast lookup, hash compared for verification
 ```
 
+### 4.3 Portal Token Authentication (v0.2.0)
+
+Customer-facing routes under `/api/v1/portal/*` are authenticated by short-lived HS256 JWTs minted by the host SaaS, **not** by an API key. The engine never mints these tokens — it only verifies them. See `docs/API.md` §3.8 for the wire contract and `docs/PORTAL.md` for host integration.
+
+**Per-application secrets stored on `Application`:**
+- `PortalSigningKey` — HS256 secret (32-byte random). Generated at portal-enable; never returned after creation. Rotated via the dashboard rotate action.
+- `AllowedPortalOriginsJson` — JSONB array of exact CORS origins (no wildcards, https-only outside Development, max 50 / 256 chars).
+- `PortalRotatedAt` — surfaced as "last rotated at" in the operator UI.
+
+**Pipeline ordering** (load-bearing, in `Program.cs` middleware section):
+
+```
+SecurityHeaders
+  → MetricsAuth
+  → RequestLogging
+  → ExceptionHandling
+  → ApiKeyAuth          (skips /api/v1/portal/*)
+  → PortalTokenAuth     (validates JWT, populates HttpContext.Items)
+  → PortalCors          (per-app CORS using populated lookup)
+  → RateLimiter         (send-by-appid partition; portal AppId flows in)
+  → Authentication
+  → Authorization
+```
+
+Three invariants this ordering encodes:
+
+1. **`ApiKeyAuthMiddleware` deliberately bypasses portal paths** — those routes use a different auth scheme. Without the bypass, every portal request would 401 before reaching the JWT validator.
+2. **`PortalTokenAuthMiddleware` runs before `PortalCorsMiddleware`** for non-`OPTIONS` requests, because CORS reads the validated `PortalAppLookup` from `HttpContext.Items`. `OPTIONS` preflight has no token (browsers don't send one), so the CORS middleware runs its own bounded `AnyAllowsPortalOriginAsync` query against `ApplicationRepository` — checking whether **any** portal-enabled app permits the origin.
+3. **Both portal middlewares run before the rate limiter** so that the JWT-derived `AppId` is in `HttpContext.Items["AppId"]` when the limiter resolves its partition. Portal traffic shares the public API's `send-by-appid` token bucket — a leaked token can't outrun the per-tenant budget.
+
+**`PortalLookupCache`** (Infrastructure layer, `IMemoryCache`-backed):
+
+- Holds the per-app `(PortalSigningKey, AllowedOrigins)` tuple to avoid a database round-trip per request.
+- TTL: 60 s (`PortalAuth:LookupCacheTtlSeconds`).
+- Mutating dashboard actions (`enable` / `rotate` / `disable` / origins update) call `PortalLookupCache.InvalidateApplication(appId)` synchronously, so on the local node a key rotation takes effect within milliseconds rather than within the cache TTL. Multi-replica deployments still bounded by the TTL on remote nodes.
+- The static per-app `CancellationTokenSource` is atomically swapped on every `Set` (via `AddOrUpdate`); the previous source is cancelled and disposed in the same step, so a `Set` racing an `Invalidate` cannot bind a fresh cache entry to a disposed token.
+
+**Cross-tenant isolation:** every controller action goes through the 2-arg `EndpointRepository.GetByIdAsync(appId, endpointId)` (and similar for event types / messages). A token for tenant A asking for tenant B's endpoint id receives `404 PORTAL_NOT_FOUND` — never `403`, which would leak the existence of other tenants' resources.
+
+**Defense-in-depth on the JWT validator:**
+- HS256 algorithm pinned via `ValidAlgorithms = [HmacSha256]`. `alg=none`, HS384, HS512 all rejected.
+- `MaximumTokenSizeInBytes = 8 KiB` (default 250 KiB) — defeats DoS amplification.
+- `MapInboundClaims = false` — we read raw JWT claim keys (`appId`, `capabilities`); the .NET URI mapping is pure overhead and a small attack surface.
+- Hard cap on `exp - nbf` (default 15 min) regardless of what the host minted, so a leaked token's blast radius is bounded.
+- Every error response uses the same opaque message body — never echoes the inner exception (which could leak signing-key length or which validation step failed).
+
 ---
 
 ## 5. Scalability Path
