@@ -50,7 +50,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.5.2",
     "eslint": "10.3.0",
-    "happy-dom": "^17.5.3",
+    "happy-dom": "^20.9.0",
     "tailwindcss": "^4.3.0",
     "tsup": "^8.5.0",
     "typescript": "6.0.3",
