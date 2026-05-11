@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.API.Contracts.Portal;
 using WebhookEngine.Core.Enums;
@@ -28,6 +29,12 @@ namespace WebhookEngine.API.Controllers;
 [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
 [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status500InternalServerError)]
 [Route("api/v1/portal")]
+// Portal tokens are short-lived but the host SaaS can mint one per page
+// render — without rate limiting, a leaked token (or a misbehaving host)
+// could spam mutating routes (notably /test, which fires a real HTTP POST
+// out of the engine). Reuses the existing send-by-appid partition so the
+// portal shares the same per-tenant budget as the public API.
+[EnableRateLimiting("send-by-appid")]
 public class PortalEndpointsController : ControllerBase
 {
     private readonly EndpointRepository _endpointRepo;

@@ -67,27 +67,51 @@ public class PortalLookupCache
     {
         if (AppTokens.TryRemove(appId, out var source))
         {
-            try
-            {
-                source.Cancel();
-            }
-            finally
-            {
-                source.Dispose();
-            }
+            CancelAndDispose(source);
         }
     }
 
     private void Set(Guid appId, string key, PortalAppLookup value)
     {
-        var token = AppTokens.GetOrAdd(appId, _ => new CancellationTokenSource());
+        // A fresh CTS per Set so a previous InvalidateApplication that
+        // already cancelled+disposed the prior token can't cause a
+        // CancellationChangeToken to be constructed over a disposed
+        // source. AddOrUpdate atomically swaps; the previous token is
+        // cancelled (so any in-flight cache entries bound to it are
+        // invalidated) and disposed.
+        var fresh = new CancellationTokenSource();
+        var current = AppTokens.AddOrUpdate(
+            appId,
+            fresh,
+            (_, existing) =>
+            {
+                CancelAndDispose(existing);
+                return fresh;
+            });
+
         var entryOptions = new MemoryCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = _ttl,
             Size = 1
         };
-        entryOptions.AddExpirationToken(new CancellationChangeToken(token.Token));
+        entryOptions.AddExpirationToken(new CancellationChangeToken(current.Token));
         _cache.Set(key, value, entryOptions);
+    }
+
+    private static void CancelAndDispose(CancellationTokenSource source)
+    {
+        try
+        {
+            source.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Concurrent Invalidate / Set already disposed it; safe to swallow.
+        }
+        finally
+        {
+            source.Dispose();
+        }
     }
 
     private static string[] ParseOrigins(string? json)

@@ -165,6 +165,23 @@ public class PortalTokenAuthMiddlewareTests : IClassFixture<PortalTokenAuthMiddl
         code.Should().Be("PORTAL_AUTH_INVALID_SIGNATURE");
     }
 
+    [Fact]
+    public async Task Portal_Request_With_Oversized_Token_Returns_401_Without_Parsing()
+    {
+        // Default MaxTokenSizeBytes = 8 KiB. A 16 KiB Bearer payload must
+        // be rejected before JwtSecurityTokenHandler even attempts to parse
+        // it; without the cap the .NET default (~250 KiB) would happily
+        // consume the bytes first and reject only on a downstream parse
+        // failure, giving an attacker a much larger DoS amplification.
+        var oversize = new string('A', 16 * 1024);
+
+        var response = await SendPingAsync(oversize);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var code = await ReadErrorCodeAsync(response);
+        code.Should().Be("PORTAL_AUTH_INVALID_TOKEN");
+    }
+
     private async Task<HttpResponseMessage> SendPingAsync(string token)
     {
         var client = _factory.CreateClient();
