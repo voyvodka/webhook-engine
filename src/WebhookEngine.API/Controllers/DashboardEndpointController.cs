@@ -54,10 +54,6 @@ public class DashboardEndpointController : ControllerBase
         _auditLogger = auditLogger;
     }
 
-    // ──────────────────────────────────────────────────
-    // Endpoints (cross-app, for dashboard admin)
-    // ──────────────────────────────────────────────────
-
     [HttpGet("endpoints")]
     public async Task<IActionResult> ListEndpoints(
         [FromQuery] Guid? appId,
@@ -364,10 +360,6 @@ public class DashboardEndpointController : ControllerBase
         return Ok(ApiEnvelope.Success(HttpContext, result));
     }
 
-    // ──────────────────────────────────────────────────
-    // Payload Transformation
-    // ──────────────────────────────────────────────────
-
     [HttpPost("transform/validate")]
     public IActionResult ValidateTransform([FromBody] ValidateTransformRequest request)
     {
@@ -380,10 +372,6 @@ public class DashboardEndpointController : ControllerBase
             error = result.Error
         }));
     }
-
-    // ──────────────────────────────────────────────────
-    // Event Types
-    // ──────────────────────────────────────────────────
 
     [HttpGet("event-types")]
     public async Task<IActionResult> ListEventTypes(

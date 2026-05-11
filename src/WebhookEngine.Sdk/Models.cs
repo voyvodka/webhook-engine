@@ -3,10 +3,6 @@ using System.Text.Json.Serialization;
 
 namespace WebhookEngine.Sdk;
 
-// ============================================================
-// Response envelope
-// ============================================================
-
 public class ApiResponse<T>
 {
     public T? Data { get; set; }
@@ -43,10 +39,6 @@ public class ApiErrorDetail
     public string? Message { get; set; }
 }
 
-// ============================================================
-// Event Types
-// ============================================================
-
 public class CreateEventTypeRequest
 {
     public string Name { get; set; } = string.Empty;
@@ -70,10 +62,6 @@ public class EventTypeResponse
     public bool IsArchived { get; set; }
     public DateTime CreatedAt { get; set; }
 }
-
-// ============================================================
-// Endpoints
-// ============================================================
 
 public class CreateEndpointRequest
 {
@@ -120,10 +108,6 @@ public class EndpointStatsResponse
     public double AvgLatencyMs { get; set; }
     public double P95LatencyMs { get; set; }
 }
-
-// ============================================================
-// Messages
-// ============================================================
 
 public class SendMessageRequest
 {
@@ -227,10 +211,6 @@ public class MessageAttemptResponse
     public int LatencyMs { get; set; }
     public DateTime CreatedAt { get; set; }
 }
-
-// ============================================================
-// Common query parameters
-// ============================================================
 
 public class ListOptions
 {

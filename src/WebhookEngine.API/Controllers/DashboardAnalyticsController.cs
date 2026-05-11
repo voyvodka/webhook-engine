@@ -90,10 +90,6 @@ public class DashboardAnalyticsController : ControllerBase
         return Ok(ApiEnvelope.Success(HttpContext, new { buckets }));
     }
 
-    // ──────────────────────────────────────────────────
-    // Helper
-    // ──────────────────────────────────────────────────
-
     private static (DateTime StartTime, int IntervalMinutes) ParseTimelineParams(string period, string interval)
     {
         var startTime = period switch

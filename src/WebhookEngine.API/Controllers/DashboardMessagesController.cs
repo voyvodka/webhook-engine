@@ -42,10 +42,6 @@ public class DashboardMessagesController : ControllerBase
         _messageQueue = messageQueue;
     }
 
-    // ──────────────────────────────────────────────────
-    // Messages (cross-app, for dashboard admin)
-    // ──────────────────────────────────────────────────
-
     [HttpGet("messages")]
     public async Task<IActionResult> ListMessages(
         [FromQuery] Guid? appId,
