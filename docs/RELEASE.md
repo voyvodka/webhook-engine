@@ -24,7 +24,7 @@ Add these secrets:
 | Secret | Description |
 |--------|-------------|
 | `DOCKERHUB_USERNAME` | Docker Hub username |
-| `DOCKERHUB_TOKEN` | Docker Hub access token |
+| `DOCKERHUB_TOKEN` | Docker Hub Personal Access Token. **Required scopes: `repo:read`, `repo:write`, `repo:write_metadata`.** The third scope is what lets the `Sync Docker Hub description` step in `release.yml` push the README to the Hub overview; without it that step fails with `403`. Create the token at Docker Hub → Account Settings → Personal Access Tokens. |
 | `NUGET_API_KEY` | NuGet.org API key |
 | `NPM_TOKEN` | npm automation token (for portal package — see Section 6) |
 

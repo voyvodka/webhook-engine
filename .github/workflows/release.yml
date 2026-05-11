@@ -60,11 +60,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Best-effort: a PAT without repo:write_metadata returns 403 here.
-      # The image push above is already committed, so don't fail the job.
+      # Requires DOCKERHUB_TOKEN with the `repo:write_metadata` scope.
+      # See docs/RELEASE.md §1 for the operator setup steps.
       - name: Sync Docker Hub description
         uses: peter-evans/dockerhub-description@v5
-        continue-on-error: true
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
