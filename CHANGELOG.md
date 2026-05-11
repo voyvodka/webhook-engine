@@ -12,6 +12,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - **`samples/portal-host/` reference application.** Standalone Vite + React app demonstrating host-SaaS integration with `<EndpointManager />`. Uses a browser-native Web Crypto HS256 mint (`mint-token.ts`) and an in-memory fetch shim (`mock-fetch.ts`) — no engine instance required to run. Shows prop wiring, CSS custom-property theme overrides, and the server-side token-mint pattern.
 - **`docs/PORTAL.md` Section 5 — Component Usage.** Replaced the "coming soon" placeholder with a full quickstart: reference to `samples/portal-host/`, a server-side `jose` + Express JWT mint snippet, a React-side `<EndpointManager />` embedding snippet, and CSS theme override instructions.
 - **`docs/RELEASE.md` Section 6 — Portal package release.** Documents the `portal-v*` tag scheme, `NPM_TOKEN` secret setup steps, sigstore provenance setup, and the pre-flight checklist to run before pushing a release tag.
+- **`@webhookengine/endpoint-manager` v0.1.0 published to npm.** First public release of the embeddable customer portal React component. Pairs with engine v0.2.0+. See `packages/endpoint-manager/CHANGELOG.md` for the package's own changelog.
 
 ## [0.2.0] - 2026-05-10
 
