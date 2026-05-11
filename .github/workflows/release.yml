@@ -63,7 +63,7 @@ jobs:
       # Best-effort: a PAT without repo:write_metadata returns 403 here.
       # The image push above is already committed, so don't fail the job.
       - name: Sync Docker Hub description
-        uses: peter-evans/dockerhub-description@v4
+        uses: peter-evans/dockerhub-description@v5
         continue-on-error: true
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
