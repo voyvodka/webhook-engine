@@ -10,7 +10,7 @@ This guide covers the embeddable customer portal shipped in v0.2.0. It is writte
 2. [Architecture](#2-architecture)
 3. [Operator Setup](#3-operator-setup)
 4. [Host SaaS Integration](#4-host-sas-integration)
-5. [Component Usage (coming soon)](#5-component-usage-coming-soon)
+5. [Component Usage](#5-component-usage)
 6. [Security Model](#6-security-model)
 7. [Configuration Reference](#7-configuration-reference)
 8. [Limits](#8-limits)
@@ -33,7 +33,7 @@ The customer portal lets SaaS operators embed a self-service endpoint-management
 **What you build:**
 
 - A short-lived JWT minted by your backend and passed to the frontend component.
-- A settings page in your product that renders the `<EndpointManager />` component (shipping in a follow-up tag — see [Section 5](#5-component-usage-coming-soon)).
+- A settings page in your product that renders the `<EndpointManager />` component.
 
 ---
 
@@ -193,22 +193,102 @@ Admin-only fields stripped on portal writes and reads: `transformExpression`, `t
 
 ---
 
-## 5. Component Usage (coming soon)
+## 5. Component Usage
 
-The `@webhookengine/endpoint-manager` React package is tracked under B1 Step 7 of the roadmap and will ship in a follow-up `portal-v0.1.0` tag after v0.2.0. It is not bundled in the engine release.
+The `@webhookengine/endpoint-manager` npm package ships the `<EndpointManager />` React component. It pairs with the `/api/v1/portal/*` engine surface described above.
 
-When it ships, usage will look roughly like:
+> The package is not yet on npm. Step 11 of the B1 roadmap pushes the first `portal-v0.1.0` tag that triggers the publish workflow. Until then, install via the Bun workspace: `"@webhookengine/endpoint-manager": "workspace:*"`.
+
+### 5.1 Quickstart — reference sample
+
+`samples/portal-host/` is the canonical consumer-side reference. Run it locally with no engine instance required:
+
+```bash
+cd samples/portal-host
+bun install
+bun run dev
+# Opens http://localhost:5173
+```
+
+The sample installs a fetch shim (`mock-fetch.ts`) that serves in-memory data so you can explore the full component UI without any Docker setup.
+
+### 5.2 Server-side token mint (Node.js + Express)
+
+Your host SaaS backend exposes an internal route that mints the JWT and returns it to the browser. The signing key **never leaves your server**.
+
+```js
+import express from 'express'
+import { SignJWT } from 'jose'
+
+const router = express.Router()
+
+// POST /internal/portal-token
+// Called by your frontend after the customer's session is verified.
+router.post('/internal/portal-token', requireSession, async (req, res) => {
+  const { customerId } = req.session
+
+  // Look up the WebhookEngine appId for this customer from your own DB.
+  const appId = await db.customers.getWebhookAppId(customerId)
+
+  // The signing key comes from your secrets manager, keyed per appId.
+  const signingKey = await secrets.get(`PORTAL_KEY_${appId}`)
+
+  const secret = new TextEncoder().encode(signingKey)
+  const now = Math.floor(Date.now() / 1000)
+
+  const token = await new SignJWT({ sub: appId, appId, cap: ['endpoints:read', 'endpoints:write', 'endpoints:test', 'attempts:read'] })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt(now)
+    .setNotBefore(now)
+    .setExpirationTime(now + 10 * 60)   // 10 minutes
+    .sign(secret)
+
+  res.json({ token, expiresAt: new Date((now + 600) * 1000).toISOString() })
+})
+```
+
+### 5.3 React-side embedding
 
 ```tsx
 import { EndpointManager } from '@webhookengine/endpoint-manager'
+import '@webhookengine/endpoint-manager/style.css'
+import { useEffect, useState } from 'react'
 
-<EndpointManager
-  apiBase="https://webhooks.yourproduct.com"
-  token={portalToken}
-/>
+export function WebhookSettingsPage() {
+  const [token, setToken] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Fetch the short-lived JWT from your OWN backend.
+    fetch('/internal/portal-token', { method: 'POST' })
+      .then(r => r.json())
+      .then(({ token }) => setToken(token))
+  }, [])
+
+  if (!token) return <p>Loading…</p>
+
+  return (
+    <EndpointManager
+      baseUrl="https://hooks.yourproduct.com"
+      token={token}
+      appId={APP_ID}
+      capabilities={['endpoints:read', 'endpoints:write', 'endpoints:test', 'attempts:read']}
+    />
+  )
+}
 ```
 
-Watch the [GitHub roadmap](https://github.com/voyvodka/webhook-engine/blob/main/docs/ROADMAP.md) for the `portal-v0.1.0` tag.
+### 5.4 Theme overrides
+
+The component exposes CSS custom properties so you can match your brand without forking the package. Declare them in your host page's `:root` or a wrapping selector:
+
+```css
+:root {
+  --color-whe-accent: #7c3aed;          /* primary interactive colour */
+  --color-whe-accent-soft: rgb(124 58 237 / 0.15); /* hover / focus tint */
+}
+```
+
+See `samples/portal-host/src/styles.css` for a working example and `packages/endpoint-manager/src/styles.css` for the full token list.
 
 ---
 
