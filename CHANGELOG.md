@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Removed
+- **Section-header / banner comment noise (~30 lines).** Cleared the empty-divider `// ──────────────────────────────────────────────────` separators in `DashboardMessagesController`, `DashboardAnalyticsController`, `DashboardEndpointController` (5 banners), and the `// ============================================================` banner pairs in `WebhookEngine.Sdk/Models.cs` (5 banners — Response envelope, Event Types, Endpoints, Messages, Common query parameters). All carried no `WHY` content; class names and IDE folding already cover navigation. Section-titled banners in test files (`// ── Read paths ──`, `// ── Plumbing ──`, etc.) are preserved as deliberate test-grouping markers.
+
 ### Changed
 - **`PATCH /api/v1/portal/endpoints/{id}` replaces `PUT`.** Portal endpoint update was tagged `[HttpPut]` but its body semantics were partial-replace (every field optional, only non-null fields applied) — that is the contract for `PATCH`, not `PUT`. Switching the method aligns the wire surface with the actual behaviour and avoids confusing REST consumers that expect `PUT` to be full-replace. The route, request shape, and response shape are unchanged. Minor breaking change for any direct HTTP caller hitting this route; the embeddable `<EndpointManager />` component already uses the new method.
 - **`POST /api/v1/dashboard/applications/{appId}/portal/disable` no longer wipes `AllowedPortalOriginsJson`.** Disable revokes the auth surface (`PortalSigningKey` + `PortalRotatedAt`) but preserves the operator-curated CORS allowlist so a re-enable doesn't lose origin configuration. To explicitly clear the allowlist, send `PUT /portal/origins` with `{"origins": []}`. The audit log entry's `before/after` snapshot still records the change accurately.
