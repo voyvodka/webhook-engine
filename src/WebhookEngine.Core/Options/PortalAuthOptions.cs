@@ -30,4 +30,13 @@ public class PortalAuthOptions
     /// Defaults to 60 seconds.
     /// </summary>
     public int LookupCacheTtlSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Maximum accepted JWT size in bytes. Defends against DoS where an
+    /// attacker sends a multi-hundred-KB token that JwtSecurityTokenHandler
+    /// would otherwise parse before rejecting. Portal tokens are typically
+    /// 0.5-2 KB; 8 KiB leaves comfortable headroom. The .NET default is
+    /// ~250 KB which is far too generous for this surface.
+    /// </summary>
+    public int MaxTokenSizeBytes { get; set; } = 8 * 1024;
 }

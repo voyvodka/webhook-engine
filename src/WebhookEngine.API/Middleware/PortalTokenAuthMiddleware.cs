@@ -32,13 +32,21 @@ public class PortalTokenAuthMiddleware
     private const string AppIdClaim = "appId";
     private const string CapabilitiesClaim = "capabilities";
 
-    private static readonly JwtSecurityTokenHandler TokenHandler = new();
-
     private readonly RequestDelegate _next;
+    private readonly JwtSecurityTokenHandler _tokenHandler;
 
-    public PortalTokenAuthMiddleware(RequestDelegate next)
+    public PortalTokenAuthMiddleware(RequestDelegate next, IOptions<PortalAuthOptions> options)
     {
         _next = next;
+        _tokenHandler = new JwtSecurityTokenHandler
+        {
+            // MapInboundClaims rewrites well-known short claims into long
+            // .NET URI claim names every request. We rely on raw JWT claim
+            // keys (`appId`, `capabilities`) so the mapping is pure overhead;
+            // turning it off also removes a small attack surface.
+            MapInboundClaims = false,
+            MaximumTokenSizeInBytes = options.Value.MaxTokenSizeBytes
+        };
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -82,7 +90,7 @@ public class PortalTokenAuthMiddleware
         JwtSecurityToken unverified;
         try
         {
-            unverified = TokenHandler.ReadJwtToken(rawToken);
+            unverified = _tokenHandler.ReadJwtToken(rawToken);
         }
         catch (Exception)
         {
@@ -132,7 +140,7 @@ public class PortalTokenAuthMiddleware
         SecurityToken validatedToken;
         try
         {
-            principal = TokenHandler.ValidateToken(rawToken, validationParameters, out validatedToken);
+            principal = _tokenHandler.ValidateToken(rawToken, validationParameters, out validatedToken);
         }
         catch (SecurityTokenExpiredException)
         {
