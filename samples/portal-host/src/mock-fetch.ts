@@ -108,15 +108,28 @@ function notFound(): Response {
 }
 
 const BASE = "https://hooks.example.com";
+const BASE_URL = new URL(BASE);
 
 const originalFetch = globalThis.fetch;
 
 export function installMockFetch(): void {
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    if (!url.startsWith(BASE)) return originalFetch(input, init);
+    // Parse the URL and compare the host explicitly. A naive
+    // url.startsWith(BASE) check would also match
+    // https://hooks.example.com.attacker.com/... — fine for a sample
+    // but the kind of pattern that gets copy-pasted into production code.
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return originalFetch(input, init);
+    }
+    if (parsed.protocol !== BASE_URL.protocol || parsed.host !== BASE_URL.host) {
+      return originalFetch(input, init);
+    }
 
-    const path = url.slice(BASE.length).split("?")[0];
+    const path = parsed.pathname;
     const method = (init?.method ?? "GET").toUpperCase();
 
     // GET /api/v1/portal/endpoints
