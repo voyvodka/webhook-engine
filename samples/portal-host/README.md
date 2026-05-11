@@ -33,6 +33,24 @@ seeded with three example endpoints.
 
 ---
 
+## Using the package in your own project
+
+In your own project, install from npm rather than referencing the workspace:
+
+```bash
+npm install @webhookengine/endpoint-manager
+# or
+bun add @webhookengine/endpoint-manager
+# or
+pnpm add @webhookengine/endpoint-manager
+```
+
+This sample's `package.json` references `"@webhookengine/endpoint-manager": "workspace:*"`
+so that local monorepo development works without publishing. That line is
+specific to this repo — do not copy it into your own project.
+
+---
+
 ## mint-token.ts caveat — production warning
 
 `src/mint-token.ts` mints a JWT in the browser using a hard-coded key. This is
