@@ -102,6 +102,10 @@ jobs:
         working-directory: packages/endpoint-manager
         run: bun run typecheck
 
+      - name: Test (endpoint-manager)
+        working-directory: packages/endpoint-manager
+        run: bun run test
+
       - name: Build (endpoint-manager)
         working-directory: packages/endpoint-manager
         run: bun run build

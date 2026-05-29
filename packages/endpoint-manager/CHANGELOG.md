@@ -11,6 +11,25 @@ release tag scheme is `portal-v{major}.{minor}.{patch}` (engine releases use
 
 ## [Unreleased]
 
+Contract-alignment fix: the `0.1.0` client diverged from the live engine and the
+divergence was masked because the client tests and the sample mocked an idealized
+shape rather than the engine's real DTOs. The next release is strongly recommended
+over `0.1.0` — `0.1.0` endpoint updates fail against a real engine and editing
+wipes custom headers.
+
+### Fixed
+- **`updateEndpoint()` now issues `PATCH`, not `PUT`.** The engine route is `[HttpPatch]`; the `0.1.0` `PUT` did not match and every endpoint update from the embedded component failed against a real engine.
+- **Endpoint status is read from `status`, not `isActive`.** The engine returns a lowercased `EndpointStatus` string (`active`/`degraded`/`failed`/`disabled`); `0.1.0` read a non-existent `isActive` boolean, so the status badge always showed "Disabled". `<EndpointList />` now renders all four states.
+- **Editing an endpoint no longer wipes its custom headers.** The engine returns header NAMES only (values are never exposed to the portal). `0.1.0` read a non-existent `customHeaders` map, started the editor empty, and sent `customHeaders: {}` on save — silently clearing all headers. The editor now shows existing header names read-only and only sends `customHeaders` when the operator enters new ones (an empty set preserves the stored headers).
+
+### Changed
+- **Types now mirror the engine DTOs:** `PortalEndpointSummary`/`PortalEndpointDetail` expose `status: PortalEndpointStatus` and `customHeaderNames: string[]` (was `isActive` / `customHeaders`). New `PortalEndpointStatus` union exported.
+- **Attempt status badge** handles the real `AttemptStatus` values (`success`/`failed`/`timeout`/`sending`) instead of a `success`/`failure` binary.
+- **Secret-override validation message** clarified to match the actual check (≥32 chars after `whsec_`).
+
+### Tests
+- Client and component test fixtures now use the real engine response shape, plus a dedicated contract test that asserts `updateEndpoint` issues `PATCH` and that `status` + `customHeaderNames` deserialize correctly (with unknown server fields ignored). The `samples/portal-host` mock now mirrors the real contract (PATCH, `status`, `customHeaderNames`, event-type IDs).
+
 ## [0.1.0] - 2026-05-11
 
 Initial public release. Pairs with WebhookEngine engine v0.2.0 or later (which exposes the `/api/v1/portal/*` route group the package consumes).

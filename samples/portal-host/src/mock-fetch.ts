@@ -4,8 +4,11 @@
  * Intercepts calls to https://hooks.example.com/api/v1/portal/* and serves
  * synthetic data so the sample runs without a running WebhookEngine instance.
  *
- * The real engine is the source of truth for the API contract. This file
- * demonstrates what calling code looks like, not faithful API reproduction.
+ * The response shapes mirror the real engine (Contracts/Portal/PortalDtos.cs):
+ * endpoints expose `status` + `customHeaderNames` (names only — values are kept
+ * internally here and never returned), `filterEventTypes` are event-type IDs,
+ * and updates use PATCH. This is a demonstration of calling code, kept faithful
+ * to the contract so it can't drift from the package client.
  */
 
 import type {
@@ -30,7 +33,21 @@ const EVENT_TYPES: PortalEventTypeListItem[] = [
   { id: uuid(), name: "refund.issued", description: "A refund was issued to the customer" },
 ];
 
-type StoredEndpoint = PortalEndpointDetail & { isActive: boolean };
+/**
+ * Internal store record. Holds the custom-header VALUES (which the engine keeps
+ * private) so the test/disable flows are realistic; only the names are exposed.
+ */
+interface StoredEndpoint {
+  id: string;
+  url: string;
+  description: string | null;
+  status: PortalEndpointSummary["status"];
+  hasSecretOverride: boolean;
+  filterEventTypes: string[];
+  customHeaders: Record<string, string>;
+  createdAt: string;
+  updatedAt: string;
+}
 
 const store = new Map<string, StoredEndpoint>([
   [
@@ -39,9 +56,9 @@ const store = new Map<string, StoredEndpoint>([
       id: "ep-0001",
       url: "https://api.acme.example/webhooks/orders",
       description: "Order lifecycle events",
-      isActive: true,
+      status: "active",
       hasSecretOverride: false,
-      filterEventTypes: ["order.created", "order.shipped"],
+      filterEventTypes: [EVENT_TYPES[0]!.id, EVENT_TYPES[1]!.id],
       customHeaders: {},
       createdAt: "2026-04-01T10:00:00.000Z",
       updatedAt: "2026-04-01T10:00:00.000Z",
@@ -53,9 +70,9 @@ const store = new Map<string, StoredEndpoint>([
       id: "ep-0002",
       url: "https://api.acme.example/webhooks/refunds",
       description: "Refund notifications",
-      isActive: true,
+      status: "active",
       hasSecretOverride: true,
-      filterEventTypes: ["refund.issued"],
+      filterEventTypes: [EVENT_TYPES[2]!.id],
       customHeaders: { "X-Source": "webhookengine" },
       createdAt: "2026-04-15T09:30:00.000Z",
       updatedAt: "2026-04-20T14:00:00.000Z",
@@ -67,7 +84,7 @@ const store = new Map<string, StoredEndpoint>([
       id: "ep-0003",
       url: "https://legacy.acme.example/hook",
       description: null,
-      isActive: false,
+      status: "disabled",
       hasSecretOverride: false,
       filterEventTypes: [],
       customHeaders: {},
@@ -82,11 +99,33 @@ function toSummary(ep: StoredEndpoint): PortalEndpointSummary {
     id: ep.id,
     url: ep.url,
     description: ep.description,
-    isActive: ep.isActive,
+    status: ep.status,
     hasSecretOverride: ep.hasSecretOverride,
     filterEventTypes: ep.filterEventTypes,
     createdAt: ep.createdAt,
   };
+}
+
+function toDetail(ep: StoredEndpoint): PortalEndpointDetail {
+  return {
+    id: ep.id,
+    url: ep.url,
+    description: ep.description,
+    status: ep.status,
+    hasSecretOverride: ep.hasSecretOverride,
+    filterEventTypes: ep.filterEventTypes,
+    customHeaderNames: Object.keys(ep.customHeaders),
+    createdAt: ep.createdAt,
+    updatedAt: ep.updatedAt,
+  };
+}
+
+interface UpdateBody {
+  url?: string;
+  description?: string | null;
+  filterEventTypes?: string[];
+  customHeaders?: Record<string, string>;
+  secretOverride?: string | null;
 }
 
 function ok(data: unknown, extra?: Record<string, unknown>): Response {
@@ -145,21 +184,21 @@ export function installMockFetch(): void {
 
     // POST /api/v1/portal/endpoints
     if (method === "POST" && path === "/api/v1/portal/endpoints") {
-      const body = JSON.parse((init?.body as string) ?? "{}") as Partial<PortalEndpointDetail>;
+      const body = JSON.parse((init?.body as string) ?? "{}") as UpdateBody;
       const id = uuid();
       const ep: StoredEndpoint = {
         id,
         url: body.url ?? "",
         description: body.description ?? null,
-        isActive: true,
-        hasSecretOverride: false,
+        status: "active",
+        hasSecretOverride: !!body.secretOverride,
         filterEventTypes: body.filterEventTypes ?? [],
         customHeaders: body.customHeaders ?? {},
         createdAt: now(),
         updatedAt: now(),
       };
       store.set(id, ep);
-      return ok(ep);
+      return ok(toDetail(ep));
     }
 
     const endpointMatch = path.match(/^\/api\/v1\/portal\/endpoints\/([^/]+)(\/.*)?$/);
@@ -170,14 +209,28 @@ export function installMockFetch(): void {
       if (!ep) return notFound();
 
       // GET /api/v1/portal/endpoints/{id}
-      if (method === "GET" && !sub) return ok(ep);
+      if (method === "GET" && !sub) return ok(toDetail(ep));
 
-      // PUT /api/v1/portal/endpoints/{id}
-      if (method === "PUT" && !sub) {
-        const body = JSON.parse((init?.body as string) ?? "{}") as Partial<PortalEndpointDetail>;
-        const updated: StoredEndpoint = { ...ep, ...body, id, updatedAt: now() };
+      // PATCH /api/v1/portal/endpoints/{id} — partial merge, matching the engine.
+      if (method === "PATCH" && !sub) {
+        const body = JSON.parse((init?.body as string) ?? "{}") as UpdateBody;
+        const updated: StoredEndpoint = {
+          ...ep,
+          ...(body.url !== undefined ? { url: body.url } : {}),
+          ...(body.description !== undefined ? { description: body.description } : {}),
+          ...(body.filterEventTypes !== undefined ? { filterEventTypes: body.filterEventTypes } : {}),
+          // Only replace headers when the client actually sends them — mirrors
+          // the engine, which preserves stored headers when the field is absent.
+          ...(body.customHeaders !== undefined ? { customHeaders: body.customHeaders } : {}),
+          // Mirror the engine: a present-but-empty/whitespace secretOverride
+          // clears the override; a non-empty value sets it; null/absent leaves it.
+          ...(body.secretOverride != null
+            ? { hasSecretOverride: body.secretOverride.trim().length > 0 }
+            : {}),
+          updatedAt: now(),
+        };
         store.set(id, updated);
-        return ok(updated);
+        return ok(toDetail(updated));
       }
 
       // DELETE /api/v1/portal/endpoints/{id}
@@ -188,13 +241,13 @@ export function installMockFetch(): void {
 
       // POST /api/v1/portal/endpoints/{id}/enable
       if (method === "POST" && sub === "/enable") {
-        store.set(id, { ...ep, isActive: true, updatedAt: now() });
+        store.set(id, { ...ep, status: "active", updatedAt: now() });
         return noContent();
       }
 
       // POST /api/v1/portal/endpoints/{id}/disable
       if (method === "POST" && sub === "/disable") {
-        store.set(id, { ...ep, isActive: false, updatedAt: now() });
+        store.set(id, { ...ep, status: "disabled", updatedAt: now() });
         return noContent();
       }
 
@@ -226,7 +279,7 @@ export function installMockFetch(): void {
           id: uuid(),
           messageId: uuid(),
           attemptNumber: i + 1,
-          status: i === 4 ? "failure" : "success",
+          status: i === 4 ? "failed" : "success",
           statusCode: i === 4 ? 500 : 200,
           error: i === 4 ? "Internal Server Error" : null,
           latencyMs: 30 + i * 10,

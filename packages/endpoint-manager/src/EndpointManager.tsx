@@ -83,10 +83,10 @@ export function EndpointManager(props: EndpointManagerProps): JSX.Element {
           id: summary.id,
           url: summary.url,
           description: summary.description,
-          isActive: summary.isActive,
+          status: summary.status,
           hasSecretOverride: summary.hasSecretOverride,
           filterEventTypes: summary.filterEventTypes,
-          customHeaders: {},
+          customHeaderNames: [],
           createdAt: summary.createdAt,
           updatedAt: summary.createdAt,
         };

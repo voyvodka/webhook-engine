@@ -9,7 +9,7 @@ const ENDPOINT: PortalEndpointSummary = {
   id: "ep-1",
   url: "https://consumer.example.com/hooks",
   description: "Test endpoint",
-  isActive: true,
+  status: "active",
   hasSecretOverride: false,
   filterEventTypes: [],
   createdAt: "2026-01-01T00:00:00Z",
@@ -72,12 +72,12 @@ describe("AttemptList", () => {
     expect(screen.getByText(/142 ms/i)).toBeInTheDocument();
   });
 
-  it("status badge is green for Success, red for Failure", async () => {
+  it("status badge is green for Success, red for Failed", async () => {
     const client = makeClient({
       listAttempts: vi.fn().mockResolvedValue({
         data: [
           makeAttempt({ id: "att-1", status: "success" }),
-          makeAttempt({ id: "att-2", status: "failure", statusCode: 500 }),
+          makeAttempt({ id: "att-2", status: "failed", statusCode: 500 }),
         ],
         pagination: { page: 1, pageSize: 20, total: 2 },
       }),
@@ -92,13 +92,13 @@ describe("AttemptList", () => {
     );
 
     await waitFor(() => expect(screen.getByText("Success")).toBeInTheDocument());
-    expect(screen.getByText("Failure")).toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
 
     const successBadge = screen.getByText("Success").closest("span");
-    const failureBadge = screen.getByText("Failure").closest("span");
+    const failedBadge = screen.getByText("Failed").closest("span");
 
     expect(successBadge?.className).toContain("whe-success");
-    expect(failureBadge?.className).toContain("whe-danger");
+    expect(failedBadge?.className).toContain("whe-danger");
   });
 
   it("Previous is disabled on page 1", async () => {

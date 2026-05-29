@@ -10,10 +10,10 @@ const DETAIL: PortalEndpointDetail = {
   id: "ep-1",
   url: "https://consumer.example.com/hooks",
   description: "Existing endpoint",
-  isActive: true,
+  status: "active",
   hasSecretOverride: false,
   filterEventTypes: [],
-  customHeaders: { "X-Custom": "value" },
+  customHeaderNames: ["X-Custom"],
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };

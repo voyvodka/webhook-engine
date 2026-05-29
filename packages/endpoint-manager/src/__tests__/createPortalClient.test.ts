@@ -22,7 +22,7 @@ const SUMMARY: PortalEndpointSummary = {
   id: "ep-1",
   url: "https://consumer.example.com/hooks",
   description: "Test endpoint",
-  isActive: true,
+  status: "active",
   hasSecretOverride: false,
   filterEventTypes: [],
   createdAt: "2026-01-01T00:00:00Z",
@@ -30,7 +30,7 @@ const SUMMARY: PortalEndpointSummary = {
 
 const DETAIL: PortalEndpointDetail = {
   ...SUMMARY,
-  customHeaders: {},
+  customHeaderNames: [],
   updatedAt: "2026-01-01T00:00:00Z",
 };
 
@@ -99,7 +99,44 @@ describe("createPortalClient", () => {
     const result = await client.getEndpoint("ep-1");
 
     expect(result.id).toBe("ep-1");
-    expect(result.customHeaders).toEqual({});
+    expect(result.status).toBe("active");
+    expect(result.customHeaderNames).toEqual([]);
+  });
+
+  it("getEndpoint — parses the real engine DTO shape (status + customHeaderNames)", async () => {
+    // Mirrors PortalEndpointDetail in the engine (Contracts/Portal/PortalDtos.cs):
+    // status is a lowercased enum string, customHeaderNames is names-only, and
+    // the engine also serialises a `metadata` JsonElement the client ignores.
+    // `satisfies` ties this literal to the type: reverting the DTO back to
+    // `isActive`/`customHeaders` makes this fail `tsc`, so the type drift is
+    // caught at typecheck while the PATCH verb is caught by the test below.
+    const serverDto = {
+      id: "ep-9",
+      url: "https://consumer.example.com/hooks",
+      description: null,
+      status: "degraded",
+      hasSecretOverride: true,
+      customHeaderNames: ["X-Tenant", "X-Source"],
+      metadata: { team: "payments" },
+      filterEventTypes: ["7d2b0c8e-0000-0000-0000-000000000001"],
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-02-01T00:00:00Z",
+    } satisfies PortalEndpointDetail & { metadata: Record<string, unknown> };
+    const fetch = createMockFetch([
+      {
+        method: "GET",
+        pattern: "/api/v1/portal/endpoints/ep-9",
+        handler: () => jsonOk(serverDto),
+      },
+    ]);
+    const client = createPortalClient({ baseUrl: BASE, token: TOKEN, fetch });
+    const result = await client.getEndpoint("ep-9");
+
+    expect(result.status).toBe("degraded");
+    expect(result.customHeaderNames).toEqual(["X-Tenant", "X-Source"]);
+    expect(result.hasSecretOverride).toBe(true);
+    // Unknown server fields (metadata) must not break deserialisation.
+    expect(result.id).toBe("ep-9");
   });
 
   it("createEndpoint — sends correct body and returns detail", async () => {
@@ -130,13 +167,18 @@ describe("createPortalClient", () => {
     expect(capturedBody).not.toHaveProperty("allowedIpsJson");
   });
 
-  it("updateEndpoint — sends correct body", async () => {
+  it("updateEndpoint — issues PATCH (not PUT) with correct body", async () => {
+    // Contract guard: the engine route is [HttpPatch]. A PUT here would 404
+    // against the real engine. The mock only registers a PATCH route, so a
+    // regression back to PUT fails to match and throws.
     let capturedBody: unknown;
+    let capturedMethod = "";
     const fetch = createMockFetch([
       {
-        method: "PUT",
+        method: "PATCH",
         pattern: "/api/v1/portal/endpoints/ep-1",
         handler: (_url, init) => {
+          capturedMethod = (init?.method ?? "").toUpperCase();
           capturedBody = JSON.parse(init?.body as string);
           return jsonOk({ ...DETAIL, url: "https://updated.example.com/hooks" });
         },
@@ -147,6 +189,7 @@ describe("createPortalClient", () => {
       url: "https://updated.example.com/hooks",
     });
 
+    expect(capturedMethod).toBe("PATCH");
     expect(result.url).toBe("https://updated.example.com/hooks");
     expect(capturedBody).not.toHaveProperty("transformExpression");
   });
