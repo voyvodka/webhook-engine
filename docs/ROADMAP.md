@@ -1,10 +1,10 @@
 # WebhookEngine — Strategic Roadmap
 
-**Last Updated:** 2026-05-10
+**Last Updated:** 2026-05-29
 **Status:** Active — Phase 2 (Traction & Feedback)
-**Latest release:** v0.2.0 (2026-05-10) — first minor release; embeddable customer portal (B1 Steps 1-5): portal engine surface (`/api/v1/portal/*`), HS256 JWT middleware, per-app dynamic CORS, operator dashboard controls, and `<PortalAccessModal />` UI.
+**Latest release:** v0.2.2 (2026-05-29) — maintenance patch (dependency refresh + CI Bun/lockfile fix). The embeddable customer portal landed in v0.2.0 (B1 Steps 1-5: `/api/v1/portal/*` surface, HS256 JWT middleware, per-app dynamic CORS, operator dashboard controls, `<PortalAccessModal />`); v0.2.1 hardened it (portal CORS deny-cache, PUT→PATCH, validator consolidation); and the `@webhookengine/endpoint-manager` npm package shipped in the `portal-v0.1.0` tag (2026-05-11).
 
-> **Note:** Phase 1 is complete (launch posts and the engineering blog post remain deferred). Phase 2 core tasks (2.2, 2.3, 2.4, **2.5 payload transformation across all three rollout phases**, 2.7 application layer cleanup) are done. v0.1.6 added eight follow-on features (endpoint test webhook, validate-time URL guard, per-resource overrides, IP allowlist, audit log, SignalR endpoint health, TanStack Query data layer). v0.2.0 adds the embeddable customer portal (engine + dashboard half). The `@webhookengine/endpoint-manager` npm package (B1 Step 7 / Step 11) lands in a follow-up `portal-v0.1.0` tag. Remaining Phase 2 items (TypeScript SDK gated on demand signal, comparison / best-practice blog posts) are planned.
+> **Note:** Phase 1 is complete (launch posts and the engineering blog post remain deferred). Phase 2 core tasks (2.2, 2.3, 2.4, **2.5 payload transformation across all three rollout phases**, 2.7 application layer cleanup) are done. v0.1.6 added eight follow-on features (endpoint test webhook, validate-time URL guard, per-resource overrides, IP allowlist, audit log, SignalR endpoint health, TanStack Query data layer). v0.2.0 adds the embeddable customer portal (engine + dashboard half). The `@webhookengine/endpoint-manager` npm package (B1 Step 7 / Step 11) shipped in the `portal-v0.1.0` tag (2026-05-11). Remaining Phase 2 items (TypeScript SDK gated on demand signal, comparison / best-practice blog posts) are planned.
 
 ---
 
@@ -140,7 +140,7 @@ Eight new features, three rounds of dashboard polish, three reviewer-finding fix
 
 ## v0.2.0 — Embeddable Customer Portal (2026-05-10)
 
-First minor release. The engine half and operator dashboard half of the embeddable customer portal land here. The `@webhookengine/endpoint-manager` React package lands in a follow-up `portal-v0.1.0` tag.
+First minor release. The engine half and operator dashboard half of the embeddable customer portal land here. The `@webhookengine/endpoint-manager` React package shipped in the follow-up `portal-v0.1.0` tag (2026-05-11).
 
 | # | Task | Status |
 |---|------|--------|
@@ -153,7 +153,7 @@ First minor release. The engine half and operator dashboard half of the embeddab
 | — | Tailwind 4.2.4 → 4.3.0 | done |
 | — | Dependabot npm `bun.lock` auto-sync workflow | done |
 | — | Documentation drift sync (ADR-003 Accepted, stack version lines) | done |
-| B1 Step 7 | `@webhookengine/endpoint-manager` npm package | planned (`portal-v0.1.0` tag) |
+| B1 Step 7 | `@webhookengine/endpoint-manager` npm package | done (`portal-v0.1.0`, 2026-05-11) |
 
 ---
 
