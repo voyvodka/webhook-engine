@@ -28,6 +28,20 @@ Add these secrets:
 | `NUGET_API_KEY` | NuGet.org API key |
 | `NPM_TOKEN` | npm automation token (for portal package — see Section 6) |
 
+### (Optional) Dependabot lockfile auto-sync that re-triggers CI
+
+`sync-bun-lock.yml` regenerates `bun.lock` on Dependabot npm PRs and pushes it back to the PR branch. By default that push uses `GITHUB_TOKEN`, and GitHub **does not** let `GITHUB_TOKEN` pushes trigger new workflow runs (recursion guard) — so the lockfile commit lands with no CI run on it and the PR stays blocked on required checks until you close/reopen it. To make the sync commit re-trigger CI automatically, configure a GitHub App whose short-lived installation token is used for the push:
+
+1. **Settings → Developer settings → GitHub Apps → New GitHub App.** Name it e.g. `webhook-engine-lock-bot`, set any homepage URL, and uncheck Webhook → Active.
+2. **Permissions → Repository permissions → Contents: Read and write.** No other permission is needed.
+3. Create the App, then **Generate a private key** (downloads a `.pem`).
+4. **Install App** on `voyvodka/webhook-engine` (only-this-repo is fine).
+5. In the repo, **Settings → Secrets and variables → Actions**:
+   - **Variables** tab → new variable `LOCK_BOT_APP_ID` = the App's numeric ID.
+   - **Secrets** tab → new secret `LOCK_BOT_PRIVATE_KEY` = the full `.pem` contents.
+
+When both are present the workflow mints a per-run App token (~1 h lifetime, so security-equivalent to `GITHUB_TOKEN`) and the lockfile-sync push re-triggers the required checks. When they are absent the workflow falls back to `GITHUB_TOKEN` and the manual close/reopen is still required.
+
 ## 2) (Optional) Bootstrap labels and milestones
 
 If you use the included scripts:

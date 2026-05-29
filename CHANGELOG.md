@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+- **Dependabot lockfile-sync commit can now re-trigger CI.** `sync-bun-lock.yml` pushed the regenerated `bun.lock` with `GITHUB_TOKEN`, and GitHub deliberately does not let `GITHUB_TOKEN` pushes trigger new workflow runs (recursion guard) — so the sync commit became the PR's HEAD with no CI run on it, leaving the PR blocked on required status checks until a manual close/reopen (as happened on #113). The push now uses a short-lived GitHub App installation token (`actions/create-github-app-token`, gated on the optional `vars.LOCK_BOT_APP_ID`) so the lockfile commit re-triggers the required checks automatically; it falls back to `GITHUB_TOKEN` (manual re-trigger) when the App is not configured. One-time App setup is documented in `docs/RELEASE.md` §1.
+
 ## [0.2.2] - 2026-05-29
 
 Maintenance patch: full dependency refresh across NuGet, npm, Docker base images, and GitHub Actions — plus the CI Bun/lockfile alignment fix. No user-visible behaviour changes, no breaking API changes; the `v1` route prefix and Standard Webhooks signature surface are unchanged.

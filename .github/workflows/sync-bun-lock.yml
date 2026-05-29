@@ -12,6 +12,16 @@ name: Sync bun.lock for Dependabot
 # to the base repo (needed to push the lockfile back); we still gate on
 # `github.actor == 'dependabot[bot]'` so an external contributor cannot
 # repurpose this surface to push arbitrary commits.
+#
+# The lockfile-sync commit is pushed with a GitHub App installation token
+# (when configured) so that the push re-triggers required CI checks.
+# GitHub deliberately does not trigger new workflow runs from pushes made
+# with GITHUB_TOKEN (recursion guard), which would leave the PR blocked on
+# required status checks. The App token is short-lived (~1 h) and therefore
+# security-equivalent to GITHUB_TOKEN in token lifetime. When the App is not
+# configured (vars.LOCK_BOT_APP_ID is empty) the workflow falls back to
+# GITHUB_TOKEN — the lockfile is still synced, but CI must be re-triggered
+# manually (close/reopen the PR or push an empty commit).
 
 on:
   pull_request_target:
@@ -30,11 +40,19 @@ jobs:
     if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
+      - name: Mint GitHub App token
+        id: app-token
+        if: ${{ vars.LOCK_BOT_APP_ID != '' }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.LOCK_BOT_APP_ID }}
+          private-key: ${{ secrets.LOCK_BOT_PRIVATE_KEY }}
+
       - name: Checkout PR head
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
