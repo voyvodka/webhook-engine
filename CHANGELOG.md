@@ -7,6 +7,18 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-05-29
+
+Maintenance patch: full dependency refresh across NuGet, npm, Docker base images, and GitHub Actions — plus the CI Bun/lockfile alignment fix. No user-visible behaviour changes, no breaking API changes; the `v1` route prefix and Standard Webhooks signature surface are unchanged.
+
+### Security
+- **Docker base image digest bumps.** `dotnet/aspnet` (`60eb031` → `1e37a82`), `dotnet/sdk` (`8a90a47` → `dc8430e`), and `oven/bun` (`4de4753` → `5acc90a`) all refreshed to pick up the latest patched Alpine layers.
+
+### Changed
+- **NuGet runtime dependency refresh.** `Microsoft.AspNetCore.OpenApi`, `Microsoft.EntityFrameworkCore` (+ `.Relational`, `.Design`), `Microsoft.Extensions.Http`, `.Hosting.Abstractions`, and `.DependencyInjection` all bumped `10.0.7 → 10.0.8`; `Scalar.AspNetCore` `2.14.11 → 2.14.14`. Test-only: `FluentAssertions` `8.9.0 → 8.10.0`, `coverlet.collector` `10.0.0 → 10.0.1`, `Microsoft.AspNetCore.Mvc.Testing` / `EntityFrameworkCore.InMemory` `10.0.7 → 10.0.8`, `Testcontainers.PostgreSql` `4.11.0 → 4.12.0`.
+- **npm / frontend dependency refresh.** `lucide-react` `1.14.0 → 1.16.0`, `react-router` `7.15.0 → 7.15.1`, `vite` `8.0.11 → 8.0.13`, `@vitejs/plugin-react` `6.0.1 → 6.0.2`, `eslint` `10.3.0 → 10.4.0`, `typescript-eslint` `8.59.2 → 8.59.3`, `@types/node` `25.6.2 → 25.8.0`. (`lucide-react`, `react-router`, and `vite` ship in the dashboard bundle; the rest are dev/build tooling.)
+- **GitHub Actions version bumps.** `actions/dependency-review-action` `v4 → v5`; `actions/setup-node` `v5 → v6`.
+
 ### Fixed
 - **CI Bun version aligned to 1.3.x and the Dependabot lockfile auto-sync repaired.** Three workflows (`ci.yml`, `sync-bun-lock.yml`, `publish-portal.yml`) pinned `BUN_VERSION: "1.2.x"` while the committed `bun.lock` is in the Bun 1.3 text-lockfile format (`configVersion`), the Docker dashboard build runs `oven/bun:1`, and local dev runs 1.3.x. The skew made every grouped Dependabot npm bump fail the `Frontend (build + lint)` job's `tsc --noEmit` under 1.2.x's transitive resolution — a duplicate vite `Plugin` type identity surfacing as `TS2321 Excessive stack depth` / `TS2769` on `vite.config.ts`. Separately, `sync-bun-lock.yml` ran `bun install --no-save`, which never writes `bun.lock`, so the auto-sync step silently no-op'd and every frontend dependency PR landed with a stale lockfile that broke CI's `bun install --frozen-lockfile`. All three pins are now `"1.3.x"` and the sync step drops `--no-save` so the refreshed lockfile is actually committed back to the PR branch.
 
