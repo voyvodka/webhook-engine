@@ -18,4 +18,8 @@
     <ProjectReference Include="..\WebhookEngine.Infrastructure\WebhookEngine.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="WebhookEngine.Worker.Tests" />
+  </ItemGroup>
+
 </Project>
