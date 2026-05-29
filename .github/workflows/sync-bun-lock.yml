@@ -22,7 +22,7 @@ permissions:
   contents: write
 
 env:
-  BUN_VERSION: "1.2.x"
+  BUN_VERSION: "1.3.x"
 
 jobs:
   sync-lockfile:
@@ -42,7 +42,7 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Regenerate lockfile (workspace root)
-        run: bun install --no-save
+        run: bun install
 
       - name: Commit and push if lockfile changed
         run: |

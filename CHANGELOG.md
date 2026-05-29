@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+- **CI Bun version aligned to 1.3.x and the Dependabot lockfile auto-sync repaired.** Three workflows (`ci.yml`, `sync-bun-lock.yml`, `publish-portal.yml`) pinned `BUN_VERSION: "1.2.x"` while the committed `bun.lock` is in the Bun 1.3 text-lockfile format (`configVersion`), the Docker dashboard build runs `oven/bun:1`, and local dev runs 1.3.x. The skew made every grouped Dependabot npm bump fail the `Frontend (build + lint)` job's `tsc --noEmit` under 1.2.x's transitive resolution — a duplicate vite `Plugin` type identity surfacing as `TS2321 Excessive stack depth` / `TS2769` on `vite.config.ts`. Separately, `sync-bun-lock.yml` ran `bun install --no-save`, which never writes `bun.lock`, so the auto-sync step silently no-op'd and every frontend dependency PR landed with a stale lockfile that broke CI's `bun install --frozen-lockfile`. All three pins are now `"1.3.x"` and the sync step drops `--no-save` so the refreshed lockfile is actually committed back to the PR branch.
+
 ## [0.2.1] - 2026-05-11
 
 ### Removed
