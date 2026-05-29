@@ -58,6 +58,27 @@ updates:
           - minor
           - patch
 
+  # ── endpoint-manager package (npm — Bun workspace) ───────────────
+  - package-ecosystem: npm
+    directory: /packages/endpoint-manager
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Istanbul
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - npm
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
   # ── CI workflows ────────────────────────────────────────────────
   - package-ecosystem: github-actions
     directory: /
