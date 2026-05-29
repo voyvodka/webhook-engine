@@ -123,15 +123,18 @@ WebhookEngine/
 │   │   │   └── PasswordHasher.cs
 │   │   ├── Controllers/
 │   │   │   ├── ApplicationsController.cs
+│   │   │   ├── AuditLogsController.cs          # Audit log query (v0.1.6)
 │   │   │   ├── AuthController.cs              # Dashboard login/logout/me
 │   │   │   ├── DashboardAnalyticsController.cs # Overview stats, timeline
 │   │   │   ├── DashboardEndpointController.cs  # Dashboard endpoint management
 │   │   │   ├── DashboardMessagesController.cs  # Dashboard message operations
+│   │   │   ├── DashboardPortalController.cs    # Portal access lifecycle (v0.2.0)
 │   │   │   ├── DevTrafficController.cs         # Dev traffic generator controls
 │   │   │   ├── EndpointsController.cs
 │   │   │   ├── EventTypesController.cs
 │   │   │   ├── HealthController.cs
-│   │   │   └── MessagesController.cs
+│   │   │   ├── MessagesController.cs
+│   │   │   └── PortalEndpointsController.cs    # Embeddable consumer portal (v0.2.0)
 │   │   ├── Hubs/
 │   │   │   └── DeliveryHub.cs           # SignalR hub + SignalRDeliveryNotifier
 │   │   ├── Middleware/
@@ -355,7 +358,7 @@ Optional CIDR positive-list per endpoint (`Endpoint.AllowedIpsJson`). When confi
 
 Admin actions write to the append-only `audit_logs` table with `actor_user_id`, `actor_email`, `application_id`, `entity_type`, `entity_id`, `action`, `before_snapshot`, `after_snapshot`, and `request_id` (mirroring `X-Request-Id` for log cross-correlation). The table holds **no foreign keys** so rows survive the cascade when an application or endpoint is deleted. `ApplicationsController.Delete` reads `MessageRepository.CountAsync(...)` *before* the delete and folds the count into the audit `before_snapshot` so post-incident reconstruction can recover scale. `GET /api/v1/dashboard/audit` exposes the table with cursor pagination and per-app, per-entity, per-action filters.
 
-### 3.5 HTTP Delivery Service
+### 3.8 HTTP Delivery Service
 
 ```csharp
 public class HttpDeliveryService : IDeliveryService
