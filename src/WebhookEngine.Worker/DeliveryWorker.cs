@@ -249,7 +249,7 @@ public class DeliveryWorker : BackgroundService
                         return;
                     }
 
-                    var nextRetryAt = CalculateNextRetryAt(attemptAfterDnsFailure);
+                    var nextRetryAt = CalculateNextRetryAt(attemptAfterDnsFailure, _retryPolicy, DateTime.UtcNow);
                     _logger.LogInformation(
                         ex,
                         "Allowlist DNS lookup failed for endpoint {EndpointId}, message {MessageId}; rescheduling for retry at {NextRetryAt} (attempt {AttemptCount}).",
@@ -366,7 +366,7 @@ public class DeliveryWorker : BackgroundService
                 }
                 else
                 {
-                    var nextRetryAt = CalculateNextRetryAt(currentAttempt);
+                    var nextRetryAt = CalculateNextRetryAt(currentAttempt, _retryPolicy, DateTime.UtcNow);
                     if (!await messageRepo.MarkFailedForRetryAsync(message.Id, currentAttempt, nextRetryAt, _workerId, ct))
                     {
                         _logger.LogWarning("MarkFailedForRetry lost the row {MessageId} — abandoning", message.Id);
@@ -408,11 +408,11 @@ public class DeliveryWorker : BackgroundService
         }
     }
 
-    private DateTime CalculateNextRetryAt(int currentAttempt)
+    internal static DateTime CalculateNextRetryAt(int currentAttempt, RetryPolicyOptions retryPolicy, DateTime utcNow)
     {
-        var backoffIndex = Math.Min(currentAttempt - 1, _retryPolicy.BackoffSchedule.Length - 1);
-        var backoffSeconds = _retryPolicy.BackoffSchedule[backoffIndex];
-        return DateTime.UtcNow.AddSeconds(backoffSeconds);
+        var backoffIndex = Math.Min(currentAttempt - 1, retryPolicy.BackoffSchedule.Length - 1);
+        var backoffSeconds = retryPolicy.BackoffSchedule[backoffIndex];
+        return utcNow.AddSeconds(backoffSeconds);
     }
 
     private string ApplyTransformation(string originalPayload, Core.Entities.Endpoint endpoint, Guid messageId)
@@ -443,7 +443,7 @@ public class DeliveryWorker : BackgroundService
         return originalPayload;
     }
 
-    private static Dictionary<string, string> ParseCustomHeaders(string? customHeadersJson)
+    internal static Dictionary<string, string> ParseCustomHeaders(string? customHeadersJson)
     {
         if (string.IsNullOrWhiteSpace(customHeadersJson))
         {
@@ -460,7 +460,7 @@ public class DeliveryWorker : BackgroundService
         }
     }
 
-    private static Dictionary<string, string> BuildRequestHeaders(
+    internal static Dictionary<string, string> BuildRequestHeaders(
         SignedHeaders signedHeaders,
         Dictionary<string, string> customHeaders)
     {
