@@ -23,6 +23,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Security
 - **Repository security baseline hardened.** Added a root `SECURITY.md` (supported-versions policy + GitHub private-vulnerability-reporting disclosure flow), which also resolves the dangling `/SECURITY.md` reference in `CODEOWNERS`. Added explicit least-privilege `permissions: contents: read` blocks to `ci.yml` and `release.yml` — previously the two highest-privilege workflows ran with the broad default token (Docker Hub / NuGet auth uses repository secrets, not `GITHUB_TOKEN`, so no write scope is needed; `id-token: write` is deliberately omitted while provenance is disabled). Extended Dependabot to the previously-uncovered `/packages/endpoint-manager` npm workspace (vite, tailwindcss, tsup, vitest, typescript, … now tracked). Added `timeout-minutes` to the CI Backend/Frontend/Docker jobs so a hung Testcontainers run can't consume the 6-hour default.
+- **Secret-scanning false-positive suppression.** Added `.github/secret_scanning.yml` with `paths-ignore` for `docs/**`, `samples/**`, `tests/**`, `**/__tests__/**`, and `**/*.md`. WebhookEngine's Standard Webhooks `whsec_` signing-secret prefix collides with Stripe's webhook-secret pattern, so GitHub flagged fabricated `whsec_…` doc examples and test vectors as "Stripe Webhook Signing Secret" alerts. Those paths never hold live credentials; `src/**` stays scanned. (The two existing alerts were resolved as false-positive.)
 
 ## [0.2.2] - 2026-05-29
 
