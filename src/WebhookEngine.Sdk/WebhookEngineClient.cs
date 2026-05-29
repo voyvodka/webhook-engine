@@ -67,7 +67,7 @@ public sealed class WebhookEngineClient : IDisposable
     /// <summary>Event type operations (create, list, get, update, archive).</summary>
     public EventTypeClient EventTypes { get; }
 
-    /// <summary>Endpoint operations (create, list, get, update, enable, disable, delete, stats).</summary>
+    /// <summary>Endpoint operations (create, list, get, update, enable, disable, delete, stats, test).</summary>
     public EndpointClient Endpoints { get; }
 
     /// <summary>Message operations (send, get, list, retry, list attempts).</summary>
