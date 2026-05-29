@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useState } from "react";
 import type { JSX } from "react";
-import type { PortalCapability, PortalEndpointSummary } from "../types.js";
+import type { PortalCapability, PortalEndpointStatus, PortalEndpointSummary } from "../types.js";
 import type { PortalClient, PortalPagination } from "../api/createPortalClient.js";
 import { EndpointTester } from "./EndpointTester.js";
 import { AttemptList } from "./AttemptList.js";
@@ -29,7 +29,7 @@ type ListAction =
   | { type: "FETCH_ERROR"; message: string }
   | { type: "SET_PAGE"; page: number }
   | { type: "TOGGLE_START"; id: string }
-  | { type: "TOGGLE_DONE"; id: string; isActive: boolean }
+  | { type: "TOGGLE_DONE"; id: string; status: PortalEndpointStatus }
   | { type: "TOGGLE_ERROR"; id: string }
   | { type: "DELETE_START"; id: string }
   | { type: "DELETE_DONE"; id: string }
@@ -57,7 +57,7 @@ function listReducer(state: ListState, action: ListAction): ListState {
         ...state,
         togglingId: null,
         endpoints: state.endpoints.map((e) =>
-          e.id === action.id ? { ...e, isActive: action.isActive } : e,
+          e.id === action.id ? { ...e, status: action.status } : e,
         ),
       };
     case "TOGGLE_ERROR":
@@ -88,6 +88,32 @@ function formatDate(iso: string): string {
 function truncateUrl(url: string, max = 48): string {
   if (url.length <= max) return url;
   return url.slice(0, max) + "…";
+}
+
+// An endpoint is "enabled" (operator-wise) unless explicitly disabled — the
+// degraded/failed states are circuit-breaker outcomes on an otherwise-live
+// endpoint, so the enable/disable toggle keys off "disabled" only.
+function isEnabled(status: string): boolean {
+  return status !== "disabled";
+}
+
+interface StatusVisual {
+  label: string;
+  pill: string;
+  dot: string;
+}
+
+function statusVisual(status: string): StatusVisual {
+  switch (status) {
+    case "active":
+      return { label: "Active", pill: "bg-whe-success-soft text-whe-success", dot: "bg-whe-success" };
+    case "degraded":
+      return { label: "Degraded", pill: "bg-whe-warning-soft text-whe-warning", dot: "bg-whe-warning" };
+    case "failed":
+      return { label: "Failed", pill: "bg-whe-danger-soft text-whe-danger", dot: "bg-whe-danger" };
+    default:
+      return { label: "Disabled", pill: "bg-whe-bg-3 text-whe-text-muted", dot: "bg-whe-text-muted" };
+  }
 }
 
 // Inline lightning-bolt SVG (no Lucide dep inside this package).
@@ -167,12 +193,12 @@ export function EndpointList({
   const handleToggle = async (endpoint: PortalEndpointSummary) => {
     dispatch({ type: "TOGGLE_START", id: endpoint.id });
     try {
-      if (endpoint.isActive) {
+      if (isEnabled(endpoint.status)) {
         await client.disableEndpoint(endpoint.id);
-        dispatch({ type: "TOGGLE_DONE", id: endpoint.id, isActive: false });
+        dispatch({ type: "TOGGLE_DONE", id: endpoint.id, status: "disabled" });
       } else {
         await client.enableEndpoint(endpoint.id);
-        dispatch({ type: "TOGGLE_DONE", id: endpoint.id, isActive: true });
+        dispatch({ type: "TOGGLE_DONE", id: endpoint.id, status: "active" });
       }
     } catch {
       dispatch({ type: "TOGGLE_ERROR", id: endpoint.id });
@@ -284,17 +310,15 @@ export function EndpointList({
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          {endpoint.isActive ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-whe-success-soft px-2 py-0.5 text-xs font-medium text-whe-success">
-                              <span className="h-1.5 w-1.5 rounded-full bg-whe-success" aria-hidden="true" />
-                              Active
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-whe-bg-3 px-2 py-0.5 text-xs font-medium text-whe-text-muted">
-                              <span className="h-1.5 w-1.5 rounded-full bg-whe-text-muted" aria-hidden="true" />
-                              Disabled
-                            </span>
-                          )}
+                          {(() => {
+                            const v = statusVisual(endpoint.status);
+                            return (
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${v.pill}`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${v.dot}`} aria-hidden="true" />
+                                {v.label}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="hidden px-4 py-3 text-whe-text-secondary md:table-cell">
                           {endpoint.filterEventTypes.length === 0 ? (
@@ -348,9 +372,9 @@ export function EndpointList({
                                     disabled={isToggling || isDeleting}
                                     onClick={() => void handleToggle(endpoint)}
                                     className="rounded px-2 py-1 text-xs text-whe-text-secondary hover:text-whe-text-primary focus:outline-none focus-visible:ring-1 focus-visible:ring-whe-accent disabled:opacity-50"
-                                    aria-label={endpoint.isActive ? "Disable endpoint" : "Enable endpoint"}
+                                    aria-label={isEnabled(endpoint.status) ? "Disable endpoint" : "Enable endpoint"}
                                   >
-                                    {isToggling ? "…" : endpoint.isActive ? "Disable" : "Enable"}
+                                    {isToggling ? "…" : isEnabled(endpoint.status) ? "Disable" : "Enable"}
                                   </button>
                                   <button
                                     type="button"

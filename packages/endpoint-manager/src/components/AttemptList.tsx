@@ -60,22 +60,28 @@ function formatRelativeTime(iso: string): string {
   return `${days}d ago`;
 }
 
+// Maps the lowercased AttemptStatus enum to a label + colour.
+function attemptStatusVisual(status: string): { label: string; pill: string; dot: string } {
+  switch (status.toLowerCase()) {
+    case "success":
+      return { label: "Success", pill: "bg-whe-success-soft text-whe-success", dot: "bg-whe-success" };
+    case "timeout":
+      return { label: "Timeout", pill: "bg-whe-warning-soft text-whe-warning", dot: "bg-whe-warning" };
+    case "sending":
+      return { label: "Sending", pill: "bg-whe-bg-3 text-whe-text-muted", dot: "bg-whe-text-muted" };
+    default:
+      return { label: "Failed", pill: "bg-whe-danger-soft text-whe-danger", dot: "bg-whe-danger" };
+  }
+}
+
 function StatusBadge({ status }: { status: string }): JSX.Element {
-  const isSuccess = status.toLowerCase() === "success";
+  const v = attemptStatusVisual(status);
   return (
     <span
-      className={[
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-        isSuccess
-          ? "bg-whe-success-soft text-whe-success"
-          : "bg-whe-danger-soft text-whe-danger",
-      ].join(" ")}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${v.pill}`}
     >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${isSuccess ? "bg-whe-success" : "bg-whe-danger"}`}
-        aria-hidden="true"
-      />
-      {isSuccess ? "Success" : "Failure"}
+      <span className={`h-1.5 w-1.5 rounded-full ${v.dot}`} aria-hidden="true" />
+      {v.label}
     </span>
   );
 }

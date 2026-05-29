@@ -4,6 +4,14 @@ export type PortalCapability =
   | "endpoints:test"
   | "attempts:read";
 
+/**
+ * Endpoint status as served by the engine — the lowercased `EndpointStatus`
+ * enum. `active`/`disabled` are operator/portal-controlled; `degraded`/`failed`
+ * are set automatically by the circuit breaker. Unknown future values are
+ * tolerated by widening to `string` at the badge layer.
+ */
+export type PortalEndpointStatus = "active" | "degraded" | "failed" | "disabled";
+
 export interface PortalAppState {
   portalEnabled: boolean;
   allowedOrigins: string[];
@@ -14,7 +22,7 @@ export interface PortalEndpointSummary {
   id: string;
   url: string;
   description: string | null;
-  isActive: boolean;
+  status: PortalEndpointStatus;
   hasSecretOverride: boolean;
   filterEventTypes: string[];
   createdAt: string;
@@ -24,10 +32,16 @@ export interface PortalEndpointDetail {
   id: string;
   url: string;
   description: string | null;
-  isActive: boolean;
+  status: PortalEndpointStatus;
   hasSecretOverride: boolean;
   filterEventTypes: string[];
-  customHeaders: Record<string, string>;
+  /**
+   * Header NAMES only — the engine deliberately never returns custom-header
+   * values to the portal (they may carry shared secrets). On edit, an update
+   * that omits `customHeaders` preserves the stored values server-side; sending
+   * `customHeaders` replaces the full set (the engine cannot merge).
+   */
+  customHeaderNames: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -46,7 +60,7 @@ export interface PortalAttempt {
   id: string;
   messageId: string;
   attemptNumber: number;
-  /** "success" | "failure" — serialised from AttemptStatus enum as camelCase */
+  /** Lowercased AttemptStatus enum: "success" | "failed" | "timeout" | "sending" */
   status: string;
   /** HTTP status code; null when a network-level error occurred before a response */
   statusCode: number | null;

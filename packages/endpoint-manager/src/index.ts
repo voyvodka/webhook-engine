@@ -8,6 +8,7 @@ export { createPortalClient, PortalError } from "./api/createPortalClient.js";
 export type {
   EndpointManagerProps,
   PortalCapability,
+  PortalEndpointStatus,
   PortalAppState,
   PortalEndpointSummary,
   PortalEndpointDetail,

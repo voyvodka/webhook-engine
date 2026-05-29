@@ -50,7 +50,7 @@ type EditorAction =
   | { type: "DELETE_START" }
   | { type: "DELETE_ERROR"; message: string }
   | { type: "TOGGLE_START" }
-  | { type: "TOGGLE_DONE"; isActive: boolean }
+  | { type: "TOGGLE_DONE" }
   | { type: "TOGGLE_ERROR"; message: string }
   | { type: "EVENT_TYPES_LOADED"; eventTypes: PortalEventTypeListItem[] };
 
@@ -135,10 +135,10 @@ function buildInitialValues(endpoint?: PortalEndpointDetail): FormValues {
     url: endpoint.url,
     description: endpoint.description ?? "",
     filterEventTypes: endpoint.filterEventTypes,
-    customHeaders: Object.entries(endpoint.customHeaders ?? {}).map(([key, value]) => ({
-      key,
-      value,
-    })),
+    // The engine returns header NAMES only (values are never exposed to the
+    // portal), so the editable rows start empty on edit. Existing header names
+    // are surfaced read-only above; see the customHeaders handling in handleSave.
+    customHeaders: [],
     secretOverride: "",
   };
 }
@@ -147,7 +147,7 @@ function validateSecretOverride(value: string): string | null {
   if (value === "") return null;
   if (!value.startsWith("whsec_")) return "Secret must start with whsec_";
   const payload = value.slice("whsec_".length);
-  if (payload.length < 32) return "Secret must be at least 38 characters (whsec_ + 32)";
+  if (payload.length < 32) return "Secret must have at least 32 characters after whsec_";
   if (payload.length > 128) return "Secret payload must not exceed 128 characters";
   return null;
 }
@@ -197,8 +197,12 @@ export function EndpointEditor({
     showDeleteConfirm: false,
   });
 
-  // Track current isActive for the enable/disable button when in edit mode.
-  const [currentIsActive, setCurrentIsActive] = useState(endpoint?.isActive ?? false);
+  // Track whether the endpoint is enabled (not "disabled") for the
+  // enable/disable button in edit mode. degraded/failed still count as enabled.
+  const [currentEnabled, setCurrentEnabled] = useState(
+    (endpoint?.status ?? "disabled") !== "disabled",
+  );
+  const existingHeaderNames = isEdit ? (endpoint?.customHeaderNames ?? []) : [];
 
   // Load event types on mount.
   useEffect(() => {
@@ -270,13 +274,27 @@ export function EndpointEditor({
 
     dispatch({ type: "SAVE_START" });
 
-    const payload = {
+    const headers = headersToRecord(state.values.customHeaders);
+    const payload: {
+      url: string;
+      description: string | null;
+      filterEventTypes: string[];
+      secretOverride: string | null;
+      customHeaders?: Record<string, string>;
+    } = {
       url: state.values.url,
       description: state.values.description || null,
       filterEventTypes: state.values.filterEventTypes,
-      customHeaders: headersToRecord(state.values.customHeaders),
       secretOverride: state.values.secretOverride || null,
     };
+
+    // On create, always send the (possibly empty) header set. On edit, only
+    // send when the user entered headers — the engine replaces the full set and
+    // cannot merge, and the portal never receives existing values to merge
+    // against, so an empty form must preserve stored headers, not wipe them.
+    if (!isEdit || Object.keys(headers).length > 0) {
+      payload.customHeaders = headers;
+    }
 
     try {
       if (isEdit && endpoint) {
@@ -321,21 +339,21 @@ export function EndpointEditor({
     if (!endpoint) return;
     dispatch({ type: "TOGGLE_START" });
     try {
-      if (currentIsActive) {
+      if (currentEnabled) {
         await client.disableEndpoint(endpoint.id);
-        setCurrentIsActive(false);
+        setCurrentEnabled(false);
       } else {
         await client.enableEndpoint(endpoint.id);
-        setCurrentIsActive(true);
+        setCurrentEnabled(true);
       }
-      dispatch({ type: "TOGGLE_DONE", isActive: !currentIsActive });
+      dispatch({ type: "TOGGLE_DONE" });
     } catch (err) {
       dispatch({
         type: "TOGGLE_ERROR",
         message: err instanceof Error ? err.message : "Failed to update endpoint status.",
       });
     }
-  }, [client, currentIsActive, endpoint]);
+  }, [client, currentEnabled, endpoint]);
 
   const title = isEdit ? "Edit endpoint" : "New endpoint";
 
@@ -463,6 +481,20 @@ export function EndpointEditor({
 
           {/* Custom headers */}
           <Field label="Custom headers" htmlFor="whe-headers">
+            {existingHeaderNames.length > 0 && (
+              <div className="mb-2 rounded-lg border border-whe-border bg-whe-bg-3 px-3 py-2">
+                <p className="text-xs text-whe-text-secondary">
+                  Current headers (values hidden):{" "}
+                  <span className="font-mono text-whe-text-primary">
+                    {existingHeaderNames.join(", ")}
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-whe-text-muted">
+                  Leave the fields below empty to keep them. Adding any header
+                  replaces the entire set.
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               {state.values.customHeaders.map((header, index) => (
                 <div key={index} className="flex gap-2">
@@ -574,7 +606,7 @@ export function EndpointEditor({
                 onClick={() => void handleToggleActive()}
                 className="rounded-md border border-whe-border px-3 py-1.5 text-sm text-whe-text-secondary hover:border-whe-accent hover:text-whe-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-whe-accent disabled:opacity-50"
               >
-                {state.toggling ? "…" : currentIsActive ? "Disable" : "Enable"}
+                {state.toggling ? "…" : currentEnabled ? "Disable" : "Enable"}
               </button>
 
               {!state.showDeleteConfirm ? (

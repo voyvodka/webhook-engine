@@ -234,7 +234,9 @@ export function createPortalClient(options: PortalClientOptions): PortalClient {
         customHeaders: input.customHeaders,
         secretOverride: input.secretOverride,
       };
-      return request<PortalEndpointDetail>("PUT", `/api/v1/portal/endpoints/${id}`, { body });
+      // PATCH, not PUT — the engine route is [HttpPatch] and partial-merges
+      // the supplied fields (PortalEndpointsController.Update).
+      return request<PortalEndpointDetail>("PATCH", `/api/v1/portal/endpoints/${id}`, { body });
     },
 
     deleteEndpoint(id) {
