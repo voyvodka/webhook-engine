@@ -7,7 +7,7 @@ WebhookEngine is a self-hosted webhook delivery platform. Single ASP.NET Core ho
 ## Tech Stack
 
 - **Backend:** C# / .NET 10, ASP.NET Core (Controllers), Entity Framework Core, PostgreSQL 17+
-- **Frontend (Dashboard):** React 19 + TypeScript 5.9 + Vite 7 + Tailwind CSS 4 + Recharts 3 + Lucide React (in `src/dashboard/`)
+- **Frontend (Dashboard):** React 19 + TypeScript 6 + Vite 8 + Tailwind CSS 4 + Recharts 3 + Lucide React (in `src/dashboard/`)
 - **Testing:** xUnit, FluentAssertions, NSubstitute, Testcontainers (real PostgreSQL)
 - **Logging:** Serilog (structured, JSON output)
 - **Validation:** FluentValidation

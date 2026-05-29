@@ -61,7 +61,7 @@ If you already operate a PostgreSQL instance, run the image directly and point i
 ```bash
 docker run -d --name webhook-engine \
   -p 8080:8080 \
-  -e ConnectionStrings__WebhookDb="Host=your-postgres;Port=5432;Database=webhookengine;Username=postgres;Password=secret" \
+  -e ConnectionStrings__Default="Host=your-postgres;Port=5432;Database=webhookengine;Username=postgres;Password=secret" \
   -e Dashboard__AdminEmail="admin@example.com" \
   -e Dashboard__AdminPassword="StrongPassword123!" \
   voyvodka/webhook-engine:latest
@@ -221,7 +221,7 @@ Base URL: `/api/v1/`
 ### Send a Message
 
 ```bash
-curl -X POST http://localhost:5128/api/v1/messages \
+curl -X POST http://localhost:5100/api/v1/messages \
   -H "Authorization: Bearer whe_abc123_your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -249,7 +249,7 @@ Response:
 ```csharp
 using WebhookEngine.Sdk;
 
-using var client = new WebhookEngineClient("whe_abc_your-api-key", "http://localhost:5128");
+using var client = new WebhookEngineClient("whe_abc_your-api-key", "http://localhost:5100");
 
 await client.Messages.SendAsync(new SendMessageRequest
 {
@@ -306,7 +306,7 @@ All configuration is via `appsettings.json` or environment variables (double-und
 # Build
 dotnet build WebhookEngine.sln
 
-# Run all tests (215 tests)
+# Run all tests
 dotnet test WebhookEngine.sln
 
 # Run specific test project
@@ -343,7 +343,7 @@ dotnet run --project src/WebhookEngine.API
 WebhookEngine exposes Prometheus metrics at `GET /metrics`. No authentication required.
 
 ```bash
-curl http://localhost:5128/metrics
+curl http://localhost:5100/metrics
 ```
 
 ### Custom Metrics
@@ -374,7 +374,7 @@ scrape_configs:
   - job_name: webhookengine
     scrape_interval: 15s
     static_configs:
-      - targets: ["localhost:5128"]
+      - targets: ["localhost:5100"]
 ```
 
 ## Message Lifecycle

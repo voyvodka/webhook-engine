@@ -2,7 +2,7 @@
 # WebhookEngine — Open-Source Webhook Delivery Infrastructure
 
 **Version:** 1.0
-**Last Updated:** 2026-03-02
+**Last Updated:** 2026-05-29
 **Status:** Active — Phase 2 (Traction & Feedback)
 
 ---
@@ -65,12 +65,13 @@ Regulated industries (fintech, healthtech, government) and GDPR/KVKK-conscious c
 
 ### 3.2 Non-Goals (explicitly out of scope for MVP)
 - Incoming webhook gateway (receiving webhooks from third parties)
-- Webhook payload transformation/mapping
 - GraphQL API (REST only for MVP)
 - Kafka/RabbitMQ as queue backend (PostgreSQL-based queue for MVP)
 - Email/SMS/push notification channels (that's the Notification Infrastructure project)
 - Mobile SDK
 - Kubernetes Helm charts (Docker Compose only for MVP)
+
+> **Update:** Webhook payload transformation/mapping was an MVP non-goal but has since been delivered post-MVP as opt-in per-endpoint JMESPath transformation (see [ADR-003](adr/adr-003-payload-transformation-proposal.md)). It is no longer out of scope.
 
 ---
 
