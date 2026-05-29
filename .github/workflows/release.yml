@@ -5,6 +5,14 @@ on:
     tags:
       - "v*"
 
+# Least-privilege token: Docker Hub and NuGet are authenticated via repository
+# secrets (DOCKERHUB_TOKEN, NUGET_API_KEY), not the GITHUB_TOKEN. The workflow
+# only needs to read source code; no GITHUB_TOKEN write scope is required.
+# id-token: write is intentionally omitted — provenance attestations are
+# disabled (provenance: false / sbom: false) so OIDC is not needed.
+permissions:
+  contents: read
+
 env:
   DOTNET_VERSION: "10.0.x"
 
