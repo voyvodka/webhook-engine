@@ -43,7 +43,7 @@ jobs:
       - name: Mint GitHub App token
         id: app-token
         if: ${{ vars.LOCK_BOT_APP_ID != '' }}
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ vars.LOCK_BOT_APP_ID }}
           private-key: ${{ secrets.LOCK_BOT_PRIVATE_KEY }}
