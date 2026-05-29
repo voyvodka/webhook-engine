@@ -2,7 +2,7 @@
 # Stage 1: Dashboard build (React SPA)
 # ============================================================
 # Image digests pinned so Dependabot can track and bump them.
-FROM oven/bun:1-alpine@sha256:4de475389889577f346c636f956b42a5c31501b654664e9ae5726f94d7bb5349 AS dashboard-build
+FROM oven/bun:1-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 AS dashboard-build
 WORKDIR /workspace
 
 # Workspace plumbing: install from the root so Bun resolves the workspace
