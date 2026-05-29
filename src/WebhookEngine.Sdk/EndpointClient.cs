@@ -77,4 +77,15 @@ public class EndpointClient
         var result = await SdkHelpers.GetAsync<EndpointStatsResponse>(_http, $"{BasePath}/{endpointId}/stats{query}", _json, ct);
         return result.Data;
     }
+
+    /// <summary>
+    /// Send a one-off signed test webhook to the endpoint and return the live
+    /// response (status, latency, body) plus the exact signed request that was
+    /// sent. Does not enqueue a real delivery or create a message record.
+    /// </summary>
+    public async Task<EndpointTestResult?> TestAsync(Guid endpointId, TestEndpointRequest request, CancellationToken ct = default)
+    {
+        var result = await SdkHelpers.PostAsync<EndpointTestResult>(_http, $"{BasePath}/{endpointId}/test", request, _json, ct);
+        return result.Data;
+    }
 }

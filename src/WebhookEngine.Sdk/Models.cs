@@ -44,6 +44,8 @@ public class CreateEventTypeRequest
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public object? Schema { get; set; }
+    // null = inherit the per-application idempotency window.
+    public int? IdempotencyWindowMinutes { get; set; }
 }
 
 public class UpdateEventTypeRequest
@@ -51,6 +53,7 @@ public class UpdateEventTypeRequest
     public string? Name { get; set; }
     public string? Description { get; set; }
     public object? Schema { get; set; }
+    public int? IdempotencyWindowMinutes { get; set; }
 }
 
 public class EventTypeResponse
@@ -60,6 +63,7 @@ public class EventTypeResponse
     public string? Description { get; set; }
     public JsonElement? Schema { get; set; }
     public bool IsArchived { get; set; }
+    public int? IdempotencyWindowMinutes { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -70,6 +74,9 @@ public class CreateEndpointRequest
     public List<Guid>? FilterEventTypes { get; set; }
     public Dictionary<string, string>? CustomHeaders { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
+    public List<string>? AllowedIps { get; set; }
+    public string? TransformExpression { get; set; }
+    public bool? TransformEnabled { get; set; }
 }
 
 public class UpdateEndpointRequest
@@ -80,6 +87,9 @@ public class UpdateEndpointRequest
     public Dictionary<string, string>? CustomHeaders { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
     public string? SecretOverride { get; set; }
+    public List<string>? AllowedIps { get; set; }
+    public string? TransformExpression { get; set; }
+    public bool? TransformEnabled { get; set; }
 }
 
 public class EndpointResponse
@@ -89,9 +99,16 @@ public class EndpointResponse
     public string Url { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string Status { get; set; } = string.Empty;
-    public Dictionary<string, string>? CustomHeadersJson { get; set; }
+    // The API serialises these as JSON objects (JsonElement), never as a
+    // string->string map; a non-string header value would silently drop the
+    // whole field if typed as Dictionary<string, string>.
+    public JsonElement CustomHeadersJson { get; set; }
     public string? SecretOverride { get; set; }
-    public Dictionary<string, string>? MetadataJson { get; set; }
+    public JsonElement MetadataJson { get; set; }
+    public List<string> AllowedIps { get; set; } = [];
+    public string? TransformExpression { get; set; }
+    public bool TransformEnabled { get; set; }
+    public DateTime? TransformValidatedAt { get; set; }
     public List<Guid> FilterEventTypes { get; set; } = [];
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -107,6 +124,29 @@ public class EndpointStatsResponse
     public double SuccessRate { get; set; }
     public double AvgLatencyMs { get; set; }
     public double P95LatencyMs { get; set; }
+}
+
+public class TestEndpointRequest
+{
+    public string EventType { get; set; } = string.Empty;
+    public object? Payload { get; set; }
+}
+
+public class EndpointTestResult
+{
+    public bool Success { get; set; }
+    public int StatusCode { get; set; }
+    public long LatencyMs { get; set; }
+    public string ResponseBody { get; set; } = string.Empty;
+    public string? Error { get; set; }
+    public EndpointTestRequestPreview Request { get; set; } = new();
+}
+
+public class EndpointTestRequestPreview
+{
+    public string Url { get; set; } = string.Empty;
+    public Dictionary<string, string> Headers { get; set; } = [];
+    public string Body { get; set; } = string.Empty;
 }
 
 public class SendMessageRequest
@@ -205,7 +245,9 @@ public class MessageAttemptResponse
     public int AttemptNumber { get; set; }
     public string Status { get; set; } = string.Empty;
     public int? StatusCode { get; set; }
-    public Dictionary<string, string>? RequestHeadersJson { get; set; }
+    // JsonElement (not Dictionary) to match the API and avoid dropping headers
+    // whose values aren't plain strings; null when no request was sent.
+    public JsonElement? RequestHeadersJson { get; set; }
     public string? ResponseBody { get; set; }
     public string? Error { get; set; }
     public int LatencyMs { get; set; }
