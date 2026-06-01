@@ -1,10 +1,10 @@
 name: Sync bun.lock for Dependabot
 
-# Dependabot only knows about npm — when it bumps a package in
-# src/dashboard/package.json it does NOT regenerate the workspace-root
-# bun.lock, and CI's `bun install --frozen-lockfile` then fails with a
-# lockfile drift. This workflow auto-runs `bun install` from the workspace
-# root on Dependabot PRs that touch the dashboard's package.json and
+# Dependabot only knows about npm — when it bumps a package in any workspace
+# member (src/dashboard, packages/*, samples/*) it does NOT regenerate the
+# workspace-root bun.lock, and CI's `bun install --frozen-lockfile` then fails
+# with a lockfile drift. This workflow auto-runs `bun install` from the
+# workspace root on Dependabot PRs that touch any workspace package.json and
 # commits the refreshed lockfile back to the PR branch so CI can go green
 # without a manual sync commit.
 #
@@ -27,6 +27,7 @@ on:
   pull_request_target:
     paths:
       - "src/dashboard/package.json"
+      - "packages/*/package.json"
 
 permissions:
   contents: write
