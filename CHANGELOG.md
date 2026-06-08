@@ -8,6 +8,18 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+### Security
+
+## [0.3.0] - 2026-06-08
+
+### Added
 - **`WebhookEngine.Sdk` gains `EndpointClient.TestAsync(endpointId, request)`** — the one live `/api/v1/*` route with no SDK coverage. Sends a one-off signed test webhook and returns the live response plus the exact signed request (new models `TestEndpointRequest`, `EndpointTestResult`, `EndpointTestRequestPreview`).
 - **SDK request models gain the fields the API already accepts:** `CreateEventTypeRequest`/`UpdateEventTypeRequest.IdempotencyWindowMinutes`, and `CreateEndpointRequest`/`UpdateEndpointRequest.{AllowedIps, TransformExpression, TransformEnabled}`. Previously SDK callers could not set per-event-type idempotency windows, per-endpoint IP allowlists, or payload-transform expressions at all.
 - **First test coverage for `WebhookEngine.Sdk`** — a new `WebhookEngine.Sdk.Tests` project (32 cases). Covers `WebhookVerifier` constant-time HMAC verification across tolerance, secret-encoding (`whsec_` vs base64), multi-signature, tamper, and missing-field cases, plus a stub-`HttpMessageHandler` contract suite that deserializes real API envelopes through the client (exercising the SDK's own camelCase options) so response-DTO drift fails CI.
