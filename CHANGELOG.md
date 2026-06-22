@@ -10,6 +10,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 ### Changed
+- **Frontend dependency refresh.** `react-router` `7.17.0 → 8.0.1` (major; v8's only hard breaking change is removing the `react-router-dom` re-export, which the dashboard never used — it already imports from `react-router` and uses the declarative `<Routes>`/`<Route>` API, which is unchanged) and `lucide-react` `1.18.0 → 1.21.0` ship in the dashboard bundle. Dev / build tooling: `typescript-eslint` `8.61.0 → 8.61.1` (dashboard and `@webhookengine/endpoint-manager`), `@types/node` `25.9.3 → 26.0.0` (dashboard), and `vite` `8.0.11 → 8.0.16` (`samples/portal-host`). No user-facing behaviour change.
 
 ### Fixed
 
