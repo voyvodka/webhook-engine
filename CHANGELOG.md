@@ -10,13 +10,23 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 ### Changed
-- **Frontend dependency refresh.** `react-router` `7.17.0 → 8.0.1` (major; v8's only hard breaking change is removing the `react-router-dom` re-export, which the dashboard never used — it already imports from `react-router` and uses the declarative `<Routes>`/`<Route>` API, which is unchanged) and `lucide-react` `1.18.0 → 1.21.0` ship in the dashboard bundle. Dev / build tooling: `typescript-eslint` `8.61.0 → 8.61.1` (dashboard and `@webhookengine/endpoint-manager`), `@types/node` `25.9.3 → 26.0.0` (dashboard), and `vite` `8.0.11 → 8.0.16` (`samples/portal-host`). No user-facing behaviour change.
 
 ### Fixed
 
 ### Removed
 
 ### Security
+
+## [0.3.1] - 2026-06-29
+
+Maintenance patch: a runtime base-image security refresh that clears 16 container CVEs (1 critical) reported by Docker Scout, plus a full dependency refresh across the dashboard, the `@webhookengine/endpoint-manager` package, and backend NuGet. No user-visible behaviour changes, no breaking changes; the `v1` route prefix, the Standard Webhooks signature surface, and the `WebhookEngine.Sdk` public API are all unchanged.
+
+### Security
+- **Runtime base image refresh clears 16 container CVEs (Docker Scout).** The runtime stage's `mcr.microsoft.com/dotnet/aspnet:10.0-alpine` digest is repinned `f03685b → 57bd717`, moving Alpine `3.23.4 → 3.23.5` and OpenSSL `3.5.6-r0 → 3.5.7-r0`. This clears the 16 CVEs Docker Scout reported against the published `voyvodka/webhook-engine:latest` image — 1 critical (`CVE-2026-34182`, CVSS 9.1), 8 high, 5 medium, 2 low — all originating in the Alpine base layer (OpenSSL plus one BusyBox advisory); none are in application code (Scout's layer view shows our own layers at 0/0/0). The locally rebuilt image scans clean (0 vulnerabilities under Trivy). The build-stage `mcr.microsoft.com/dotnet/sdk:10.0` digest is also repinned `548d93f → ea8bde3` for consistency and Dependabot tracking; it is build-only and never ships in the final image.
+
+### Changed
+- **Frontend dependency refresh.** `react-router` `7.17.0 → 8.0.1` (major; v8's only hard breaking change is removing the `react-router-dom` re-export, which the dashboard never used — it already imports from `react-router` and uses the declarative `<Routes>`/`<Route>` API, which is unchanged), `lucide-react` `1.18.0 → 1.22.0`, and `recharts` `3.8.1 → 3.9.0` ship in the dashboard bundle. Dev / build tooling: `vite` `8.0.16 → 8.1.0`, `@vitejs/plugin-react` `6.0.2 → 6.0.3`, `@types/node` `25.9.3 → 26.0.1`, `eslint` `10.5.0 → 10.6.0`, and `typescript-eslint` `8.61.0 → 8.62.0` (dashboard and `@webhookengine/endpoint-manager`), plus `vite` `8.0.11 → 8.0.16` in `samples/portal-host`. No user-facing behaviour change.
+- **Backend dependency refresh.** `OpenTelemetry.Instrumentation.AspNetCore` `1.15.2 → 1.16.0` and `Scalar.AspNetCore` `2.16.4 → 2.16.6` (runtime); `Microsoft.NET.Test.Sdk` `18.6.0 → 18.7.0` (test projects — build-only, no runtime impact). No user-facing behaviour change.
 
 ## [0.3.0] - 2026-06-08
 
