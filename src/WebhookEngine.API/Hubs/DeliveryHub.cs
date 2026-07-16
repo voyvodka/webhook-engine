@@ -1,30 +1,18 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
 
 namespace WebhookEngine.API.Hubs;
 
-/// <summary>
-/// SignalR hub for real-time delivery status updates.
-/// Dashboard clients connect to receive live delivery events.
-/// </summary>
+// Cookie-only: the event stream spans all applications and carries cross-tenant detail.
+[Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme)]
 public class DeliveryHub : Hub
 {
-    public override async Task OnConnectedAsync()
-    {
-        await base.OnConnectedAsync();
-    }
-
-    public override async Task OnDisconnectedAsync(Exception? exception)
-    {
-        await base.OnDisconnectedAsync(exception);
-    }
 }
 
-/// <summary>
-/// IDeliveryNotifier implementation that pushes events to all connected SignalR clients.
-/// Registered as a singleton in DI so workers can resolve it.
-/// </summary>
+// Singleton IDeliveryNotifier so workers can resolve it; fans events out to all clients.
 public class SignalRDeliveryNotifier : IDeliveryNotifier
 {
     private readonly IHubContext<DeliveryHub> _hubContext;
