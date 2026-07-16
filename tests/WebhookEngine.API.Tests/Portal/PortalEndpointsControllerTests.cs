@@ -29,6 +29,13 @@ public class PortalEndpointsControllerTests : IClassFixture<PortalEndpointsContr
 {
     private const string PortalRoot = "/api/v1/portal";
 
+    // Fixed signed-header sample the fake tester returns. Distinct, easily-matched
+    // values so redaction / pass-through assertions stay unambiguous.
+    private const string SignedWebhookId = "msg_2abc";
+    private const string SignedTimestamp = "1700000000";
+    private const string SignedSignature = "v1,dGVzdHNpZ25hdHVyZQ==";
+    private const string SignedUserAgent = "WebhookEngine/1.0";
+
     private readonly PortalTestFactory _factory;
 
     public PortalEndpointsControllerTests(PortalTestFactory factory)
@@ -195,6 +202,142 @@ public class PortalEndpointsControllerTests : IClassFixture<PortalEndpointsContr
                 && c.Application.Id == appId
                 && c.Request.EventTypeName == "order.created"),
             Arg.Any<CancellationToken>());
+    }
+
+    // ── /test header redaction (A2 secret-leak guard) ──
+    // The raw EndpointTestResult echoed operator custom-header VALUES to portal
+    // customers; ToPortalTestResult masks them to "***" (signed headers stay verbatim).
+
+    [Fact]
+    public async Task Portal_Test_Endpoint_Redacts_Custom_Header_Value_And_Never_Leaks_Secret_In_Body()
+    {
+        await ResetDatabaseAsync();
+        const string secret = "super-secret-token";
+        var (appId, endpointId) = await SeedAppAndEndpointAsync(
+            customHeadersJson: JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                ["X-Internal-Auth"] = secret
+            }));
+        var token = MintFullToken(appId);
+        using var client = CreateClient(token);
+
+        StubTesterResult(SignedPreviewWith(("X-Internal-Auth", secret)));
+
+        var response = await client.PostAsJsonAsync($"{PortalRoot}/endpoints/{endpointId}/test", new
+        {
+            eventType = "order.created",
+            payload = new { id = "evt_1" }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Load-bearing negative scan (mirrors the audit-redaction NotContain idiom):
+        // the secret string must not survive anywhere in the serialized body.
+        var rawBody = await response.Content.ReadAsStringAsync();
+        rawBody.Should().NotContain(secret,
+            "the portal /test response must never surface an operator's custom-header value to a portal customer");
+
+        using var doc = JsonDocument.Parse(rawBody);
+        var headers = doc.RootElement.GetProperty("data").GetProperty("request").GetProperty("headers");
+        headers.GetProperty("X-Internal-Auth").GetString().Should().Be("***");
+    }
+
+    [Fact]
+    public async Task Portal_Test_Endpoint_Preserves_Signed_Header_Values_Unredacted()
+    {
+        // Over-redaction guard: the fix must leave the four signed/standard headers
+        // verbatim so the customer keeps a usable signature preview.
+        await ResetDatabaseAsync();
+        var (appId, endpointId) = await SeedAppAndEndpointAsync(
+            customHeadersJson: JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                ["X-Internal-Auth"] = "super-secret-token"
+            }));
+        var token = MintFullToken(appId);
+        using var client = CreateClient(token);
+
+        StubTesterResult(SignedPreviewWith(("X-Internal-Auth", "super-secret-token")));
+
+        var response = await client.PostAsJsonAsync($"{PortalRoot}/endpoints/{endpointId}/test", new
+        {
+            eventType = "order.created",
+            payload = new { id = "evt_1" }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var headers = (await ParseJsonAsync(response))
+            .GetProperty("data").GetProperty("request").GetProperty("headers");
+
+        headers.GetProperty("webhook-id").GetString().Should().Be(SignedWebhookId);
+        headers.GetProperty("webhook-timestamp").GetString().Should().Be(SignedTimestamp);
+        headers.GetProperty("webhook-signature").GetString().Should().Be(SignedSignature);
+        headers.GetProperty("User-Agent").GetString().Should().Be(SignedUserAgent);
+        // The custom header is still masked — over-redaction guard cuts both ways.
+        headers.GetProperty("X-Internal-Auth").GetString().Should().Be("***");
+    }
+
+    [Fact]
+    public async Task Portal_Test_Endpoint_Redacts_Custom_Header_That_Masquerades_As_Signed()
+    {
+        // A custom header keyed with a signed name (webhook-signature) must not ride
+        // the allow-list to leak its value. Redaction anchors on the endpoint's
+        // CustomHeadersJson, so a name collision is masked, not unmasked.
+        await ResetDatabaseAsync();
+        const string spoofSecret = "attacker-owned-signature-secret";
+        var (appId, endpointId) = await SeedAppAndEndpointAsync(
+            customHeadersJson: JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                ["webhook-signature"] = spoofSecret
+            }));
+        var token = MintFullToken(appId);
+        using var client = CreateClient(token);
+
+        StubTesterResult(SignedPreviewWith(("webhook-signature", spoofSecret)));
+
+        var response = await client.PostAsJsonAsync($"{PortalRoot}/endpoints/{endpointId}/test", new
+        {
+            eventType = "order.created",
+            payload = new { id = "evt_1" }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var rawBody = await response.Content.ReadAsStringAsync();
+        rawBody.Should().NotContain(spoofSecret,
+            "a custom header colliding with a signed name must still be redacted, never unmasked");
+
+        using var doc = JsonDocument.Parse(rawBody);
+        var headers = doc.RootElement.GetProperty("data").GetProperty("request").GetProperty("headers");
+        headers.GetProperty("webhook-signature").GetString().Should().Be("***");
+        // A genuine signed header the customer did NOT override still passes through.
+        headers.GetProperty("webhook-id").GetString().Should().Be(SignedWebhookId);
+    }
+
+    [Fact]
+    public async Task Portal_Test_Endpoint_With_No_Custom_Headers_Passes_Signed_Headers_Through()
+    {
+        await ResetDatabaseAsync();
+        var (appId, endpointId) = await SeedAppAndEndpointAsync(); // default CustomHeadersJson = "{}"
+        var token = MintFullToken(appId);
+        using var client = CreateClient(token);
+
+        StubTesterResult(SignedPreviewWith());
+
+        var response = await client.PostAsJsonAsync($"{PortalRoot}/endpoints/{endpointId}/test", new
+        {
+            eventType = "order.created",
+            payload = new { id = "evt_1" }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var rawBody = await response.Content.ReadAsStringAsync();
+        rawBody.Should().NotContain("***", "with no custom headers there is nothing to redact");
+
+        using var doc = JsonDocument.Parse(rawBody);
+        var headers = doc.RootElement.GetProperty("data").GetProperty("request").GetProperty("headers");
+        headers.GetProperty("webhook-signature").GetString().Should().Be(SignedSignature);
+        headers.GetProperty("webhook-id").GetString().Should().Be(SignedWebhookId);
     }
 
     [Fact]
@@ -493,6 +636,55 @@ public class PortalEndpointsControllerTests : IClassFixture<PortalEndpointsContr
     private static string MintToken(Guid appId, params string[] capabilities)
         => PortalJwtFactory.Mint(appId, capabilities);
 
+    /// <summary>
+    /// Re-stubs the shared <see cref="IEndpointTester"/> fake to return <paramref name="result"/>
+    /// for the next /test call. Clears prior received-call history first. Tests in a
+    /// class run sequentially, so the last stub wins for the test that set it; the
+    /// body-agnostic tests (status / call-args only) are unaffected by the leftover.
+    /// </summary>
+    private void StubTesterResult(EndpointTestResult result)
+    {
+        _factory.EndpointTester.ClearReceivedCalls();
+        _factory.EndpointTester
+            .ExecuteAsync(Arg.Any<EndpointTestContext>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(result));
+    }
+
+    /// <summary>
+    /// Builds an <see cref="EndpointTestResult"/> whose preview carries the four
+    /// signed/standard headers at fixed values plus any <paramref name="extra"/>
+    /// custom headers — the shape the admin tester returns verbatim and the portal
+    /// must redact.
+    /// </summary>
+    private static EndpointTestResult SignedPreviewWith(params (string Key, string Value)[] extra)
+    {
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["webhook-id"] = SignedWebhookId,
+            ["webhook-timestamp"] = SignedTimestamp,
+            ["webhook-signature"] = SignedSignature,
+            ["User-Agent"] = SignedUserAgent
+        };
+        foreach (var (key, value) in extra)
+        {
+            headers[key] = value;
+        }
+
+        return new EndpointTestResult
+        {
+            Success = true,
+            StatusCode = 200,
+            LatencyMs = 7,
+            ResponseBody = "{}",
+            Request = new EndpointTestRequestPreview
+            {
+                Url = "https://example.invalid/seeded",
+                Headers = headers,
+                Body = "{}"
+            }
+        };
+    }
+
     private async Task ResetDatabaseAsync()
     {
         using var scope = _factory.Services.CreateScope();
@@ -506,7 +698,8 @@ public class PortalEndpointsControllerTests : IClassFixture<PortalEndpointsContr
         string? secretOverride = null,
         string? transformExpression = null,
         bool transformEnabled = false,
-        string? allowedIpsJson = null)
+        string? allowedIpsJson = null,
+        string? customHeadersJson = null)
     {
         var (appId, _) = await SeedAppAsync(name);
         var endpointId = Guid.NewGuid();
@@ -522,7 +715,8 @@ public class PortalEndpointsControllerTests : IClassFixture<PortalEndpointsContr
             SecretOverride = secretOverride,
             TransformExpression = transformExpression,
             TransformEnabled = transformEnabled,
-            AllowedIpsJson = allowedIpsJson
+            AllowedIpsJson = allowedIpsJson,
+            CustomHeadersJson = customHeadersJson ?? "{}"
         });
         await db.SaveChangesAsync();
         return (appId, endpointId);

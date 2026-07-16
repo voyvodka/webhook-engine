@@ -16,6 +16,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Removed
 
 ### Security
+- **The embeddable portal's endpoint-test preview no longer leaks custom-header values.** `POST /api/v1/portal/endpoints/{id}/test` returned the raw test preview, whose `request.headers` included the **values** of the endpoint's operator-configured custom headers (e.g. an internal `Authorization`/API-key header). A portal customer holding the `endpoints:test` capability could read secrets the portal hides everywhere else — the rest of the portal surface exposes only `customHeaderNames`. The portal test response now maps through a dedicated `PortalEndpointTestResult` that redacts every custom-header value to `***` while preserving the Standard Webhooks signed headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`) and `User-Agent` verbatim; a custom header whose name collides case-insensitively with a signed one is still redacted, so it cannot masquerade as signed to leak. The operator-facing admin and dashboard test routes are unchanged (they legitimately return the values to the header's owner).
 
 ## [0.3.1] - 2026-06-29
 
