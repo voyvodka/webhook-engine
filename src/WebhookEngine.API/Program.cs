@@ -372,7 +372,7 @@ app.UseAuthorization();
 app.UseStaticFiles(); // Serve React dashboard from wwwroot
 
 app.MapControllers();
-app.MapHub<DeliveryHub>("/hubs/deliveries");
+app.MapHub<DeliveryHub>("/hubs/deliveries").RequireAuthorization();
 app.MapPrometheusScrapingEndpoint(); // GET /metrics
 
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging())

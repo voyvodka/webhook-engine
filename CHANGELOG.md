@@ -16,6 +16,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Removed
 
 ### Security
+- **The real-time delivery hub now requires authentication (cross-tenant leak fix).** `/hubs/deliveries` was mapped with no authorization and `DeliveryHub` carried no `[Authorize]`, while the notifier fans every delivery event out to `Clients.All` — so any anonymous client that could reach the host could open a websocket and receive the system-wide delivery firehose for **all** applications (message IDs, endpoint IDs, per-attempt error strings that leak other tenants' endpoint hostnames, latencies, and circuit-state transitions), defeating the AppId isolation the rest of the system enforces. The hub now requires the dashboard cookie scheme (`[Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme)]` on the hub plus `.RequireAuthorization()` on the `MapHub` mapping so the `/negotiate` endpoint is gated too). The operator dashboard is unaffected — it already connects same-origin with the session cookie. A negotiate-handshake integration test (anonymous → redirect to login, authenticated → `200`) locks the guard in place.
 
 ## [0.3.1] - 2026-06-29
 
