@@ -292,7 +292,10 @@ public class PortalEndpointsController : ControllerBase
         };
 
         var result = await _endpointTester.ExecuteAsync(context, ct);
-        return Ok(ApiEnvelope.Success(HttpContext, result));
+        // Portal-specific redaction: the shared tester returns the operator's custom
+        // header VALUES verbatim (correct for the owner-facing API/dashboard callers),
+        // but the portal must never surface them to end-customers.
+        return Ok(ApiEnvelope.Success(HttpContext, result.ToPortalTestResult(endpoint.CustomHeadersJson)));
     }
 
     [HttpGet("endpoints/{endpointId:guid}/attempts")]
