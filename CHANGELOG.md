@@ -12,6 +12,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Changed
 
 ### Fixed
+- **A failed enqueue no longer silently drops a sibling message (poisoned-`DbContext` fix).** When a webhook was fanned out to several subscribed endpoints, `PostgresMessageQueue.EnqueueAsync` added the `Message` and saved it per endpoint on one request-scoped `DbContext`. If a save threw — typically the idempotency partial-unique index raising `23505` — the failed entity stayed tracked in `Added` state, so the next endpoint's `SaveChanges` re-flushed it, threw again, rolled back the whole batch, and the controller's idempotency-conflict catch swallowed it: the API returned success while that later endpoint never received the webhook. `EnqueueAsync` now detaches the entity when the save fails (rethrowing the original exception, so idempotency replay still works) — leaving the context clean for the next iteration. A real-PostgreSQL (Testcontainers) regression asserts a distinct message still persists after a `23505` on the same context.
 
 ### Removed
 

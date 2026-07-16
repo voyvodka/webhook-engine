@@ -57,7 +57,17 @@ public class PostgresMessageQueue : IMessageQueue
     {
         message.Status = MessageStatus.Pending;
         _dbContext.Messages.Add(message);
-        await _dbContext.SaveChangesAsync(ct);
+        try
+        {
+            await _dbContext.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            // Scoped context is reused across an enqueue loop; a still-Added entity would
+            // re-flush and re-throw on the next SaveChanges, silently losing that sibling.
+            _dbContext.Entry(message).State = EntityState.Detached;
+            throw;
+        }
         _metrics?.RecordMessageEnqueued();
         _metrics?.RecordQueueEnqueue();
     }
