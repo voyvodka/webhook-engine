@@ -70,6 +70,33 @@ public class EndpointTestEndpointTests : IClassFixture<TestWebApplicationFactory
     }
 
     [Fact]
+    public async Task Public_Test_Endpoint_Returns_Custom_Header_Values_Verbatim()
+    {
+        // Owner-facing counterpart to the portal redaction: the operator's own
+        // credential path returns custom-header VALUES verbatim (masking is portal-only).
+        await ResetDatabaseAsync();
+        using var client = CreatePublicClient();
+        const string headerValue = "operator-internal-token";
+        var (_, apiKey, endpointId) = await SeedAppAndEndpointAsync(
+            customHeadersJson: JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                ["X-Internal-Auth"] = headerValue
+            }));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+        var response = await client.PostAsJsonAsync($"/api/v1/endpoints/{endpointId}/test", new
+        {
+            eventType = "order.created",
+            payload = new { id = "order_42" }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var headers = (await ParseJsonAsync(response))
+            .GetProperty("data").GetProperty("request").GetProperty("headers");
+        headers.GetProperty("X-Internal-Auth").GetString().Should().Be(headerValue);
+    }
+
+    [Fact]
     public async Task Public_Test_Endpoint_Falls_Back_To_Default_Payload_When_Body_Omitted()
     {
         await ResetDatabaseAsync();
@@ -208,7 +235,8 @@ public class EndpointTestEndpointTests : IClassFixture<TestWebApplicationFactory
         loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
-    private async Task<(Guid AppId, string ApiKey, Guid EndpointId)> SeedAppAndEndpointAsync()
+    private async Task<(Guid AppId, string ApiKey, Guid EndpointId)> SeedAppAndEndpointAsync(
+        string? customHeadersJson = null)
     {
         var appId = Guid.NewGuid();
         var appShort = appId.ToString("N")[..8];
@@ -236,7 +264,8 @@ public class EndpointTestEndpointTests : IClassFixture<TestWebApplicationFactory
             Id = endpointId,
             AppId = appId,
             Url = ProbeEndpointUrl,
-            Status = EndpointStatus.Active
+            Status = EndpointStatus.Active,
+            CustomHeadersJson = customHeadersJson ?? "{}"
         });
 
         await db.SaveChangesAsync();

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Entities;
+using WebhookEngine.Core.Models;
 using WebhookEngine.Infrastructure.Repositories;
 using EndpointEntity = WebhookEngine.Core.Entities.Endpoint;
 
@@ -107,6 +108,34 @@ public class PortalEndpointTestRequest
 }
 
 /// <summary>
+/// Customer-facing outcome of a portal endpoint probe. Wire-level fields mirror the
+/// admin <see cref="EndpointTestResult"/>, but the request preview is redacted:
+/// custom-header VALUES (often an operator API key) are masked so the portal never
+/// leaks the secrets it hides everywhere else. Signed webhook headers stay verbatim.
+/// </summary>
+public sealed class PortalEndpointTestResult
+{
+    public bool Success { get; init; }
+    public int StatusCode { get; init; }
+    public long LatencyMs { get; init; }
+    public string ResponseBody { get; init; } = string.Empty;
+    public string? Error { get; init; }
+    public PortalEndpointTestRequestPreview Request { get; init; } = new();
+}
+
+/// <summary>
+/// Redacted preview of the signed request the portal probe sent. Custom-header names
+/// are preserved but their values are masked with
+/// <see cref="PortalDtoMapper.RedactedHeaderValue"/>.
+/// </summary>
+public sealed class PortalEndpointTestRequestPreview
+{
+    public string Url { get; init; } = string.Empty;
+    public Dictionary<string, string> Headers { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    public string Body { get; init; } = "{}";
+}
+
+/// <summary>
 /// Customer-facing event-type list item used to populate the endpoint
 /// FilterEventTypes dropdown. Archived rows are excluded at the controller.
 /// </summary>
@@ -119,6 +148,19 @@ public sealed class PortalEventTypeListItem
 
 public static class PortalDtoMapper
 {
+    public const string RedactedHeaderValue = "***";
+
+    // Anchored on the four known signed/standard keys so a custom header colliding
+    // with one of these names (e.g. operator-set "user-agent" or spoofed
+    // "webhook-signature") is still redacted rather than masquerading as signed.
+    private static readonly HashSet<string> SignedPreviewHeaderNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "webhook-id",
+        "webhook-timestamp",
+        "webhook-signature",
+        "User-Agent"
+    };
+
     public static PortalEndpointDetail ToPortalDetail(this EndpointEntity endpoint)
     {
         return new PortalEndpointDetail
@@ -195,6 +237,41 @@ public static class PortalDtoMapper
         };
     }
 
+    /// <summary>
+    /// Projects an admin <see cref="EndpointTestResult"/> into the portal-safe shape,
+    /// masking every custom-header value. Redaction anchors on
+    /// <paramref name="customHeadersJson"/> so a spoofed header colliding with a
+    /// signed name is masked, not unmasked.
+    /// </summary>
+    public static PortalEndpointTestResult ToPortalTestResult(
+        this EndpointTestResult result,
+        string? customHeadersJson)
+    {
+        var customNames = ParseHeaderNameSet(customHeadersJson);
+
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in result.Request.Headers)
+        {
+            var isSigned = SignedPreviewHeaderNames.Contains(key) && !customNames.Contains(key);
+            headers[key] = isSigned ? value : RedactedHeaderValue;
+        }
+
+        return new PortalEndpointTestResult
+        {
+            Success = result.Success,
+            StatusCode = result.StatusCode,
+            LatencyMs = result.LatencyMs,
+            ResponseBody = result.ResponseBody,
+            Error = result.Error,
+            Request = new PortalEndpointTestRequestPreview
+            {
+                Url = result.Request.Url,
+                Headers = headers,
+                Body = result.Request.Body
+            }
+        };
+    }
+
     private static List<string> ParseHeaderNames(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -211,5 +288,32 @@ public static class PortalDtoMapper
         {
             return [];
         }
+    }
+
+    private static HashSet<string> ParseHeaderNameSet(string? json)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return set;
+        }
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+            if (parsed is not null)
+            {
+                foreach (var key in parsed.Keys)
+                {
+                    set.Add(key);
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Malformed JSON — treat as no custom headers; preview keeps only the signed set.
+        }
+
+        return set;
     }
 }
