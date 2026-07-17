@@ -243,7 +243,13 @@ public class MessagesController : ControllerBase
                 "Only failed or dead-letter messages can be retried."));
         }
 
-        await _messageRepo.RetryAsync(messageId, ct);
+        if (!await _messageRepo.RetryAsync(messageId, ct))
+        {
+            return Conflict(ApiEnvelope.Error(
+                HttpContext,
+                "CONFLICT",
+                "Message state changed; it is no longer retriable. Refresh and try again."));
+        }
 
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
