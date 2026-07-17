@@ -40,7 +40,12 @@ builder.Host.UseSerilog((context, configuration) =>
     configuration.ReadFrom.Configuration(context.Configuration));
 
 // Options
-builder.Services.Configure<DeliveryOptions>(builder.Configuration.GetSection(DeliveryOptions.SectionName));
+// DeliveryOptions carries the load-bearing A4 timing invariant (TimeoutSeconds vs
+// StaleLockMinutes); the validator + ValidateOnStart fail a bad config at boot.
+builder.Services.AddOptions<DeliveryOptions>()
+    .Bind(builder.Configuration.GetSection(DeliveryOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<DeliveryOptions>, DeliveryOptionsValidator>();
 builder.Services.Configure<RetryPolicyOptions>(builder.Configuration.GetSection(RetryPolicyOptions.SectionName));
 builder.Services.Configure<CircuitBreakerOptions>(builder.Configuration.GetSection(CircuitBreakerOptions.SectionName));
 builder.Services.Configure<SsrfGuardOptions>(builder.Configuration.GetSection(SsrfGuardOptions.SectionName));

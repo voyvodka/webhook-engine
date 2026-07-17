@@ -194,17 +194,6 @@ public class MessageRepository
         await _dbContext.SaveChangesAsync(ct);
     }
 
-    public async Task UpdateMessageStatusAsync(Guid messageId, MessageStatus status, CancellationToken ct = default)
-    {
-        await _dbContext.Messages
-            .Where(m => m.Id == messageId)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(m => m.Status, status)
-                .SetProperty(m => m.LockedAt, (DateTime?)null)
-                .SetProperty(m => m.LockedBy, (string?)null)
-                .SetProperty(m => m.DeliveredAt, status == MessageStatus.Delivered ? DateTime.UtcNow : (DateTime?)null), ct);
-    }
-
     /// <summary>
     /// Compare-and-set transition Sending → Delivered. Returns true when the
     /// row matched (we owned the lock); false when the row had already been
@@ -259,6 +248,32 @@ public class MessageRepository
                 .SetProperty(m => m.Status, MessageStatus.DeadLetter)
                 .SetProperty(m => m.AttemptCount, attemptCount)
                 .SetProperty(m => m.DeliveredAt, (DateTime?)null)
+                .SetProperty(m => m.LockedAt, (DateTime?)null)
+                .SetProperty(m => m.LockedBy, (string?)null), ct);
+        return rows == 1;
+    }
+
+    /// <summary>CAS lease refresh: bumps locked_at while we still own the Sending row; false means it was stale-recovered or taken and the caller must stop.</summary>
+    public async Task<bool> RefreshLockAsync(Guid messageId, string lockedBy, CancellationToken ct = default)
+    {
+        var rows = await _dbContext.Messages
+            .Where(m => m.Id == messageId
+                && m.Status == MessageStatus.Sending
+                && m.LockedBy == lockedBy)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(m => m.LockedAt, DateTime.UtcNow), ct);
+        return rows == 1;
+    }
+
+    /// <summary>CAS error-recovery reset Sending → Pending; false means the row is no longer ours, so a committed Delivered/DeadLetter row can't be regressed.</summary>
+    public async Task<bool> ResetToPendingIfOwnedAsync(Guid messageId, string lockedBy, CancellationToken ct = default)
+    {
+        var rows = await _dbContext.Messages
+            .Where(m => m.Id == messageId
+                && m.Status == MessageStatus.Sending
+                && m.LockedBy == lockedBy)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(m => m.Status, MessageStatus.Pending)
                 .SetProperty(m => m.LockedAt, (DateTime?)null)
                 .SetProperty(m => m.LockedBy, (string?)null), ct);
         return rows == 1;
