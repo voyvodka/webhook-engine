@@ -76,7 +76,9 @@ ENV ASPNETCORE_URLS=http://+:8080 \
     DOTNET_RUNNING_IN_CONTAINER=true \
     DOTNET_EnableDiagnostics=0
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+# Readiness, not liveness: /health/ready 503s on a dead DB so the container is
+# restarted instead of answering 200. Longer start-period covers first-boot migrations.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health/ready || exit 1
 
 ENTRYPOINT ["dotnet", "WebhookEngine.API.dll"]

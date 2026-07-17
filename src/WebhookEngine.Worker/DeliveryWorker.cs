@@ -77,8 +77,6 @@ public class DeliveryWorker : BackgroundService
                     continue;
                 }
 
-                _metrics?.RecordQueueDequeue(messages.Count);
-
                 foreach (var message in messages)
                 {
                     if (stoppingToken.IsCancellationRequested)

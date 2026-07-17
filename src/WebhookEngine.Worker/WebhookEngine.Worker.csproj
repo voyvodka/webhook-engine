@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="WebhookEngine.Worker.Tests" />
+    <InternalsVisibleTo Include="WebhookEngine.Infrastructure.Tests" />
   </ItemGroup>
 
 </Project>

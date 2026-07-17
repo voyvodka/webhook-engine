@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using WebhookEngine.Core.Entities;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Core.Metrics;
+using WebhookEngine.Core.Options;
 using WebhookEngine.Infrastructure.Data;
 
 namespace WebhookEngine.Infrastructure.Queue;
@@ -10,22 +12,23 @@ namespace WebhookEngine.Infrastructure.Queue;
 public class PostgresMessageQueue : IMessageQueue
 {
     private readonly WebhookDbContext _dbContext;
+    private readonly RetryPolicyOptions _retryPolicy;
     private readonly WebhookMetrics? _metrics;
 
-    public PostgresMessageQueue(WebhookDbContext dbContext, WebhookMetrics? metrics = null)
+    public PostgresMessageQueue(
+        WebhookDbContext dbContext,
+        IOptions<RetryPolicyOptions>? retryPolicy = null,
+        WebhookMetrics? metrics = null)
     {
         _dbContext = dbContext;
+        _retryPolicy = retryPolicy?.Value ?? new RetryPolicyOptions();
         _metrics = metrics;
     }
 
     public async Task<IReadOnlyList<Message>> DequeueAsync(int batchSize, string workerId, CancellationToken ct = default)
     {
-        // CORR-04: Transaction-scoped row lock via FOR UPDATE SKIP LOCKED.
-        // Worker crash → transaction rollback → lock auto-released by PostgreSQL.
-        // StaleLockRecoveryWorker handles residual edge cases (D-08).
-        // Use raw SQL for SKIP LOCKED — critical for queue performance.
-        // Circuit-open messages are dequeued so DeliveryWorker can increment attemptCount
-        // and eventually dead-letter them — preventing infinite Pending limbo.
+        // CORR-04: FOR UPDATE SKIP LOCKED is a transaction-scoped lock (crash → rollback → auto-release);
+        // raw SQL is required for SKIP LOCKED. Circuit-open rows are dequeued too so they can dead-letter, not stall in Pending.
         var sql = """
             WITH next_batch AS (
                 SELECT m.id
@@ -56,6 +59,9 @@ public class PostgresMessageQueue : IMessageQueue
     public async Task EnqueueAsync(Message message, CancellationToken ct = default)
     {
         message.Status = MessageStatus.Pending;
+        // The one chokepoint every message passes through, so the configured cap wins here;
+        // the entity default (7) is only the fallback when RetryPolicyOptions is unbound.
+        message.MaxRetries = _retryPolicy.MaxRetries;
         _dbContext.Messages.Add(message);
         try
         {
@@ -69,7 +75,6 @@ public class PostgresMessageQueue : IMessageQueue
             throw;
         }
         _metrics?.RecordMessageEnqueued();
-        _metrics?.RecordQueueEnqueue();
     }
 
     public async Task<int> ReleaseStaleLocksAsync(TimeSpan staleDuration, CancellationToken ct = default)
