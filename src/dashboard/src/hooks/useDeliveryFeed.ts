@@ -30,13 +30,13 @@ const infiniteRetryPolicy: IRetryPolicy = {
   },
 };
 
-/**
- * Connects to the SignalR /hubs/deliveries endpoint and provides
- * a rolling list of recent delivery events (most recent first).
- */
+/** SignalR feed of recent delivery events (most recent first), capped to maxEvents. */
 export function useDeliveryFeed(maxEvents = 50) {
   const connectionRef = useRef<HubConnection | null>(null);
   const [events, setEvents] = useState<DeliveryEvent[]>([]);
+  // Uncapped, monotonic — events.length plateaus at maxEvents, so consumers
+  // must key invalidation effects off this instead.
+  const [eventCount, setEventCount] = useState(0);
   const [connected, setConnected] = useState(false);
   // Single-slot state — pages watch its identity in useEffect to patch
   // their local endpoint state. Storing only the latest change is enough
@@ -46,6 +46,7 @@ export function useDeliveryFeed(maxEvents = 50) {
   const push = useCallback(
     (event: DeliveryEvent) => {
       setEvents((prev) => [event, ...prev].slice(0, maxEvents));
+      setEventCount((c) => c + 1);
     },
     [maxEvents]
   );
@@ -97,10 +98,8 @@ export function useDeliveryFeed(maxEvents = 50) {
     const handleReconnected = () => {
       if (!isMounted) return;
       setConnected(true);
-      // Drop any cached health change so the consumer sees a clean slate.
-      // Otherwise an EndpointsPage that resubscribes after a reconnect would
-      // re-apply a stale snapshot from before the disconnect, masking the
-      // server's authoritative state from the next overview/list refetch.
+      // Clear stale health snapshot on reconnect — otherwise a resubscribing
+      // EndpointsPage could mask the server's authoritative state.
       setLastHealthChange(null);
     };
 
@@ -153,5 +152,5 @@ export function useDeliveryFeed(maxEvents = 50) {
     };
   }, [push]);
 
-  return { events, connected, lastHealthChange };
+  return { events, eventCount, connected, lastHealthChange };
 }
