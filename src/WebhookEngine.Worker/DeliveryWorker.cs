@@ -298,7 +298,8 @@ public class DeliveryWorker : BackgroundService
                 EndpointUrl = endpoint.Url,
                 Payload = deliveryPayload,
                 SignedHeaders = signedHeaders,
-                CustomHeaders = customHeaders
+                CustomHeaders = customHeaders,
+                AllowedIpsJson = endpoint.AllowedIpsJson
             };
 
             // Bound the HTTP call to TimeoutSeconds via a dedicated CTS, decoupled

@@ -30,7 +30,11 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         {
             cfg.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["WebhookEngine:Transformation:TimeoutMs"] = "2000"
+                ["WebhookEngine:Transformation:TimeoutMs"] = "2000",
+                // The login limiter is a host singleton; the general suite authenticates
+                // many times per host, so keep it effectively unlimited here. The dedicated
+                // login-limiter test overrides this back to a low value.
+                ["WebhookEngine:LoginRateLimit:PermitLimit"] = "100000"
             });
         });
 

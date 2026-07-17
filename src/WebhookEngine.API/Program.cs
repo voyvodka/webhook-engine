@@ -55,6 +55,7 @@ builder.Services.Configure<SsrfGuardOptions>(builder.Configuration.GetSection(Ss
 builder.Services.Configure<DashboardAuthOptions>(builder.Configuration.GetSection(DashboardAuthOptions.SectionName));
 builder.Services.Configure<RetentionOptions>(builder.Configuration.GetSection(RetentionOptions.SectionName));
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
+builder.Services.Configure<LoginRateLimitOptions>(builder.Configuration.GetSection(LoginRateLimitOptions.SectionName));
 builder.Services.Configure<TransformationOptions>(builder.Configuration.GetSection(TransformationOptions.SectionName));
 builder.Services.Configure<PortalAuthOptions>(builder.Configuration.GetSection(PortalAuthOptions.SectionName));
 
@@ -95,6 +96,15 @@ builder.Services.AddHttpClient("webhook-delivery", client =>
                     throw new HttpRequestException(
                         $"Refused to connect to {ctx.DnsEndPoint.Host}: {reason}.");
                 }
+            }
+
+            // Per-endpoint egress allowlist: enforce it on the SAME resolution we
+            // pin, using the worker's predicate, so a DNS rebind can't slip past.
+            if (ctx.InitialRequestMessage.Options.TryGetValue(DeliveryHttpRequestOptions.AllowedNetworks, out var allowedNetworks)
+                && !IpAllowlistMatcher.AllAddressesAllowed(allowedNetworks, addresses))
+            {
+                throw new HttpRequestException(
+                    $"Refused to connect to {ctx.DnsEndPoint.Host}: resolved address outside endpoint allowlist.");
             }
 
             // Pin the connection to a vetted address — defeats DNS rebinding.
@@ -264,6 +274,10 @@ builder.Services.AddRateLimiter(options =>
         .GetSection(RateLimitOptions.SectionName)
         .Get<RateLimitOptions>() ?? new RateLimitOptions();
 
+    var loginRlOpts = builder.Configuration
+        .GetSection(LoginRateLimitOptions.SectionName)
+        .Get<LoginRateLimitOptions>() ?? new LoginRateLimitOptions();
+
     options.AddPolicy("send-by-appid", httpContext =>
     {
         var appId = httpContext.Items["AppId"] as Guid? ?? Guid.Empty;
@@ -276,6 +290,21 @@ builder.Services.AddRateLimiter(options =>
                 TokensPerPeriod = rlOpts.TokensPerPeriod,
                 AutoReplenishment = true,
                 QueueLimit = rlOpts.QueueLimit
+            });
+    });
+
+    // Login brute-force guard: fixed window per client IP. The body isn't parsed
+    // at the limiter stage, so the remote IP is the only reliable partition key.
+    options.AddPolicy("login", httpContext =>
+    {
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(clientIp, _ =>
+            new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = loginRlOpts.PermitLimit,
+                Window = TimeSpan.FromSeconds(loginRlOpts.WindowSeconds),
+                QueueLimit = loginRlOpts.QueueLimit
             });
     });
 
