@@ -5,6 +5,14 @@ using WebhookEngine.Infrastructure.Data;
 
 namespace WebhookEngine.Infrastructure.Repositories;
 
+public record EndpointStatsRow
+{
+    public int TotalAttempts { get; init; }
+    public int Successful { get; init; }
+    public double AvgLatency { get; init; }
+    public double P95Latency { get; init; }
+}
+
 public class MessageRepository
 {
     private readonly WebhookDbContext _dbContext;
@@ -186,6 +194,26 @@ public class MessageRepository
         return await _dbContext.MessageAttempts
             .AsNoTracking()
             .CountAsync(a => a.EndpointId == endpointId && a.Message.AppId == appId, ct);
+    }
+
+    /// Computes p95 via percentile_cont in-database so a busy 30d window never
+    /// materializes every attempt's latency into host memory.
+    public async Task<EndpointStatsRow> GetEndpointStatsAsync(Guid endpointId, DateTime startAt, CancellationToken ct = default)
+    {
+        var rows = await _dbContext.Database
+            .SqlQueryRaw<EndpointStatsRow>(
+                """
+                SELECT
+                    COUNT(*)::int                                                          AS "TotalAttempts",
+                    COUNT(*) FILTER (WHERE status = 'Success')::int                        AS "Successful",
+                    COALESCE(AVG(latency_ms), 0)::double precision                         AS "AvgLatency",
+                    COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms), 0)  AS "P95Latency"
+                FROM message_attempts
+                WHERE endpoint_id = @p0 AND created_at >= @p1
+                """,
+                endpointId, startAt)
+            .ToListAsync(ct);
+        return rows.Single();
     }
 
     public async Task CreateAttemptAsync(MessageAttempt attempt, CancellationToken ct = default)

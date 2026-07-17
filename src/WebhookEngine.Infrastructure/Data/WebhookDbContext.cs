@@ -137,6 +137,12 @@ public class WebhookDbContext : DbContext
                 .HasDatabaseName("idx_messages_queue")
                 .HasFilter("status = 'Pending'");
 
+            // Retry sweep for RetryScheduler — cross-app Failed scan the app-leading
+            // indexes can't serve (PG17 has no skip scan). Named overload so it
+            // coexists with idx_messages_queue on the same scheduled_at column.
+            entity.HasIndex(e => e.ScheduledAt, "idx_messages_retry")
+                .HasFilter("status = 'Failed'");
+
             entity.HasIndex(e => new { e.AppId, e.EndpointId }).HasDatabaseName("idx_messages_app_endpoint");
             entity.HasIndex(e => new { e.AppId, e.Status }).HasDatabaseName("idx_messages_app_status");
             entity.HasIndex(e => new { e.AppId, e.EventTypeId }).HasDatabaseName("idx_messages_app_event_type");
@@ -182,6 +188,10 @@ public class WebhookDbContext : DbContext
 
             entity.HasIndex(e => e.MessageId).HasDatabaseName("idx_attempts_message_id");
             entity.HasIndex(e => new { e.EndpointId, e.Status, e.CreatedAt }).HasDatabaseName("idx_attempts_endpoint_status").IsDescending(false, false, true);
+
+            // Dashboard timeline scans attempts by created_at with no endpoint
+            // predicate, which the endpoint-leading composite above can't serve.
+            entity.HasIndex(e => e.CreatedAt).HasDatabaseName("idx_message_attempts_created_at");
 
             entity.HasOne(e => e.Message).WithMany(m => m.Attempts).HasForeignKey(e => e.MessageId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.Endpoint).WithMany().HasForeignKey(e => e.EndpointId);

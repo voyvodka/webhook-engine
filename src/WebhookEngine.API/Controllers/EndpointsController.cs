@@ -1,11 +1,9 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using WebhookEngine.API.Contracts;
 using WebhookEngine.Core.Enums;
 using WebhookEngine.Core.Interfaces;
 using WebhookEngine.Core.Models;
-using WebhookEngine.Infrastructure.Data;
 using WebhookEngine.Infrastructure.Repositories;
 using WebhookEngine.Infrastructure.Services;
 using Endpoint = WebhookEngine.Core.Entities.Endpoint;
@@ -23,20 +21,20 @@ public class EndpointsController : ControllerBase
     private readonly EventTypeRepository _eventTypeRepo;
     private readonly ApplicationRepository _appRepo;
     private readonly IEndpointTester _endpointTester;
-    private readonly WebhookDbContext _dbContext;
+    private readonly MessageRepository _messageRepo;
 
     public EndpointsController(
         EndpointRepository endpointRepo,
         EventTypeRepository eventTypeRepo,
         ApplicationRepository appRepo,
         IEndpointTester endpointTester,
-        WebhookDbContext dbContext)
+        MessageRepository messageRepo)
     {
         _endpointRepo = endpointRepo;
         _eventTypeRepo = eventTypeRepo;
         _appRepo = appRepo;
         _endpointTester = endpointTester;
-        _dbContext = dbContext;
+        _messageRepo = messageRepo;
     }
 
     [HttpPost]
@@ -263,28 +261,12 @@ public class EndpointsController : ControllerBase
             _ => DateTime.UtcNow.AddHours(-24)
         };
 
-        var attemptsQuery = _dbContext.MessageAttempts
-            .AsNoTracking()
-            .Where(a => a.EndpointId == endpointId && a.CreatedAt >= startAt);
+        var stats = await _messageRepo.GetEndpointStatsAsync(endpointId, startAt, ct);
 
-        var totalAttempts = await attemptsQuery.CountAsync(ct);
-        var successful = await attemptsQuery.CountAsync(a => a.Status == AttemptStatus.Success, ct);
+        var totalAttempts = stats.TotalAttempts;
+        var successful = stats.Successful;
         var failed = totalAttempts - successful;
         var successRate = totalAttempts > 0 ? Math.Round((double)successful / totalAttempts * 100, 1) : 0;
-        var avgLatencyMs = await attemptsQuery.AverageAsync(a => (double?)a.LatencyMs, ct) ?? 0;
-
-        var latencies = await attemptsQuery
-            .OrderBy(a => a.LatencyMs)
-            .Select(a => a.LatencyMs)
-            .ToListAsync(ct);
-
-        var p95LatencyMs = 0;
-        if (latencies.Count > 0)
-        {
-            var percentileIndex = (int)Math.Ceiling(latencies.Count * 0.95) - 1;
-            percentileIndex = Math.Clamp(percentileIndex, 0, latencies.Count - 1);
-            p95LatencyMs = latencies[percentileIndex];
-        }
 
         return Ok(ApiEnvelope.Success(HttpContext, new
         {
@@ -294,8 +276,8 @@ public class EndpointsController : ControllerBase
             successful,
             failed,
             successRate,
-            avgLatencyMs = Math.Round(avgLatencyMs, 0),
-            p95LatencyMs
+            avgLatencyMs = Math.Round(stats.AvgLatency, 0),
+            p95LatencyMs = (int)Math.Round(stats.P95Latency, 0)
         }));
     }
 }
