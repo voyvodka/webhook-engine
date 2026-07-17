@@ -83,7 +83,7 @@ const accentMap = {
 export function DashboardPage() {
   const queryClient = useQueryClient();
   const [devSeedResult, setDevSeedResult] = useState<DevTrafficSeedResult | null>(null);
-  const { events, connected } = useDeliveryFeed(20);
+  const { events, eventCount, connected } = useDeliveryFeed(20);
 
   const overviewQuery = useQuery({
     queryKey: ["overview"],
@@ -96,21 +96,16 @@ export function DashboardPage() {
     placeholderData: fallbackTimeline
   });
 
-  // R6's manual debounce rig (1 s / 5 s tick + min-interval ref + pending
-  // / in-flight flags + lastRealtimeRefreshAtRef) is replaced by this
-  // single line: SignalR events invalidate the overview + timeline cache,
-  // staleTime (30 s in App.tsx) coalesces floods, and TanStack handles
-  // dedup + cancellation. Reconnect already invalidates lastHealthChange
-  // separately (DPR-1); here we only need the delivery-event triggered
-  // refresh.
+  // eventCount (not events.length, which is capped) drives this so
+  // invalidation keeps firing past the feed's rolling-window size.
   useEffect(() => {
-    if (events.length === 0 && !connected) return;
+    if (eventCount === 0 && !connected) return;
     void Promise.resolve().then(() => {
       queryClient.invalidateQueries({ queryKey: ["overview"] });
       queryClient.invalidateQueries({ queryKey: ["timeline"] });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events.length, connected]);
+  }, [eventCount, connected]);
 
   const overview = overviewQuery.data ?? fallbackOverview;
   const timeline = timelineQuery.data ?? fallbackTimeline;
