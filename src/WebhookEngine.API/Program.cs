@@ -46,7 +46,10 @@ builder.Services.AddOptions<DeliveryOptions>()
     .Bind(builder.Configuration.GetSection(DeliveryOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<DeliveryOptions>, DeliveryOptionsValidator>();
-builder.Services.Configure<RetryPolicyOptions>(builder.Configuration.GetSection(RetryPolicyOptions.SectionName));
+builder.Services.AddOptions<RetryPolicyOptions>()
+    .Bind(builder.Configuration.GetSection(RetryPolicyOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<RetryPolicyOptions>, RetryPolicyOptionsValidator>();
 builder.Services.Configure<CircuitBreakerOptions>(builder.Configuration.GetSection(CircuitBreakerOptions.SectionName));
 builder.Services.Configure<SsrfGuardOptions>(builder.Configuration.GetSection(SsrfGuardOptions.SectionName));
 builder.Services.Configure<DashboardAuthOptions>(builder.Configuration.GetSection(DashboardAuthOptions.SectionName));
@@ -148,6 +151,7 @@ builder.Services.AddHostedService<RetryScheduler>();
 builder.Services.AddHostedService<CircuitBreakerWorker>();
 builder.Services.AddHostedService<StaleLockRecoveryWorker>();
 builder.Services.AddHostedService<RetentionCleanupWorker>();
+builder.Services.AddHostedService<QueueMetricsWorker>();
 
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

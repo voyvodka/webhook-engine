@@ -159,7 +159,6 @@ public class MessagesController : ControllerBase
                 Payload = source.Payload,
                 Status = MessageStatus.Pending,
                 AttemptCount = 0,
-                MaxRetries = source.MaxRetries,
                 ScheduledAt = DateTime.UtcNow
             };
 

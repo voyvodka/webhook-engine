@@ -2,10 +2,7 @@ using System.Diagnostics.Metrics;
 
 namespace WebhookEngine.Core.Metrics;
 
-/// <summary>
-/// Custom Prometheus metrics for webhook delivery operations.
-/// Uses System.Diagnostics.Metrics (IMeterFactory compatible).
-/// </summary>
+/// <summary>Custom Prometheus metrics for webhook delivery operations (IMeterFactory-compatible System.Diagnostics.Metrics).</summary>
 public sealed class WebhookMetrics
 {
     public const string MeterName = "WebhookEngine";
@@ -20,7 +17,6 @@ public sealed class WebhookMetrics
     private readonly Counter<long> _circuitClosed;
     private readonly Counter<long> _staleLockRecovered;
     private readonly Histogram<double> _deliveryDurationMs;
-    private readonly UpDownCounter<long> _queueDepth;
     private readonly Counter<long> _transformationsApplied;
     private readonly Counter<long> _transformationsFailedOpen;
 
@@ -78,11 +74,6 @@ public sealed class WebhookMetrics
             unit: "ms",
             description: "Delivery attempt duration in milliseconds");
 
-        _queueDepth = meter.CreateUpDownCounter<long>(
-            "webhookengine.queue.depth",
-            unit: "{message}",
-            description: "Approximate queue depth (enqueue increments, dequeue decrements)");
-
         _transformationsApplied = meter.CreateCounter<long>(
             "webhookengine.transformations.applied",
             unit: "{transformation}",
@@ -119,10 +110,6 @@ public sealed class WebhookMetrics
     public void RecordCircuitClosed() => _circuitClosed.Add(1);
 
     public void RecordStaleLockRecovered(int count) => _staleLockRecovered.Add(count);
-
-    public void RecordQueueEnqueue(int count = 1) => _queueDepth.Add(count);
-
-    public void RecordQueueDequeue(int count) => _queueDepth.Add(-count);
 
     public void RecordTransformationApplied() => _transformationsApplied.Add(1);
 
