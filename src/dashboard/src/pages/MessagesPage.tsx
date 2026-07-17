@@ -59,7 +59,7 @@ export function MessagesPage() {
   const [lastSendAt, setLastSendAt] = useState(0);
   const [sendResult, setSendResult] = useState("");
   const [showSend, setShowSend] = useState(false);
-  const { events, connected } = useDeliveryFeed(20);
+  const { eventCount, connected } = useDeliveryFeed(20);
 
   const messagesQuery = useQuery({
     queryKey: ["messages", { page, appFilter, endpointFilter, eventTypeFilter, statusFilter, afterFilter, beforeFilter }],
@@ -120,15 +120,13 @@ export function MessagesPage() {
 
   const invalidateMessages = () => queryClient.invalidateQueries({ queryKey: ["messages"] });
 
-  // SignalR delivery events trigger a background invalidation rather than a
-  // direct refetch — TanStack's staleTime + dedup makes the actual network
-  // call only when the cache is stale, so a flood of events coalesces. The
-  // 7-second setInterval poll is gone; staleTime + invalidate replaces it.
+  // eventCount (not events.length, which is capped) drives this so
+  // invalidation keeps firing past the feed's rolling-window size.
   useEffect(() => {
-    if (events.length === 0) return;
+    if (eventCount === 0) return;
     void Promise.resolve().then(() => invalidateMessages());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events.length]);
+  }, [eventCount]);
 
   const sendMutation = useMutation({
     mutationFn: (payload: { appId: string; eventType: string; payload: unknown; idempotencyKey?: string }) =>
