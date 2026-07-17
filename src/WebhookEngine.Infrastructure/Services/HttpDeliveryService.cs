@@ -35,6 +35,14 @@ public class HttpDeliveryService : IDeliveryService
             httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
         }
 
+        // Hand the allowlist to the ConnectCallback so egress is enforced on the
+        // same resolution that pins the socket. Only when configured.
+        var allowedNetworks = IpAllowlistMatcher.Parse(request.AllowedIpsJson);
+        if (allowedNetworks.Count > 0)
+        {
+            httpRequest.Options.Set(DeliveryHttpRequestOptions.AllowedNetworks, allowedNetworks);
+        }
+
         var stopwatch = Stopwatch.StartNew();
         try
         {
