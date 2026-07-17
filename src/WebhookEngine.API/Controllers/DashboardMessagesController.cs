@@ -274,7 +274,13 @@ public class DashboardMessagesController : ControllerBase
                 "Only failed or dead-letter messages can be retried."));
         }
 
-        await _messageRepository.RetryAsync(messageId, ct);
+        if (!await _messageRepository.RetryAsync(messageId, ct))
+        {
+            return Conflict(ApiEnvelope.Error(
+                HttpContext,
+                "CONFLICT",
+                "Message state changed; it is no longer retriable. Refresh and try again."));
+        }
 
         return Ok(ApiEnvelope.Success(HttpContext, new
         {

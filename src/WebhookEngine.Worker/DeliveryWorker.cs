@@ -131,35 +131,20 @@ public class DeliveryWorker : BackgroundService
             var circuitState = await healthTracker.GetCircuitStateAsync(message.EndpointId, ct);
             if (circuitState == CircuitState.Open)
             {
-                var currentAttemptForCircuit = message.AttemptCount + 1;
-
-                if (currentAttemptForCircuit >= message.MaxRetries)
-                {
-                    if (!await messageRepo.MarkDeadLetterAsync(message.Id, currentAttemptForCircuit, _workerId, CancellationToken.None))
-                    {
-                        _logger.LogDebug("MarkDeadLetter (circuit-open) lost the row {MessageId} — abandoning", message.Id);
-                        return;
-                    }
-                    _metrics?.RecordDeadLetter();
-                    _logger.LogWarning(
-                        "Message {MessageId} moved to dead letter — circuit open for endpoint {EndpointId}, max retries ({MaxRetries}) exhausted",
-                        message.Id, message.EndpointId, message.MaxRetries);
-
-                    if (notifier is not null)
-                        await notifier.NotifyDeadLetterAsync(message.Id, message.EndpointId, currentAttemptForCircuit, ct);
-                    return;
-                }
-
                 _logger.LogDebug("Circuit open for endpoint {EndpointId}, deferring message {MessageId} (attempt {Attempt}/{MaxRetries})",
-                    message.EndpointId, message.Id, currentAttemptForCircuit, message.MaxRetries);
+                    message.EndpointId, message.Id, message.AttemptCount, message.MaxRetries);
 
                 var health = await healthTracker.GetHealthAsync(message.EndpointId, ct);
                 var nextTryAt = health?.CooldownUntil ?? DateTime.UtcNow.AddMinutes(1);
 
-                if (!await messageRepo.MarkFailedForRetryAsync(message.Id, currentAttemptForCircuit, nextTryAt, _workerId, CancellationToken.None))
-                {
-                    _logger.LogDebug("MarkFailedForRetry (circuit-open) lost the row {MessageId} — abandoning", message.Id);
-                }
+                // A circuit-open deferral is a pure reschedule: no attempt increment and
+                // never due in the past. CircuitBreakerWorker flips Open->HalfOpen after
+                // cooldown; the real HalfOpen probe is what consumes the retry budget.
+                var clampedNextTryAt = nextTryAt > DateTime.UtcNow
+                    ? nextTryAt
+                    : DateTime.UtcNow.AddMilliseconds(_deliveryOptions.PollIntervalMs);
+
+                await messageRepo.ReschedulePendingAsync(message.Id, clampedNextTryAt, CancellationToken.None);
                 return;
             }
 
