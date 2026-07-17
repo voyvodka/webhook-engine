@@ -54,6 +54,9 @@ public class DashboardMessagesController : ControllerBase
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
+        (page, pageSize) = PaginationBounds.Clamp(page, pageSize);
+        after = TimestampBounds.AsUtc(after);
+        before = TimestampBounds.AsUtc(before);
         var messages = await _messageRepository.ListAllAsync(appId, status, endpointId, eventType, after, before, page, pageSize, ct);
         var totalCount = await _messageRepository.CountAllAsync(appId, status, endpointId, eventType, after, before, ct);
         var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);

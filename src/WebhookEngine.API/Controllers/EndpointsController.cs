@@ -92,6 +92,7 @@ public class EndpointsController : ControllerBase
         CancellationToken ct = default)
     {
         var appId = (Guid)HttpContext.Items["AppId"]!;
+        (page, pageSize) = PaginationBounds.Clamp(page, pageSize);
         var endpoints = await _endpointRepo.ListByAppIdAsync(appId, status, page, pageSize, ct);
         var totalCount = await _endpointRepo.CountByAppIdAsync(appId, status, ct);
         var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);

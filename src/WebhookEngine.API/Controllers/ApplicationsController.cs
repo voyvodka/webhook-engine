@@ -92,6 +92,7 @@ public class ApplicationsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
+        (page, pageSize) = PaginationBounds.Clamp(page, pageSize);
         var applications = await _appRepo.ListAsync(page, pageSize, ct);
         var totalCount = await _appRepo.CountAsync(ct);
         var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);

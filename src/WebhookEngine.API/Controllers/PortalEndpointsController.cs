@@ -86,6 +86,7 @@ public class PortalEndpointsController : ControllerBase
         if (!HasCapability(PortalCapability.EndpointsRead))
             return Forbidden();
 
+        (page, pageSize) = PaginationBounds.Clamp(page, pageSize);
         var endpoints = await _endpointRepo.ListByAppIdAsync(AppId, status, page, pageSize, ct);
         var totalCount = await _endpointRepo.CountByAppIdAsync(AppId, status, ct);
         var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);
@@ -314,6 +315,7 @@ public class PortalEndpointsController : ControllerBase
         if (endpoint is null)
             return PortalNotFound();
 
+        (page, pageSize) = PaginationBounds.Clamp(page, pageSize);
         var attempts = await _messageRepo.ListAttemptsByEndpointAsync(AppId, endpointId, page, pageSize, ct);
         var totalCount = await _messageRepo.CountAttemptsByEndpointAsync(AppId, endpointId, ct);
         var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);
@@ -336,6 +338,7 @@ public class PortalEndpointsController : ControllerBase
             return Forbidden();
 
         // includeArchived: false — archived event types are admin-only history.
+        (page, pageSize) = PaginationBounds.Clamp(page, pageSize);
         var eventTypes = await _eventTypeRepo.ListByAppIdAsync(AppId, includeArchived: false, page, pageSize, ct);
         var totalCount = await _eventTypeRepo.CountByAppIdAsync(AppId, includeArchived: false, ct);
         var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);
