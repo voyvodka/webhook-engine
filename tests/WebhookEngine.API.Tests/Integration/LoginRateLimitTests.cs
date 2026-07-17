@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 
 namespace WebhookEngine.API.Tests.Integration;
 
@@ -10,9 +13,16 @@ namespace WebhookEngine.API.Tests.Integration;
 // app.UseRateLimiter() runs in every environment.
 public class LoginRateLimitTests : IDisposable
 {
-    // Fresh host per method: the "login" fixed-window limiter is a host singleton and its
-    // 60 s window would bleed token state across methods under a shared IClassFixture.
-    private readonly TestWebApplicationFactory _factory = new();
+    // Fresh host per method (the fixed-window limiter is a host singleton whose window would
+    // bleed across methods), and the base factory's high login permit is overridden back to
+    // the real default so the limiter actually engages here.
+    private readonly WebApplicationFactory<Program> _factory = new TestWebApplicationFactory()
+        .WithWebHostBuilder(builder =>
+            builder.ConfigureAppConfiguration((_, cfg) =>
+                cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["WebhookEngine:LoginRateLimit:PermitLimit"] = "5"
+                })));
 
     public void Dispose() => _factory.Dispose();
 
