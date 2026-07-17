@@ -20,8 +20,6 @@ namespace WebhookEngine.API.Controllers;
 [Authorize(AuthenticationSchemes = CookieAuthenticationDefaults.AuthenticationScheme)]
 public class AuditLogsController : ControllerBase
 {
-    private const int MaxPageSize = 100;
-
     private readonly AuditLogRepository _auditLogRepo;
 
     public AuditLogsController(AuditLogRepository auditLogRepo)
@@ -41,8 +39,9 @@ public class AuditLogsController : ControllerBase
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
-        page = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        (page, pageSize) = PaginationBounds.Clamp(page, pageSize);
+        from = TimestampBounds.AsUtc(from);
+        to = TimestampBounds.AsUtc(to);
 
         var (rows, total) = await _auditLogRepo.ListAsync(
             appId, action, resourceType, resourceId, from, to, page, pageSize, ct);

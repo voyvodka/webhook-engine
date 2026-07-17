@@ -170,6 +170,10 @@ public class UpdateEndpointRequestValidator : AbstractValidator<UpdateEndpointRe
             .EndpointAllowedIpsCidrs()
             .When(x => x.AllowedIps is { Count: > 0 });
 
+        RuleFor(x => x.SecretOverride)
+            .EndpointSecretOverride()
+            .When(x => x.SecretOverride is not null);
+
         RuleFor(x => x)
             .Must(x => x.Url is not null
                 || x.Description is not null
@@ -217,6 +221,10 @@ public class DashboardCreateEndpointRequestValidator : AbstractValidator<Dashboa
         RuleFor(x => x.AllowedIps)
             .EndpointAllowedIpsCidrs()
             .When(x => x.AllowedIps is { Count: > 0 });
+
+        RuleFor(x => x.SecretOverride)
+            .EndpointSecretOverride()
+            .When(x => x.SecretOverride is not null);
     }
 }
 
@@ -251,6 +259,10 @@ public class DashboardUpdateEndpointRequestValidator : AbstractValidator<Dashboa
         RuleFor(x => x.AllowedIps)
             .EndpointAllowedIpsCidrs()
             .When(x => x.AllowedIps is { Count: > 0 });
+
+        RuleFor(x => x.SecretOverride)
+            .EndpointSecretOverride()
+            .When(x => x.SecretOverride is not null);
 
         RuleFor(x => x)
             .Must(x => x.Url is not null

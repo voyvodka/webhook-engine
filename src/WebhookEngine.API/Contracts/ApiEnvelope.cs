@@ -29,7 +29,10 @@ public static class ApiEnvelope
 
     public static PaginationMeta Pagination(int page, int pageSize, int totalCount)
     {
-        var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling((double)totalCount / pageSize);
+        // pageSize <= 0 guards divide-by-zero even if a caller forgets to clamp.
+        var totalPages = totalCount <= 0 || pageSize <= 0
+            ? 0
+            : (int)Math.Ceiling((double)totalCount / pageSize);
         return new PaginationMeta(
             page,
             pageSize,
