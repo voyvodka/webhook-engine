@@ -116,6 +116,17 @@ public class DeliveryWorker : BackgroundService
     {
         try
         {
+            // Per-message lease refresh: a slow sequential batch can outlive
+            // StaleLockMinutes. A false result means the row was stale-recovered
+            // or taken — stop before delivering a message we no longer own.
+            if (!await messageRepo.RefreshLockAsync(message.Id, _workerId, ct))
+            {
+                _logger.LogWarning(
+                    "Lost the lease on message {MessageId} before delivery (stale-lock recovered or reclaimed) — skipping",
+                    message.Id);
+                return;
+            }
+
             // Check circuit breaker state before delivery
             var circuitState = await healthTracker.GetCircuitStateAsync(message.EndpointId, ct);
             if (circuitState == CircuitState.Open)
@@ -124,7 +135,7 @@ public class DeliveryWorker : BackgroundService
 
                 if (currentAttemptForCircuit >= message.MaxRetries)
                 {
-                    if (!await messageRepo.MarkDeadLetterAsync(message.Id, currentAttemptForCircuit, _workerId, ct))
+                    if (!await messageRepo.MarkDeadLetterAsync(message.Id, currentAttemptForCircuit, _workerId, CancellationToken.None))
                     {
                         _logger.LogDebug("MarkDeadLetter (circuit-open) lost the row {MessageId} — abandoning", message.Id);
                         return;
@@ -145,7 +156,7 @@ public class DeliveryWorker : BackgroundService
                 var health = await healthTracker.GetHealthAsync(message.EndpointId, ct);
                 var nextTryAt = health?.CooldownUntil ?? DateTime.UtcNow.AddMinutes(1);
 
-                if (!await messageRepo.MarkFailedForRetryAsync(message.Id, currentAttemptForCircuit, nextTryAt, _workerId, ct))
+                if (!await messageRepo.MarkFailedForRetryAsync(message.Id, currentAttemptForCircuit, nextTryAt, _workerId, CancellationToken.None))
                 {
                     _logger.LogDebug("MarkFailedForRetry (circuit-open) lost the row {MessageId} — abandoning", message.Id);
                 }
@@ -156,7 +167,7 @@ public class DeliveryWorker : BackgroundService
             if (endpoint is null)
             {
                 _logger.LogWarning("Endpoint {EndpointId} not found for message {MessageId}", message.EndpointId, message.Id);
-                await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, ct);
+                await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, CancellationToken.None);
                 return;
             }
 
@@ -213,7 +224,7 @@ public class DeliveryWorker : BackgroundService
                 if (!Uri.TryCreate(endpoint.Url, UriKind.Absolute, out var endpointUri))
                 {
                     _logger.LogError("Endpoint URL is not parseable for {EndpointId}, message {MessageId}", message.EndpointId, message.Id);
-                    await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, ct);
+                    await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, CancellationToken.None);
                     return;
                 }
 
@@ -242,7 +253,7 @@ public class DeliveryWorker : BackgroundService
                             message.Id,
                             attemptAfterDnsFailure);
 
-                        if (await messageRepo.MarkDeadLetterAsync(message.Id, attemptAfterDnsFailure, _workerId, ct))
+                        if (await messageRepo.MarkDeadLetterAsync(message.Id, attemptAfterDnsFailure, _workerId, CancellationToken.None))
                         {
                             _metrics?.RecordDeadLetter();
                         }
@@ -258,7 +269,7 @@ public class DeliveryWorker : BackgroundService
                         nextRetryAt,
                         attemptAfterDnsFailure);
 
-                    if (await messageRepo.MarkFailedForRetryAsync(message.Id, attemptAfterDnsFailure, nextRetryAt, _workerId, ct))
+                    if (await messageRepo.MarkFailedForRetryAsync(message.Id, attemptAfterDnsFailure, nextRetryAt, _workerId, CancellationToken.None))
                     {
                         _metrics?.RecordRetryScheduled();
                     }
@@ -271,7 +282,7 @@ public class DeliveryWorker : BackgroundService
                         "Endpoint {EndpointId} resolved to an IP outside its allowlist; message {MessageId} dead-lettered.",
                         endpoint.Id,
                         message.Id);
-                    await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, ct);
+                    await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, CancellationToken.None);
                     return;
                 }
             }
@@ -280,7 +291,7 @@ public class DeliveryWorker : BackgroundService
             if (string.IsNullOrWhiteSpace(signingSecret))
             {
                 _logger.LogError("Signing secret missing for endpoint {EndpointId}, message {MessageId}", message.EndpointId, message.Id);
-                await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, ct);
+                await messageRepo.MarkDeadLetterAsync(message.Id, message.AttemptCount, _workerId, CancellationToken.None);
                 return;
             }
 
@@ -307,9 +318,12 @@ public class DeliveryWorker : BackgroundService
                 CustomHeaders = customHeaders
             };
 
-            // Deliver
+            // Bound the HTTP call to TimeoutSeconds via a dedicated CTS, decoupled
+            // from stoppingToken so a shutdown SIGTERM lets an in-flight POST finish
+            // (within ShutdownTimeout) instead of fabricating a false "Timeout".
             _metrics?.RecordDeliveryAttempt();
-            var result = await deliveryService.DeliverAsync(request, ct);
+            using var deliveryCts = new CancellationTokenSource(TimeSpan.FromSeconds(_deliveryOptions.TimeoutSeconds));
+            var result = await deliveryService.DeliverAsync(request, deliveryCts.Token);
 
             var currentAttempt = message.AttemptCount + 1;
 
@@ -326,11 +340,13 @@ public class DeliveryWorker : BackgroundService
                 Error = result.Error,
                 LatencyMs = (int)result.LatencyMs
             };
-            await messageRepo.CreateAttemptAsync(attempt, ct);
+            // Finalization writes use CancellationToken.None so the attempt row and
+            // the state transition still persist if shutdown fires mid-delivery.
+            await messageRepo.CreateAttemptAsync(attempt, CancellationToken.None);
 
             if (result.Success)
             {
-                if (!await messageRepo.MarkDeliveredAsync(message.Id, currentAttempt, _workerId, ct))
+                if (!await messageRepo.MarkDeliveredAsync(message.Id, currentAttempt, _workerId, CancellationToken.None))
                 {
                     _logger.LogWarning(
                         "MarkDelivered lost the row {MessageId} (stale-lock recovered or another worker took over) — abandoning to avoid duplicate state",
@@ -352,7 +368,7 @@ public class DeliveryWorker : BackgroundService
 
                 if (currentAttempt >= message.MaxRetries)
                 {
-                    if (!await messageRepo.MarkDeadLetterAsync(message.Id, currentAttempt, _workerId, ct))
+                    if (!await messageRepo.MarkDeadLetterAsync(message.Id, currentAttempt, _workerId, CancellationToken.None))
                     {
                         _logger.LogWarning("MarkDeadLetter lost the row {MessageId} — abandoning", message.Id);
                         return;
@@ -367,7 +383,7 @@ public class DeliveryWorker : BackgroundService
                 else
                 {
                     var nextRetryAt = CalculateNextRetryAt(currentAttempt, _retryPolicy, DateTime.UtcNow);
-                    if (!await messageRepo.MarkFailedForRetryAsync(message.Id, currentAttempt, nextRetryAt, _workerId, ct))
+                    if (!await messageRepo.MarkFailedForRetryAsync(message.Id, currentAttempt, nextRetryAt, _workerId, CancellationToken.None))
                     {
                         _logger.LogWarning("MarkFailedForRetry lost the row {MessageId} — abandoning", message.Id);
                         return;
@@ -390,14 +406,18 @@ public class DeliveryWorker : BackgroundService
         {
             _logger.LogError(ex, "Error processing message {MessageId}", message.Id);
 
-            // CORR-02: Only transition back to Pending if the current status allows it.
-            // Prevents Delivered->Pending and DeadLetter->Pending regression from error recovery.
-            // message.Status is updated in-memory after each DB write so this reflects
-            // the committed state: if MarkDeliveredAsync succeeded, message.Status is Delivered
-            // and IsValid(Delivered, Pending) returns false, blocking the regression.
+            // CORR-02: the CAS in ResetToPendingIfOwnedAsync is the real guard — it
+            // reverts only a row we still own in Sending, so a stale-lock steal that
+            // already moved it to Delivered/DeadLetter cannot be regressed. IsValid is
+            // a cheap pre-filter; None keeps the reset alive through shutdown.
             if (stateMachine.IsValid(message.Status, MessageStatus.Pending))
             {
-                await messageRepo.UpdateMessageStatusAsync(message.Id, MessageStatus.Pending, ct);
+                if (!await messageRepo.ResetToPendingIfOwnedAsync(message.Id, _workerId, CancellationToken.None))
+                {
+                    _logger.LogWarning(
+                        "Skipping error-recovery reset for message {MessageId}: ownership already moved on",
+                        message.Id);
+                }
             }
             else
             {
