@@ -290,10 +290,17 @@ public class MessageRepository
                 .SetProperty(m => m.LockedBy, (string?)null), ct);
     }
 
-    public async Task RetryAsync(Guid messageId, CancellationToken ct = default)
+    /// <summary>
+    /// CAS manual-retry Failed/DeadLetter -> Pending with a reset attempt counter.
+    /// Returns false when the row left a retriable state concurrently (e.g. a worker
+    /// already re-leased it) — the caller must surface a conflict instead of
+    /// resurrecting an in-flight message.
+    /// </summary>
+    public async Task<bool> RetryAsync(Guid messageId, CancellationToken ct = default)
     {
-        await _dbContext.Messages
-            .Where(m => m.Id == messageId)
+        var rows = await _dbContext.Messages
+            .Where(m => m.Id == messageId
+                && (m.Status == MessageStatus.Failed || m.Status == MessageStatus.DeadLetter))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(m => m.Status, MessageStatus.Pending)
                 .SetProperty(m => m.AttemptCount, 0)
@@ -301,6 +308,7 @@ public class MessageRepository
                 .SetProperty(m => m.DeliveredAt, (DateTime?)null)
                 .SetProperty(m => m.LockedAt, (DateTime?)null)
                 .SetProperty(m => m.LockedBy, (string?)null), ct);
+        return rows == 1;
     }
 
     public async Task<int> RequeueDueFailedMessagesAsync(DateTime now, CancellationToken ct = default)
