@@ -62,6 +62,7 @@ public class DashboardEndpointController : ControllerBase
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
+        (page, pageSize) = PaginationBounds.Clamp(page, pageSize);
         var endpoints = await _endpointRepository.ListAllAsync(appId, status, page, pageSize, ct);
         var totalCount = await _endpointRepository.CountAllAsync(appId, status, ct);
         var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);

@@ -132,12 +132,15 @@ public class MessagesController : ControllerBase
             ? request.Statuses
             : [MessageStatus.Delivered, MessageStatus.Failed, MessageStatus.DeadLetter];
 
+        var fromUtc = TimestampBounds.AsUtc(request.From);
+        var toUtc = TimestampBounds.AsUtc(request.To);
+
         var sourceMessages = await _messageRepo.ListReplayCandidatesAsync(
             appId,
             eventTypeResolution.EventTypeId,
             request.EndpointId,
-            request.From,
-            request.To,
+            fromUtc,
+            toUtc,
             statuses,
             request.MaxMessages,
             ct);
@@ -171,8 +174,8 @@ public class MessagesController : ControllerBase
             messageIds = replayedMessageIds,
             eventType = eventTypeResolution.EventTypeName,
             endpointId = request.EndpointId,
-            from = request.From,
-            to = request.To,
+            from = fromUtc,
+            to = toUtc,
             maxMessages = request.MaxMessages,
             statuses = statuses.Select(s => s.ToString().ToLowerInvariant())
         }));
@@ -201,6 +204,9 @@ public class MessagesController : ControllerBase
         CancellationToken ct = default)
     {
         var appId = (Guid)HttpContext.Items["AppId"]!;
+        (page, pageSize) = PaginationBounds.Clamp(page, pageSize);
+        after = TimestampBounds.AsUtc(after);
+        before = TimestampBounds.AsUtc(before);
         var messages = await _messageRepo.ListAsync(appId, status, endpointId, eventTypeId, after, before, page, pageSize, ct);
         var totalCount = await _messageRepo.CountAsync(appId, status, endpointId, eventTypeId, after, before, ct);
         var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);
@@ -220,6 +226,7 @@ public class MessagesController : ControllerBase
         if (message is null)
             return NotFound(ApiEnvelope.Error(HttpContext, "NOT_FOUND", "Message not found."));
 
+        (page, pageSize) = PaginationBounds.Clamp(page, pageSize);
         var attempts = await _messageRepo.ListAttemptsAsync(appId, messageId, page, pageSize, ct);
         var totalCount = await _messageRepo.CountAttemptsAsync(appId, messageId, ct);
         var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);

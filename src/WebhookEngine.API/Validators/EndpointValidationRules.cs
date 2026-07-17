@@ -23,7 +23,9 @@ public static class EndpointValidationRules
     public const int MaxDescriptionLength = 500;
     public const int MaxTransformExpressionLength = 4096;
     public const int MinSecretOverrideLength = 32;
-    public const int MaxSecretOverrideLength = 128;
+    // Aligns with the secret_override varchar(64) column so an over-length value
+    // fails as a clean 422 instead of a 22001 at INSERT.
+    public const int MaxSecretOverrideLength = 64;
     public const string SecretOverridePrefix = "whsec_";
 
     /// <summary>

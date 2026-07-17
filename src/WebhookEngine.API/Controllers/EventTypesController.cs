@@ -61,6 +61,7 @@ public class EventTypesController : ControllerBase
         CancellationToken ct = default)
     {
         var appId = (Guid)HttpContext.Items["AppId"]!;
+        (page, pageSize) = PaginationBounds.Clamp(page, pageSize);
         var eventTypes = await _eventTypeRepo.ListByAppIdAsync(appId, includeArchived, page, pageSize, ct);
         var totalCount = await _eventTypeRepo.CountByAppIdAsync(appId, includeArchived, ct);
         var pagination = ApiEnvelope.Pagination(page, pageSize, totalCount);
