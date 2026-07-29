@@ -33,7 +33,7 @@ jobs:
       # is the canonical npm registry client; bun's npm publish path does not
       # reliably emit sigstore provenance attestations on GitHub-hosted runners.
       - name: Setup Node (for npm publish)
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://registry.npmjs.org"
