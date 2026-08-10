@@ -17,6 +17,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Security
 
+## [0.4.1] - 2026-08-10
+
+Maintenance patch: a dependency refresh across backend NuGet, the dashboard bundle, the `@webhookengine/endpoint-manager` package, and the Docker build stage. No application code changed and there is no user-visible behaviour change; the `v1` route prefix, the Standard Webhooks signature surface, and the `WebhookEngine.Sdk` public API are all unchanged.
+
+### Changed
+- **Backend dependency refresh.** `Scalar.AspNetCore` `2.16.16 → 2.16.18` and `System.IdentityModel.Tokens.Jwt` `8.21.0 → 8.22.0` ship at runtime. Test-only: `NSubstitute` `6.0.0 → 6.1.0` in the API and Infrastructure suites and `5.3.0 → 6.1.0` in the Worker suite — the last project still on the 5.x line, so the solution now resolves a single NSubstitute version. No user-facing behaviour change.
+- **Frontend dependency refresh.** `lucide-react` `1.27.0 → 1.29.0` ships in the dashboard bundle. Build and lint tooling: `vite` `8.1.5 → 8.2.1`, `@vitejs/plugin-react` `6.0.4 → 6.0.5`, `@types/node` `26.1.1 → 26.1.2`, and `typescript-eslint` `8.65.0 → 8.66.0` across both the dashboard and `@webhookengine/endpoint-manager`. TypeScript stays pinned at 6.0.3 — the 7.0 line still crashes `@typescript-eslint/typescript-estree`, so that bump continues to wait on upstream support.
+- **Docker build-stage base image repinned.** The `mcr.microsoft.com/dotnet/sdk:10.0` digest moves `ed034a8 → 72dd743`. Build stage only — it never ships in the published runtime image, whose `aspnet:10.0-alpine` pin is unchanged.
+
 ## [0.4.0] - 2026-07-29
 
 Reliability and security release. A full audit closed the delivery-correctness and API defects behind double delivery under stale-lock recovery, silent message loss on a failed fan-out enqueue, a racy manual retry, a circuit-open endpoint burning a message's retry budget, unbounded list pagination, and a dashboard whose live counters silently froze after 20 events — plus three security fixes: an unauthenticated SignalR hub leaking cross-tenant delivery data, connect-time IP-allowlist enforcement against DNS rebinding, and login rate limiting. Adds the operator backlog metrics an alert can actually fire on, and repairs three query paths that degraded as `messages` and `message_attempts` grew. No breaking API changes; the `v1` prefix, the Standard Webhooks signature surface, and the `WebhookEngine.Sdk` public API are unchanged.
