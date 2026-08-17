@@ -52,7 +52,7 @@ RUN dotnet publish src/WebhookEngine.API/WebhookEngine.API.csproj \
 # ============================================================
 # Stage 3: Runtime
 # ============================================================
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine@sha256:27b6b84beeede74fd16886177d360799c8e4299ceadfbd64eef57bafead7878a AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine@sha256:c4b29bf368004ad9076c1ab9bc91fb373561e3905b4345637e14e8b8c57e3be8 AS runtime
 
 # Labels
 LABEL org.opencontainers.image.title="WebhookEngine" \
