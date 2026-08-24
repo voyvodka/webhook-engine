@@ -2,7 +2,7 @@
 # Stage 1: Dashboard build (React SPA)
 # ============================================================
 # Image digests pinned so Dependabot can track and bump them.
-FROM oven/bun:1-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 AS dashboard-build
+FROM oven/bun:1-alpine@sha256:07235578f79ef8c6f97d94aee7938e76f5cdba5f21ae5dbfdd3d3d38058437eb AS dashboard-build
 WORKDIR /workspace
 
 # Workspace plumbing: install from the root so Bun resolves the workspace
@@ -20,7 +20,7 @@ RUN bun run build
 # ============================================================
 # Stage 2: .NET restore + publish
 # ============================================================
-FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:72dd743782f2ae7e5476fd64f6a460045e3998dc862218b80e6944cba79a01b0 AS backend-build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:e1fc6e423f543119c406d24e2e687d67c569f18f04a37a8b0005d80ad0dcee80 AS backend-build
 WORKDIR /src
 
 # Copy solution and project files for layer-cached restore
@@ -52,7 +52,7 @@ RUN dotnet publish src/WebhookEngine.API/WebhookEngine.API.csproj \
 # ============================================================
 # Stage 3: Runtime
 # ============================================================
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine@sha256:27b6b84beeede74fd16886177d360799c8e4299ceadfbd64eef57bafead7878a AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine@sha256:c4b29bf368004ad9076c1ab9bc91fb373561e3905b4345637e14e8b8c57e3be8 AS runtime
 
 # Labels
 LABEL org.opencontainers.image.title="WebhookEngine" \
