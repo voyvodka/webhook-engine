@@ -10,6 +10,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 ### Changed
+- **Agent instructions consolidated.** `AGENTS.md` is now the single source of project rules for every coding agent; `CLAUDE.md` imports it and keeps only the Claude Code subagent catalog. The merged file drops the stale direct-to-main flow and per-commit approval gate in favour of the protected-`main` PR workflow, and its structure listings are synced to the current tree (six workers, portal controllers and middleware, `MetricsAuthMiddleware`'s optional scrape token, `EventTypesPage`, `WebhookEngine.Sdk.Tests`).
 
 ### Fixed
 
