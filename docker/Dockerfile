@@ -20,7 +20,7 @@ RUN bun run build
 # ============================================================
 # Stage 2: .NET restore + publish
 # ============================================================
-FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:e1fc6e423f543119c406d24e2e687d67c569f18f04a37a8b0005d80ad0dcee80 AS backend-build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:35d40304542c8689331f8cab17c65926cdf48fe711e289321d71924b230a7d29 AS backend-build
 WORKDIR /src
 
 # Copy solution and project files for layer-cached restore
