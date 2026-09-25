@@ -13,6 +13,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - **Agent instructions consolidated.** `CLAUDE.md` is now the single source of agent instructions, slimmed to the rules that apply to every change — constraints, commands, binding architectural decisions, the PR workflow — with pointers into `docs/` instead of restated directory trees and endpoint lists; area-specific coding rules live in path-scoped rule files. `AGENTS.md` is a short pointer to it. The stale direct-to-main flow and per-commit approval gate are replaced by the protected-`main` PR workflow.
 
 ### Fixed
+- **`/metrics` authentication is documented as it behaves.** The README said the endpoint needs no authentication; it is public by default and requires `Authorization: Bearer <token>` once `WebhookEngine__Metrics__ScrapeToken` is set. The README and `docs/SELF-HOSTING.md` now say so and show the Prometheus `authorization` block.
 
 ### Removed
 

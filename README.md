@@ -340,7 +340,7 @@ dotnet run --project src/WebhookEngine.API
 
 ## Prometheus Metrics
 
-WebhookEngine exposes Prometheus metrics at `GET /metrics`. No authentication required.
+WebhookEngine exposes Prometheus metrics at `GET /metrics`. The endpoint is public by default. Set `WebhookEngine__Metrics__ScrapeToken` to require `Authorization: Bearer <token>`; requests without it then get `401`.
 
 ```bash
 curl http://localhost:5100/metrics
@@ -375,6 +375,9 @@ scrape_configs:
     scrape_interval: 15s
     static_configs:
       - targets: ["localhost:5100"]
+    # Only when WebhookEngine__Metrics__ScrapeToken is set:
+    # authorization:
+    #   credentials: <token>
 ```
 
 ## Message Lifecycle
