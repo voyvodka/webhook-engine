@@ -28,7 +28,7 @@ Exact versions live in the `.csproj` files and `src/dashboard/package.json`.
 - **Migrations** are applied on startup. Never generate a migration or run any `dotnet ef` command without explicit user consent.
 - **Package managers:** Bun for the frontend (never npm, yarn or pnpm), NuGet for the backend. Never mix.
 - **Zero-dependency packages:** `WebhookEngine.Core` takes no NuGet references; `WebhookEngine.Sdk` takes no external NuGet dependencies.
-- **Tests never mock the database** (a past mock-vs-prod incident) — use Testcontainers against real PostgreSQL.
+- **Tests never mock the persistence layer** (a mock-vs-prod divergence once masked migration bugs): no substitute for `WebhookDbContext`, `DbSet`, a repository or a migration. Anything PostgreSQL decides — `SKIP LOCKED`, advisory locks, unique constraints, `ExecuteUpdate` compare-and-set guards — is tested against real PostgreSQL (Testcontainers, `Infrastructure.Tests`). The EF InMemory provider is fine where the database only stores and returns rows — HTTP-pipeline, middleware, validator and worker-logic tests — and pure-domain interfaces such as `IMessageQueue` may be substituted.
 - **No AI attribution** ("Generated with Claude Code", `Co-Authored-By` trailers or similar) in commits, PRs, release notes or any public-facing content.
 - **Documentation language:** every Markdown file committed to git (root `*.md` including this one, `docs/**`, `samples/**`) is English. Only the gitignored `.planning/` may be Turkish.
 

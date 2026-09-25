@@ -267,6 +267,9 @@ scrape_configs:
     scrape_interval: 15s
     static_configs:
       - targets: ["webhook-engine:8080"]  # Use container name in Docker network
+    # Only when WebhookEngine__Metrics__ScrapeToken is set; /metrics then answers 401 without it:
+    # authorization:
+    #   credentials: <token>
 ```
 
 Key metrics to monitor:
