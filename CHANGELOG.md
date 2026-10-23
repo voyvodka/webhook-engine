@@ -10,6 +10,18 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 ### Changed
+
+### Fixed
+
+### Removed
+
+### Security
+
+## [0.4.2] - 2026-10-23
+
+Maintenance patch: every dependency moves to its latest stable release — backend NuGet, the dashboard bundle, the `@webhookengine/endpoint-manager` tooling, the Docker base images and the CI runtimes — and the landing page and `/metrics` documentation catch up with the product. No application code changed; the `v1` route prefix, the Standard Webhooks signature surface, and the `WebhookEngine.Sdk` public API are unchanged.
+
+### Changed
 - **Agent instructions consolidated.** `CLAUDE.md` is now the single source of agent instructions, slimmed to the rules that apply to every change — constraints, commands, binding architectural decisions, the PR workflow — with pointers into `docs/` instead of restated directory trees and endpoint lists; area-specific coding rules live in path-scoped rule files. `AGENTS.md` is a short pointer to it. The stale direct-to-main flow and per-commit approval gate are replaced by the protected-`main` PR workflow.
 - **Backend dependency refresh.** The .NET 10 stack moves `10.0.12 → 10.0.13` (EF Core, `Microsoft.Extensions.*`, `Microsoft.AspNetCore.OpenApi`), OpenTelemetry `1.19 → 1.20.1` (OTLP exporter, hosting, ASP.NET Core and runtime instrumentation), `Scalar.AspNetCore` `2.17.10 → 2.18.2`, and `FluentValidation.DependencyInjectionExtensions` `12.1.1 → 12.2.0`. Test-only: `Microsoft.NET.Test.Sdk` `18.10.1 → 18.11.0`, `xunit.runner.visualstudio` `4.0.0 → 4.0.1`, `coverlet.collector` `10.0.1 → 10.1.0`, `Testcontainers.PostgreSql` `4.15.0 → 4.16.0`. No user-facing behaviour change.
 - **Frontend dependency refresh.** The dashboard bundle ships React `19.2.6 → 19.3.1`, `react-router` `8.4.0 → 8.5.0`, `@microsoft/signalr` `10.0.0 → 10.0.11`, `@tanstack/react-query` `5.100.9 → 5.104.5`, `lucide-react` `1.47.0 → 1.61.0` and the CodeMirror packages' latest patches. Build and test tooling: `vite` `8.3.0 → 8.3.5`, `eslint` `10.11.0 → 10.13.0`, `typescript-eslint` `8.70.1 → 8.72.0`, and in `@webhookengine/endpoint-manager` the majors `vitest` `4 → 5`, `happy-dom` `20 → 21` and `tsup` `8 → 9`. Transitive `ws`, `source-map-js`, `browserslist` and `brace-expansion` advisories are resolved. TypeScript stays pinned at 6.0.3 — `typescript-eslint` still caps its peer range below 6.1.
@@ -19,9 +31,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - **The landing page shows the current release, and keeps doing so.** Its header badge and footer said v0.1.6 and its structured data said 0.1.3, long after v0.4.1 shipped. The version is no longer written by hand: the Pages workflow fills it from the newest `v<major>.<minor>.<patch>` tag at deploy time and redeploys after every successful Release run. The footer also credits the author with a link to their site, and the structured-data author carries the same `@id` that site uses.
 - **`/metrics` authentication is documented as it behaves.** The README said the endpoint needs no authentication; it is public by default and requires `Authorization: Bearer <token>` once `WebhookEngine__Metrics__ScrapeToken` is set. The README and `docs/SELF-HOSTING.md` now say so and show the Prometheus `authorization` block.
 
-### Removed
-
 ### Security
+- **Development tooling advisories cleared.** `vite` `8.3.5` picks up the patched `launch-editor` (GHSA advisories on its editor-launch and Windows escaping paths), and the transitive `ws`, `source-map-js`, `browserslist` and `brace-expansion` advisories are resolved. These packages run only in local development and the build; none ships in the published Docker image, whose `trivy` scan reports no findings.
 
 ## [0.4.1] - 2026-08-10
 
