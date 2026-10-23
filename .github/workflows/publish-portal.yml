@@ -10,8 +10,8 @@ permissions:
   id-token: write   # required for npm provenance / sigstore attestation
 
 env:
-  BUN_VERSION: "1.3.x"
-  NODE_VERSION: "20"
+  BUN_VERSION: "1.4.x"
+  NODE_VERSION: "24"
 
 jobs:
   publish:
